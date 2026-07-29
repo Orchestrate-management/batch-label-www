@@ -1,0 +1,45 @@
+import React from 'react';
+import { CheckIcon } from 'lucide-react';
+import { Section, Heading, Eyebrow, Lead } from '../ui/Section';
+import { LabelPreview } from '../LabelPreview';
+
+export const labelContents = [
+'Product name and pack size, with net weight or volume',
+'Hazard pictograms at the required minimum size',
+'The signal word, Warning or Danger, where one applies',
+'Hazard statements, the H codes, in full sentences',
+'Precautionary statements, the P codes, chosen and combined',
+'Allergen declarations from the fragrance, such as linalool and limonene',
+'A generated UFI, that is a Unique Formula Identifier, for poison centre notification',
+'Batch code and date fields you can fill per batch',
+'Your business name, address and contact details as the supplier',
+'Candle and diffuser safety wording, such as burn within sight',
+'CLP text at the minimum size for your pack, so nothing is set too small'];
+
+
+export function WhatsIncluded() {
+  return (
+    <Section ariaLabelledBy="included-heading">
+      <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+        <div>
+          <Eyebrow>What is included</Eyebrow>
+          <Heading id="included-heading">Everything that goes on the label</Heading>
+          <Lead className="mt-3">
+            One label, built from your safety data sheet and your recipe. Here is what appears on it.
+          </Lead>
+          <ul className="mt-6 space-y-2.5">
+            {labelContents.map((item) =>
+            <li key={item} className="flex items-start gap-2.5 text-[0.97rem] leading-relaxed text-ink-soft">
+                <CheckIcon size={17} className="mt-1 shrink-0 text-teal-700" aria-hidden="true" />
+                {item}
+              </li>
+            )}
+          </ul>
+        </div>
+        <div className="lg:sticky lg:top-24">
+          <LabelPreview compact />
+        </div>
+      </div>
+    </Section>);
+
+}
