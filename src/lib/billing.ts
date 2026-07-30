@@ -1,13 +1,25 @@
 /**
  * Stripe Checkout and Customer Portal, client side half.
  *
- * Both calls hit our own API routes (see the api folder) so secret keys and price ids
- * never reach the browser. Stripe Tax is assumed to be on, and the Maker prices are
- * stored in Stripe as VAT inclusive for consumers.
+ * Both calls hit our own API routes (the root `/api` directory — see src/api/README.md for
+ * why that location matters) so secret keys and price ids never reach the browser. Stripe
+ * Tax is on, and the Maker prices are stored in Stripe VAT-inclusive for consumers.
+ *
+ * WHAT THIS MODULE DELIBERATELY NO LONGER SENDS
+ *
+ * It used to post `user_id` and `email` in the request body, and the server used them. That
+ * is a claim, not a proof: anyone could change the id in devtools and put a subscription on
+ * someone else's account, or open their billing portal. Both endpoints now derive identity
+ * from the Supabase access token instead — the same principle as the `auth.uid()` that
+ * set_consent and complete_oauth_signup rely on, moved to the edge.
+ *
+ * So the only thing the body carries is what the browser is genuinely the authority on:
+ * which billing interval was clicked, and the first-touch attribution.
  */
 
 import { trackBeginCheckout, trackPurchaseRedirect } from './analytics';
 import { getAttribution } from './attribution';
+import { supabase } from './supabase';
 
 export type BillingInterval = 'monthly' | 'annual';
 
@@ -26,26 +38,46 @@ interface CheckoutResponse {
 }
 
 /**
- * Fires begin_checkout, asks the server for a Checkout Session, fires
- * purchase_redirect, then hands the maker over to Stripe.
+ * The caller's Supabase access token, or null when signed out.
+ *
+ * getSession() is read at call time rather than cached, so a token refreshed in another tab
+ * is picked up. A stale token would come back as a 401 the customer cannot act on.
  */
-export async function startCheckout(
-interval: BillingInterval,
-options: {email?: string | null;userId?: string | null;} = {})
-: Promise<{error: string | null;}> {
+async function accessToken(): Promise<string | null> {
+  if (!supabase) return null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function requestHeaders(token: string | null): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+/**
+ * Fires begin_checkout, asks the server for a Checkout Session, fires purchase_redirect,
+ * then hands the maker over to Stripe.
+ *
+ * Works signed out: the pricing page sells to people who have not made an account yet, and
+ * the webhook links that payment to them by the email that paid.
+ */
+export async function startCheckout(interval: BillingInterval): Promise<{error: string | null;}> {
   const value = PRICES[interval];
   trackBeginCheckout(interval, value);
 
   try {
     const response = await fetch(CHECKOUT_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: requestHeaders(await accessToken()),
       body: JSON.stringify({
         interval,
-        email: options.email ?? null,
-        user_id: options.userId ?? null,
-        // Click identifiers ride along so the webhook can forward a server side
-        // conversion later without guessing which ad produced the sale.
+        // Click identifiers ride along so the webhook can forward a server-side conversion
+        // later without guessing which ad produced the sale.
         attribution: getAttribution()
       })
     });
@@ -67,13 +99,23 @@ options: {email?: string | null;userId?: string | null;} = {})
   }
 }
 
-/** Opens the Stripe Customer Portal for the signed in maker. */
-export async function openBillingPortal(userId: string | null): Promise<{error: string | null;}> {
+/**
+ * Opens the Stripe Customer Portal for the signed-in maker.
+ *
+ * Takes no arguments on purpose. There is no user id to pass, because the server will not
+ * accept one — it resolves the Stripe customer from the token's own identity.
+ */
+export async function openBillingPortal(): Promise<{error: string | null;}> {
+  const token = await accessToken();
+  if (!token) {
+    return { error: 'Please sign in again to manage your billing.' };
+  }
+
   try {
     const response = await fetch(PORTAL_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId })
+      headers: requestHeaders(token),
+      body: JSON.stringify({})
     });
     const payload = (await response.json().catch(() => ({}))) as CheckoutResponse;
     if (!response.ok || !payload.url) {
