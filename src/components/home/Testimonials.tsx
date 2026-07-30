@@ -36,7 +36,7 @@ export function Testimonials() {
             <p className="mt-3 text-sm leading-relaxed text-ink-muted">
               Space reserved for a real quote. {item.prompt}
             </p>
-            <p className="mt-4 text-xs font-medium text-ink-muted/80">{item.meta}</p>
+            <p className="mt-4 text-xs font-medium text-ink-muted">{item.meta}</p>
           </li>
         )}
       </ul>

@@ -1,7 +1,20 @@
-import type { AccordionItem } from '../components/ui/Accordion';
+/**
+ * The FAQ copy, and the only place it lives.
+ *
+ * Answers are plain strings rather than `React.ReactNode` on purpose: the same array
+ * feeds both the visible accordions and the `FAQPage` JSON-LD built in
+ * `src/lib/structured-data.ts`. If an answer could be JSX, the structured data would
+ * silently stop matching what a reader sees, which is exactly the drift Google penalises.
+ * `FaqEntry` is structurally assignable to `AccordionItem`, so the components take it
+ * unchanged.
+ */
+export interface FaqEntry {
+  question: string;
+  answer: string;
+}
 
 /** Six questions used on the home page. */
-export const homeFaqs: AccordionItem[] = [
+export const homeFaqs: FaqEntry[] = [
 {
   question: 'Do I still need to read the safety data sheet myself?',
   answer:
@@ -35,7 +48,7 @@ export const homeFaqs: AccordionItem[] = [
 
 
 /** Longer set for the full FAQ page, grouped by theme. */
-export const faqGroups: {title: string;items: AccordionItem[];}[] = [
+export const faqGroups: {title: string;items: FaqEntry[];}[] = [
 {
   title: 'Which products we cover',
   items: [
@@ -149,7 +162,7 @@ export const faqGroups: {title: string;items: AccordionItem[];}[] = [
 
 
 /** Pricing page questions: VAT, cancellation and refunds. */
-export const pricingFaqs: AccordionItem[] = [
+export const pricingFaqs: FaqEntry[] = [
 {
   question: 'Is VAT included in the price?',
   answer:
@@ -180,3 +193,6 @@ export const pricingFaqs: AccordionItem[] = [
   answer:
   'The Maker plan covers teams of up to five people. If you run something bigger, email us and we will talk it through rather than sell you a tier you do not need.'
 }];
+
+/** Every question on the FAQ page, flattened, in the order a reader meets them. */
+export const allFaqEntries: FaqEntry[] = faqGroups.flatMap((group) => group.items);

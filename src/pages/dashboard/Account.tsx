@@ -20,7 +20,9 @@ export function Account() {
   const handlePortal = async () => {
     setBusy('portal');
     setError(null);
-    const result = await openBillingPortal(user?.id ?? null);
+    // No user id: the endpoint resolves the Stripe customer from the access token, so a
+    // billing-portal link can only ever be minted for the person who asked for it.
+    const result = await openBillingPortal();
     if (result.error) setError(result.error);
     setBusy(null);
   };
@@ -28,7 +30,7 @@ export function Account() {
   const handleUpgrade = async () => {
     setBusy('checkout');
     setError(null);
-    const result = await startCheckout('monthly', { email: user?.email, userId: user?.id });
+    const result = await startCheckout('monthly');
     if (result.error) setError(result.error);
     setBusy(null);
   };

@@ -1,4 +1,5 @@
-import { usePageMeta } from '../lib/seo';
+import { usePageMeta, useStructuredData } from '../lib/seo';
+import { breadcrumbSchema, graph, howToSchema } from '../lib/structured-data';
 import { PageHero } from '../components/PageHero';
 import { Section, Heading, Eyebrow, Lead } from '../components/ui/Section';
 import { StepIllustration } from '../components/StepIllustration';
@@ -41,10 +42,25 @@ const detailedSteps = [
 
 export function HowItWorks() {
   usePageMeta({
-    title: 'How it works',
+    title: 'How it works, safety data sheet to candle label',
     description:
-    'Three steps to a CLP label for candles, wax melts and diffusers. Upload your fragrance supplier safety data sheet, enter your recipe and pack size, then download a print ready PDF or SVG.'
+    'Three steps to a CLP label for candles, wax melts and diffusers. Upload the supplier safety data sheet, enter your recipe and pack size, download a PDF or SVG.'
   });
+
+  // Built from detailedSteps above, so the markup is the page. The step anchors below
+  // are real ids on the list items, which is what makes the HowToStep urls resolve.
+  useStructuredData(
+    graph([
+    breadcrumbSchema('How it works', '/how-it-works'),
+    howToSchema(
+      '/how-it-works',
+      detailedSteps.map((step, index) => ({
+        name: step.title,
+        text: step.paragraphs[0],
+        anchor: `step-${index + 1}`
+      }))
+    )])
+  );
 
   return (
     <>
@@ -61,7 +77,10 @@ export function HowItWorks() {
       <Section>
         <ol className="space-y-12">
           {detailedSteps.map((step, index) =>
-          <li key={step.title} className="grid gap-5 sm:grid-cols-[56px_1fr] sm:gap-7">
+          <li
+            key={step.title}
+            id={`step-${index + 1}`}
+            className="grid gap-5 scroll-mt-24 sm:grid-cols-[56px_1fr] sm:gap-7">
               <StepIllustration kind={step.kind} />
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MailIcon, ClockIcon, MapPinIcon } from 'lucide-react';
-import { usePageMeta } from '../lib/seo';
+import { usePageMeta, useStructuredData } from '../lib/seo';
+import { breadcrumbSchema, graph } from '../lib/structured-data';
 import { PageHero } from '../components/PageHero';
 import { Section } from '../components/ui/Section';
 import { Field, Alert } from '../components/ui/Field';
@@ -8,10 +9,12 @@ import { Button } from '../components/ui/Button';
 
 export function Contact() {
   usePageMeta({
-    title: 'Contact us',
+    title: 'Contact us about CLP labelling or your account',
     description:
     'Email hello@batchlabel.co.uk with a question about CLP labelling or your Batchlabel account. A person replies, usually the same working day.'
   });
+
+  useStructuredData(graph([breadcrumbSchema('Contact', '/contact')]));
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -39,7 +42,20 @@ export function Contact() {
 
       <Section>
         <div className="grid gap-10 lg:grid-cols-[1fr_0.85fr]">
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          {/* Both halves of this page had cards with their own headings but no heading of
+              their own, which left the h1 with three unrelated h2 siblings and no way to
+              tell the form apart from the contact details. The two headings are visually
+              hidden because the layout already makes the split obvious to a sighted
+              reader. */}
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-4"
+            aria-labelledby="contact-form-heading"
+            noValidate>
+
+            <h2 id="contact-form-heading" className="sr-only">
+              Send us a message
+            </h2>
             <Field
               label="Your name"
               name="name"
@@ -69,7 +85,7 @@ export function Contact() {
                 required
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
-                className="w-full rounded-xl border border-ink/15 bg-white px-3.5 py-2.5 text-[0.97rem] text-ink" />
+                className="w-full rounded-xl border border-ink-line bg-white px-3.5 py-2.5 text-[0.97rem] text-ink" />
               
             </div>
             <Button type="submit" track={{ label: 'Send message', location: 'contact_form' }}>
@@ -84,6 +100,7 @@ export function Contact() {
           </form>
 
           <div className="space-y-4">
+            <h2 className="sr-only">Other ways to reach us</h2>
             <DetailCard icon={<MailIcon size={18} aria-hidden="true" />} title="Email">
               <a
                 href="mailto:hello@batchlabel.co.uk"
@@ -122,7 +139,7 @@ function DetailCard({
   return (
     <div className="rounded-2xl border border-paper-edge bg-white p-5">
       <div className="flex items-center gap-2 text-teal-700">{icon}</div>
-      <h2 className="mt-2 font-display text-[1.02rem] font-semibold text-ink">{title}</h2>
+      <h3 className="mt-2 font-display text-[1.02rem] font-semibold text-ink">{title}</h3>
       <p className="mt-1 text-sm leading-relaxed text-ink-soft">{children}</p>
     </div>);
 

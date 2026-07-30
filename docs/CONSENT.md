@@ -105,7 +105,9 @@ A stored opt-in that no code reads is theatre. Today:
 - **Advertising, in the browser** — really gates `ad_storage`, `ad_user_data` and
   `ad_personalization` through Consent Mode v2. Enforced by Google's tag.
 - **Advertising, on the server** — gates **nothing yet**. The Meta Conversions API and
-  Google Enhanced Conversions calls in `src/api/stripe-webhook.ts` are documented stubs.
+  Google Enhanced Conversions calls do not exist yet. The gate they must respect is
+  documented at the top of `src/server/webhook.ts`, which is where a paid conversion
+  would be forwarded from.
   There is a `CONSENT GATE` note at that exact point: whoever implements them must read
   `advertising_opt_in` and skip forwarding when it is false, failing closed if the lookup
   fails.

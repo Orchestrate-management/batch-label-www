@@ -87,29 +87,38 @@ Set in Vercel (and `.env.local` for local dev — see `../.env.example`):
 | `VITE_ORCHESTRATE_BRAND`  | browser          | Sub-brand slug for this deployment. `batchlabel`. |
 | `SUPABASE_SERVICE_ROLE_KEY` | server only    | For the Stripe webhook to write billing state. **Never expose to the browser.** |
 
-## Billing write-back (server side)
+## Billing and entitlements
 
-`brand_memberships` billing columns (`plan`, `plan_status`, `stripe_customer_id`,
-`stripe_subscription_id`) are **service-role only** — RLS gives browser clients no write
-path, so a user cannot promote their own plan. Wire `src/api/stripe-webhook.ts` to update
-the membership on `checkout.session.completed` using the service-role key, keyed off the
-`supabase_user_id` already placed in the Stripe Checkout Session metadata by
-`src/api/create-checkout-session.ts`:
+Implemented in `migrations/20260801120000_entitlements.sql`. The billing columns on
+`brand_memberships` (`plan`, `plan_status`, `stripe_customer_id`, `stripe_subscription_id`,
+`current_period_end`, `cancel_at_period_end`, `trial_end`, `stripe_price_id`) are
+**service-role only** — `authenticated` holds `SELECT` and nothing else, so a browser client
+has no path to promoting its own plan.
 
-```ts
-await fetch(`${SUPABASE_URL}/rest/v1/brand_memberships?user_id=eq.${userId}&brand_slug=eq.batchlabel`, {
-  method: 'PATCH',
-  headers: {
-    apikey: SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-    'Content-Type': 'application/json',
-    Prefer: 'return=minimal'
-  },
-  body: JSON.stringify({
-    plan: 'maker',
-    plan_status: 'active',
-    stripe_customer_id: session.customer,
-    stripe_subscription_id: session.subscription
-  })
-});
-```
+**Writes go through one function, not a PATCH.** An earlier draft of this file suggested
+PATCHing the row from the webhook. That is wrong, and the reason is worth keeping: Stripe
+webhooks are at-least-once and unordered, so a plain PATCH stores whichever delivery happened
+to land last — a coin toss between a cancelled customer keeping access and a paying one losing
+it. `public.apply_stripe_entitlement()` instead does the whole thing in one transaction:
+
+1. resolves the membership (metadata user id → subscription id → customer id → the email that
+   paid);
+2. claims the Stripe event id in `public.stripe_webhook_events`, whose **primary key** is what
+   makes processing exactly-once;
+3. refuses any event older than the one already applied (monotonic on Stripe's `event.created`);
+4. applies a **partial** update — a null argument means "this event says nothing about that
+   column", so `checkout.session.completed` cannot blank a period end that
+   `customer.subscription.created` already wrote.
+
+It is granted to `service_role` only, so even a leaked anon key cannot reach it.
+
+The route that calls it is [`/api/stripe-webhook.ts`](../api/stripe-webhook.ts) — in the
+**root** `/api` directory, because that is the only place Vercel builds functions from. See
+[`../src/api/README.md`](../src/api/README.md) for why that used to be wrong and what it broke.
+
+### Reading entitlements
+
+`public.entitlements` (a `security_invoker` view) and `public.get_entitlement(brand)`. Both are
+readable by the owning user and nobody else, and both are granted to `authenticated` only.
+The contract for the separate product app is [`../docs/ENTITLEMENTS.md`](../docs/ENTITLEMENTS.md);
+the founder's dashboard steps are [`../docs/STRIPE_SETUP.md`](../docs/STRIPE_SETUP.md).

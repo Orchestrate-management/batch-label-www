@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-GB">
   <head>
     <meta charset="UTF-8" />
     <!-- SVG first for browsers that take it; the PNG is the fallback for those that
@@ -11,7 +11,114 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/brand/apple-touch-icon.png" />
     <meta name="theme-color" content="#14514F" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Batchlabel</title>
+
+    <!-- The webfonts are pulled in by an @import at the top of src/index.css, which the
+         browser cannot discover until that stylesheet has parsed. Opening the two
+         connections early saves a round trip on first paint. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!--
+      Everything from here down is the no-JavaScript fallback, and it describes the home
+      page. usePageMeta (src/lib/seo.ts) rewrites all of it on every route change.
+
+      It has to be static, because the crawlers that matter most for link previews —
+      Facebook, LinkedIn, Slack, X — do not execute JavaScript. Before this, a shared
+      Batchlabel link had no description and no image at all.
+    -->
+    <title>CLP labels for candle and wax melt makers | Batchlabel</title>
+    <meta
+      name="description"
+      content="Turn your fragrance supplier's safety data sheet into a print ready UK and EU CLP label for candles, wax melts, diffusers and room sprays. First label free."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://www.batchlabel.xyz/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Batchlabel" />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:title" content="CLP labels for candle and wax melt makers | Batchlabel" />
+    <meta
+      property="og:description"
+      content="Turn your fragrance supplier's safety data sheet into a print ready UK and EU CLP label for candles, wax melts, diffusers and room sprays. First label free."
+    />
+    <meta property="og:url" content="https://www.batchlabel.xyz/" />
+    <meta property="og:image" content="https://www.batchlabel.xyz/og/batchlabel-share.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Batchlabel. Correct CLP labels for your candles, in minutes."
+    />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="CLP labels for candle and wax melt makers | Batchlabel" />
+    <meta
+      name="twitter:description"
+      content="Turn your fragrance supplier's safety data sheet into a print ready UK and EU CLP label for candles, wax melts, diffusers and room sprays. First label free."
+    />
+    <meta name="twitter:image" content="https://www.batchlabel.xyz/og/batchlabel-share.png" />
+    <meta
+      name="twitter:image:alt"
+      content="Batchlabel. Correct CLP labels for your candles, in minutes."
+    />
+
+    <!--
+      Organization and WebSite are site-wide facts, so they are stated here rather than
+      injected by React and an answer engine that does not render JavaScript still gets
+      them. Page-level markup (FAQPage, SoftwareApplication, BreadcrumbList, HowTo) is
+      added per route by useStructuredData and points back at these @ids.
+
+      Keep in step with src/lib/structured-data.ts — src/lib/structured-data.test.ts
+      asserts the two agree.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://www.batchlabel.xyz/#organization",
+            "name": "Batchlabel",
+            "legalName": "Orchestrate Technologies Ltd",
+            "url": "https://www.batchlabel.xyz/",
+            "description": "Batchlabel turns the safety data sheet from your fragrance supplier into a UK and EU CLP label for candles, wax melts, reed diffusers and room sprays.",
+            "email": "hello@batchlabel.co.uk",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://www.batchlabel.xyz/brand/apple-touch-icon.png",
+              "width": 180,
+              "height": 180
+            },
+            "address": {
+              "@type": "PostalAddress",
+              "streetAddress": "167-169 Great Portland Street",
+              "addressLocality": "London",
+              "postalCode": "W1W 5PF",
+              "addressCountry": "GB"
+            },
+            "contactPoint": [
+              {
+                "@type": "ContactPoint",
+                "contactType": "customer support",
+                "email": "hello@batchlabel.co.uk",
+                "url": "https://www.batchlabel.xyz/contact",
+                "availableLanguage": "en-GB"
+              }
+            ]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://www.batchlabel.xyz/#website",
+            "url": "https://www.batchlabel.xyz/",
+            "name": "Batchlabel",
+            "description": "Batchlabel turns the safety data sheet from your fragrance supplier into a UK and EU CLP label for candles, wax melts, reed diffusers and room sprays.",
+            "inLanguage": "en-GB",
+            "publisher": { "@id": "https://www.batchlabel.xyz/#organization" }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
