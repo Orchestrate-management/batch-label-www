@@ -2,18 +2,38 @@
 
 Everything measurement related lives in three files: `lib/consent.ts` (tag loading and
 Consent Mode v2), `lib/attribution.ts` (first touch capture) and `lib/analytics.ts`
-(dataLayer events).
+(events).
 
 ## Load order
 
 1. `index.tsx` calls `initTagging()` before React renders.
 2. `initTagging()` creates `dataLayer`, pushes Consent Mode v2 **defaults in the denied
-   state**, sets `ads_data_redaction` and `url_passthrough`, replays any stored choice,
-   then injects the GTM container script.
-3. GA4 and the Meta Pixel are configured **inside GTM**, so a denied category actually
-   blocks them rather than only hiding the banner.
+   state**, sets `ads_data_redaction` and `url_passthrough`, then replays any stored
+   choice.
+3. Only then does it inject `gtag/js` and call `gtag('config', …)`.
 
-Set the container id in `lib/consent.ts` (`GTM_CONTAINER_ID`).
+**Do not move the tag into `index.html`.** Google's copy-paste snippet loads gtag at the
+top of `<head>`, which would put it ahead of the consent defaults in step 2 and measure
+people who never consented. The ordering above is the whole point of this file.
+
+Measurement id: `GA4_MEASUREMENT_ID` in `lib/consent.ts` (`G-BGDNRH022T`), overridable
+per deployment with `VITE_GA4_MEASUREMENT_ID`. Localhost is excluded so development does
+not report into the live property; preview deploys do report.
+
+`send_page_view` is off in the config call. This is a single page app, so `page_view` is
+sent per route change by `usePageMeta` instead — otherwise the first page would count
+twice.
+
+### There is no tag manager
+
+GA4 is loaded directly. That matters for anyone adding an event: **a plain object pushed
+to `dataLayer` is inert.** GA4 acts only on gtag commands, so `lib/analytics.ts` sends
+every event twice — once onto `dataLayer` (kept so a tag manager could be put in front
+later, and it is what the tests assert), and once through `gtagEvent()`, which is the
+call that actually reports. Push to `dataLayer` alone and the event is recorded nowhere.
+
+The Meta Pixel has no home yet as a result. When it is added it needs loading here, gated
+on `ad_storage`, rather than assumed to be configured inside a container.
 
 ## Consent
 
