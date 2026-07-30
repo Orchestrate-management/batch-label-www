@@ -5,14 +5,22 @@ import { SignUp } from './SignUp';
 import { LogIn } from './LogIn';
 
 /**
- * The Google option is gated on VITE_GOOGLE_AUTH_ENABLED so that merging this code
+ * The Google option is gated on VITE_GOOGLE_AUTH_ENABLED so that shipping this code
  * cannot put a "Continue with Google" button in front of a maker before the provider is
  * switched on in Supabase and the OAuth client exists in Google Cloud Console. A button
  * that errors is worse than no button.
  *
- * The flag is unset under test, which is the disabled case, so these render the real
- * pages with no mocking of the gate at all.
+ * The gate is forced OFF here rather than left to the ambient environment. An earlier
+ * version of this file relied on the flag simply being unset under test, which passed
+ * locally and then failed the build on Vercel, where VITE_GOOGLE_AUTH_ENABLED=true is
+ * set for the production environment and is therefore visible to the test run. A test
+ * whose result depends on which machine it runs on is not testing anything.
  */
+vi.mock('../../components/auth/GoogleButton', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../components/auth/GoogleButton')>()),
+  isGoogleAuthEnabled: () => false
+}));
+
 vi.mock('../../lib/auth', () => ({
   useAuth: () => ({
     signUpWithPassword: vi.fn(),
