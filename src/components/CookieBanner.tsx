@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getStoredConsent, saveConsent } from '../lib/consent';
 import { Button } from './ui/Button';
@@ -16,6 +16,12 @@ export function CookieBanner() {
   const [showDetail, setShowDetail] = useState(false);
   const [analytics, setAnalytics] = useState(false);
   const [marketing, setMarketing] = useState(false);
+  // Focus is only moved when a maker asks for the banner from the footer. On a first
+  // visit it appears by itself, and stealing focus from someone who is already reading
+  // would be worse than leaving it alone.
+  const [reopened, setReopened] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const stored = getStoredConsent();
@@ -31,11 +37,18 @@ export function CookieBanner() {
       setAnalytics(current?.analytics ?? false);
       setMarketing(current?.marketing ?? false);
       setShowDetail(true);
+      returnFocusRef.current =
+      typeof document === 'undefined' ? null : document.activeElement as HTMLElement | null;
+      setReopened(true);
       setVisible(true);
     };
     window.addEventListener(OPEN_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_EVENT, onOpen);
   }, []);
+
+  useEffect(() => {
+    if (visible && reopened) dialogRef.current?.focus();
+  }, [visible, reopened]);
 
   if (!visible) return null;
 
@@ -43,20 +56,29 @@ export function CookieBanner() {
     saveConsent(choice);
     setVisible(false);
     setShowDetail(false);
+    // Put focus back on the footer button that opened this, so a keyboard user is not
+    // dropped at the top of the document.
+    if (reopened) {
+      returnFocusRef.current?.focus();
+      setReopened(false);
+    }
   };
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="false"
       aria-labelledby="cookie-title"
+      aria-describedby="cookie-description"
       className="fixed inset-x-0 bottom-0 z-50 border-t border-paper-edge bg-white p-4 shadow-[0_-8px_30px_-24px_rgba(27,37,35,0.5)] sm:p-5">
-      
+
       <div className="mx-auto w-full max-w-5xl">
         <h2 id="cookie-title" className="font-display text-base font-semibold text-ink">
           Cookies
         </h2>
-        <p className="mt-1 max-w-prose text-sm leading-relaxed text-ink-soft">
+        <p id="cookie-description" className="mt-1 max-w-prose text-sm leading-relaxed text-ink-soft">
           We use cookies that are needed to run the site. We would also like to measure how people
           find us, so we know which adverts are worth paying for. Nothing optional loads until you
           say yes.{' '}

@@ -1,16 +1,23 @@
-import { usePageMeta } from '../lib/seo';
+import { usePageMeta, useStructuredData } from '../lib/seo';
 import { PageHero } from '../components/PageHero';
 import { Section, Heading } from '../components/ui/Section';
 import { Accordion } from '../components/ui/Accordion';
 import { CtaBand } from '../components/CtaBand';
-import { faqGroups } from '../content/faqs';
+import { faqGroups, allFaqEntries } from '../content/faqs';
+import { breadcrumbSchema, faqPageSchema, graph } from '../lib/structured-data';
 
 export function Faq() {
   usePageMeta({
-    title: 'Frequently asked questions',
+    title: 'Common questions about CLP labels for candles',
     description:
     'Plain answers on CLP, safety data sheets, UFI codes, allergens, printing, pricing and VAT. Batchlabel covers candles, wax melts, reed diffusers and room sprays.'
   });
+
+  // allFaqEntries is faqGroups flattened, so every question in the markup is a question
+  // rendered below it, in the same order.
+  useStructuredData(
+    graph([breadcrumbSchema('FAQ', '/faq'), faqPageSchema('/faq', allFaqEntries)])
+  );
 
   return (
     <>
