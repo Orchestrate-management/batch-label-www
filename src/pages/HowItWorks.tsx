@@ -14,7 +14,7 @@ const detailedSteps = [
   title: 'Upload your supplier safety data sheet',
   paragraphs: [
   'A safety data sheet, often shortened to SDS, is the document your fragrance oil supplier must give you free of charge. It lists what the fragrance contains and how it is classified.',
-  'Drag the PDF in. We pull out the hazard classification, the hazard statements, the allergens that have to be declared, and the substances that drive the classification. If a value we need is missing, we say exactly which line to ask your supplier about rather than quietly guessing.'],
+  'Drag the PDF in. We pull out the classification, the hazard statements, the allergens you have to declare, and the substances that drive it. If something we need is missing, we tell you which line to ask your supplier about.'],
 
   aside: 'Takes about a minute. Keep the PDF, because suppliers issue a new version when a fragrance is reformulated.'
 },
@@ -23,8 +23,8 @@ const detailedSteps = [
   title: 'Enter your fragrance percentage and pack size',
   paragraphs: [
   'Tell us the fragrance load, for example 8 per cent, and the pack size, for example a 180 g candle or a 100 ml diffuser. Add your business name and address, since that has to appear on the label as the supplier.',
-  'The classification of your finished product depends on how much fragrance is in it, not on the neat oil. That is the step most spreadsheets get wrong. Change the percentage here and everything downstream updates, including which precautionary statements apply.',
-  'Save it as a recipe. Next time you make the same product in a different size, you start from the recipe rather than from scratch.'],
+  'The classification of your finished product depends on how much fragrance is in it, not on the neat oil. That is the step most spreadsheets get wrong. Change the percentage here and the label changes with it, including which precautionary statements apply.',
+  'Save it as a recipe. Next time you make the same product in a different size, start from the recipe.'],
 
   aside: 'Saved recipes are on the Maker plan. Free accounts can still make one label.'
 },
@@ -32,8 +32,8 @@ const detailedSteps = [
   kind: 'download' as const,
   title: 'Download your print ready label',
   paragraphs: [
-  'You get a preview at true size, so you can see the label as it will print. Check your product name, your address and your batch code, then download.',
-  'Paid plans give you a PDF for home printing or a print shop, and an SVG if your printer asks for vector artwork. Pictograms stay at the required minimum size and the regulated text does not shrink below what the rules allow, whatever else you change.'],
+  'The preview is at true size, so you see the label as it will print. Check your product name, your address and your batch code, then download.',
+  'Paid plans give you a PDF for home printing or a print shop, and an SVG if your printer asks for vector artwork. Pictograms and regulated text stay at the minimum sizes the rules require, whatever else you change.'],
 
   aside: 'Free accounts get a watermarked PNG, which is enough to check the wording.'
 }];
@@ -43,15 +43,15 @@ export function HowItWorks() {
   usePageMeta({
     title: 'How it works',
     description:
-    'The flow that turns safety and regulatory data into a compliant label: upload the source document, enter your recipe and pack size, then download a print ready label as PDF or SVG. Shown here for candles, our first category, with cosmetics next.'
+    'Three steps to a CLP label for candles, wax melts and diffusers. Upload your fragrance supplier safety data sheet, enter your recipe and pack size, then download a print ready PDF or SVG.'
   });
 
   return (
     <>
       <PageHero
         eyebrow="How it works"
-        title="From source document to printed label"
-        intro="The same three steps work for any category we take on: turn the data that governs a product into a compliant label. Below, we walk it through with candles, where we started. No compliance knowledge needed. If you can read the safety data sheet your supplier emailed you, you can make a label.">
+        title="From safety data sheet to printed label"
+        intro="Three steps, walked through with a candle. If you can read the safety data sheet your supplier emailed you, you can make a label.">
 
         <Button to="/sign-up" size="lg" track={{ label: 'Make a label free', location: 'how_it_works_hero' }}>
           Make a label free
@@ -92,8 +92,7 @@ export function HowItWorks() {
             <Eyebrow>The output</Eyebrow>
             <Heading>What ends up on the label</Heading>
             <Lead className="mt-3">
-              Every part of the label comes from something you gave us, so you can trace each line
-              back to the safety data sheet or your recipe.
+              If a line is on the label, it is because CLP requires it for a product like yours.
             </Lead>
             <ul className="mt-6 space-y-2.5">
               {labelContents.map((item) =>
@@ -109,7 +108,7 @@ export function HowItWorks() {
       </Section>
 
       <Section>
-        <Eyebrow>Being straight with you</Eyebrow>
+        <Eyebrow>Scope</Eyebrow>
         <Heading>What Batchlabel does not do</Heading>
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
           {[

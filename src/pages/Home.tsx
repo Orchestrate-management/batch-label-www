@@ -14,7 +14,7 @@ export function Home() {
   usePageMeta({
     title: 'CLP labels for candle and wax melt makers',
     description:
-    'Compliance labelling for small batch makers. Upload your fragrance supplier safety data sheet, enter your recipe and pack size, and download a print ready UK and EU CLP label in minutes. Candles today, cosmetics next. Free first label, no card needed.'
+    'Upload your fragrance supplier safety data sheet, enter your recipe and pack size, and download a print ready UK and EU CLP label for candles, wax melts, reed diffusers and room sprays. First label free, no card needed.'
   });
 
   return (

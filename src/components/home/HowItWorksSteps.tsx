@@ -6,7 +6,7 @@ export const steps = [
 {
   kind: 'upload' as const,
   title: 'Upload your supplier safety data sheet',
-  body: 'Drop in the PDF your fragrance oil supplier gave you. We read the classification, the hazard statements and the allergens out of it, so you do not have to.'
+  body: 'Drop in the PDF your fragrance oil supplier gave you. We read the classification, the hazard statements and the allergens out of it.'
 },
 {
   kind: 'recipe' as const,
@@ -26,8 +26,7 @@ export function HowItWorksSteps({ withCta = true }: {withCta?: boolean;}) {
       <Eyebrow>Three steps</Eyebrow>
       <Heading id="how-heading">How Batchlabel works</Heading>
       <Lead className="mt-3">
-        Data in, compliant label out. The flow is the same for every category we take on. Here it is
-        with candles, the worked example we know best.
+        About ten minutes the first time, a couple of minutes after that.
       </Lead>
 
       <ol className="mt-8 grid gap-6 sm:grid-cols-3">

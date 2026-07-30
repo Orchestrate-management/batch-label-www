@@ -13,7 +13,7 @@ export const labelContents = [
 'Batch code and date fields you can fill per batch',
 'Your business name, address and contact details as the supplier',
 'Candle and diffuser safety wording, such as burn within sight',
-'CLP text at the minimum size for your pack, so nothing is set too small'];
+'CLP text set at the minimum size your pack size requires'];
 
 
 export function WhatsIncluded() {
@@ -24,7 +24,7 @@ export function WhatsIncluded() {
           <Eyebrow>What is included</Eyebrow>
           <Heading id="included-heading">Everything that goes on the label</Heading>
           <Lead className="mt-3">
-            One label, built from your safety data sheet and your recipe. Here is what appears on it.
+            Every line comes from your safety data sheet or from your recipe.
           </Lead>
           <ul className="mt-6 space-y-2.5">
             {labelContents.map((item) =>

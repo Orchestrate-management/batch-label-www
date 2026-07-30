@@ -9,14 +9,14 @@ export function Faq() {
   usePageMeta({
     title: 'Frequently asked questions',
     description:
-    'Plain answers about compliance labelling: which product categories we cover, cosmetics labelling coming next, safety data sheets, UFI codes, allergens, printing, pricing, VAT and cancellation. Candles, wax melts and diffusers live today.'
+    'Plain answers on CLP, safety data sheets, UFI codes, allergens, printing, pricing and VAT. Batchlabel covers candles, wax melts, reed diffusers and room sprays.'
   });
 
   return (
     <>
       <PageHero
         eyebrow="FAQ"
-        title="Questions, answered plainly"
+        title="Common questions"
         intro="If your question is not here, email hello@batchlabel.co.uk and a person will reply." />
       
 
@@ -35,8 +35,8 @@ export function Faq() {
 
       <CtaBand
         location="faq_final"
-        heading="Still not sure? Try one label."
-        body="The free label costs nothing and needs no card. It is the quickest way to see whether we handle your fragrance properly." />
+        heading="Try one label before you decide"
+        body="No card needed. It is the quickest way to see whether we handle your fragrance properly." />
       
     </>);
 

@@ -8,7 +8,7 @@ interface CtaBandProps {
 
 export function CtaBand({
   heading = 'Make your first label tonight',
-  body = 'One label, free, no card. If it does not handle your fragrance properly, you have lost ten minutes.',
+  body = 'Free, and no card needed. If it does not handle your fragrance properly, you have lost ten minutes.',
   location
 }: CtaBandProps) {
   return (

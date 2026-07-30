@@ -34,7 +34,7 @@ export function Contact() {
       <PageHero
         eyebrow="Contact"
         title="Talk to a person"
-        intro="Stuck on a safety data sheet, unsure whether we cover your product, or need a hand with billing? Ask us." />
+        intro="Questions about a safety data sheet, your account or the bill all come to the same inbox." />
       
 
       <Section>
