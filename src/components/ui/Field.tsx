@@ -64,6 +64,45 @@ export function Field({
 
 }
 
+interface CheckboxProps {
+  name: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  required?: boolean;
+  error?: string;
+  /** Label content. May include links (open them in a new tab to preserve form state). */
+  children: React.ReactNode;
+}
+
+export function Checkbox({ name, checked, onChange, required, error, children }: CheckboxProps) {
+  const errorId = error ? `${name}-error` : undefined;
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={name} className="flex items-start gap-3 text-sm text-ink-soft">
+        <input
+          id={name}
+          name={name}
+          type="checkbox"
+          checked={checked}
+          required={required}
+          aria-describedby={errorId}
+          aria-invalid={error ? true : undefined}
+          onChange={(event) => onChange(event.target.checked)}
+          className={`mt-0.5 h-4 w-4 shrink-0 rounded border accent-teal-700 ${
+          error ? 'border-clay-600' : 'border-ink/25'}`
+          } />
+
+        <span className="leading-relaxed">{children}</span>
+      </label>
+      {error ?
+      <p id={errorId} role="alert" className="pl-7 text-xs font-medium text-clay-600">
+          {error}
+        </p> :
+      null}
+    </div>);
+
+}
+
 interface AlertProps {
   tone: 'error' | 'success' | 'info';
   children: React.ReactNode;

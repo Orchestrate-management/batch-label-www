@@ -43,7 +43,7 @@ export function LogIn() {
     }
     setBusy(true);
     setError(null);
-    const result = await sendMagicLink(email);
+    const result = await sendMagicLink({ email });
     setBusy(false);
     if (result.error) {
       setError(result.error);

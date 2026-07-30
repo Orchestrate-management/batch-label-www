@@ -3,6 +3,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { Navigate, useLocation } from 'react-router-dom';
 import { supabase, isSupabaseConfigured, MISSING_CONFIG_MESSAGE } from './supabase';
 import { BRAND_SLUG } from './brand';
+import { signupConsents } from './agreements';
 import { attributionForMetadata } from './attribution';
 import { trackSignUpCompleted, trackSignUpStarted } from './analytics';
 
@@ -19,9 +20,19 @@ interface AuthContextValue {
     email: string;
     password: string;
     businessName: string;
+    marketingEmailOptIn: boolean;
+    advertisingOptIn: boolean;
   }) => Promise<AuthResult>;
   signInWithPassword: (input: {email: string;password: string;}) => Promise<AuthResult>;
-  sendMagicLink: (email: string) => Promise<AuthResult>;
+  /**
+   * Sends a one time sign in link. Pass `signUp` to create the account (carrying the
+   * signup consents); omit it on the log in path so an unknown email is NOT silently
+   * turned into a consent-less account.
+   */
+  sendMagicLink: (input: {
+    email: string;
+    signUp?: {businessName: string;marketingEmailOptIn: boolean;advertisingOptIn: boolean;};
+  }) => Promise<AuthResult>;
   sendPasswordReset: (email: string) => Promise<AuthResult>;
   updatePassword: (password: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
@@ -60,13 +71,14 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
   }, []);
 
   const signUpWithPassword = useCallback<AuthContextValue['signUpWithPassword']>(
-    async ({ email, password, businessName }) => {
+    async ({ email, password, businessName, marketingEmailOptIn, advertisingOptIn }) => {
       if (!supabase) return { error: MISSING_CONFIG_MESSAGE };
       trackSignUpStarted('password');
       // Signup context is written to auth.users.raw_user_meta_data. The Supabase
-      // provisioning trigger (see supabase/migrations) reads `brand`, `business_name`
-      // and the nested `attribution` to create the profile and brand membership, so the
-      // sale can be tied back to the ad that started it and to the right sub-brand.
+      // provisioning trigger (see supabase/migrations) reads `brand`, `business_name`,
+      // the nested `attribution`, and `consents` to create the profile, brand membership
+      // and consent audit trail. `consents` carries the exact document versions shown;
+      // the acceptance timestamp is stamped server-side, not trusted from here.
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -75,12 +87,15 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
           data: {
             brand: BRAND_SLUG,
             business_name: businessName,
-            attribution: attributionForMetadata()
+            attribution: attributionForMetadata(),
+            consents: signupConsents(marketingEmailOptIn, advertisingOptIn),
+            marketing_email_opt_in: marketingEmailOptIn,
+            advertising_opt_in: advertisingOptIn
           }
         }
       });
       if (error) return { error: error.message };
-      await trackSignUpCompleted('password', email, data.user?.id);
+      await trackSignUpCompleted('password', email, data.user?.id, marketingEmailOptIn, advertisingOptIn);
       return { error: null };
     },
     []
@@ -95,21 +110,36 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     []
   );
 
-  const sendMagicLink = useCallback<AuthContextValue['sendMagicLink']>(async (email) => {
+  const sendMagicLink = useCallback<AuthContextValue['sendMagicLink']>(async ({ email, signUp }) => {
     if (!supabase) return { error: MISSING_CONFIG_MESSAGE };
-    trackSignUpStarted('magic_link');
+    const isSignUp = Boolean(signUp);
+    if (isSignUp) trackSignUpStarted('magic_link');
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
+        // Only the signup path may create a new account. On the log in path an unknown
+        // email is rejected rather than turned into an account with no consent on file.
+        shouldCreateUser: isSignUp,
         emailRedirectTo: redirectTo('/dashboard'),
-        data: {
+        data: isSignUp ?
+        {
           brand: BRAND_SLUG,
-          attribution: attributionForMetadata()
-        }
+          business_name: signUp!.businessName,
+          attribution: attributionForMetadata(),
+          consents: signupConsents(signUp!.marketingEmailOptIn, signUp!.advertisingOptIn),
+          marketing_email_opt_in: signUp!.marketingEmailOptIn,
+          advertising_opt_in: signUp!.advertisingOptIn
+        } :
+        undefined
       }
     });
     if (error) return { error: error.message };
-    await trackSignUpCompleted('magic_link', email);
+    if (isSignUp) {
+      await trackSignUpCompleted(
+        'magic_link', email, undefined,
+        signUp!.marketingEmailOptIn, signUp!.advertisingOptIn
+      );
+    }
     return { error: null };
   }, []);
 
