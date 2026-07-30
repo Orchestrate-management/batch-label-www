@@ -74,6 +74,24 @@ interface CheckboxProps {
   children: React.ReactNode;
 }
 
+/**
+ * A checkbox that can be marked as required without lying to anyone.
+ *
+ * A red asterisk is the convention sighted people already read, so it is here. It is not
+ * the only signal, because on its own it is worth nothing to someone who cannot see it
+ * and worse than nothing to a screen reader, which would announce a bare "star":
+ *
+ *  - the asterisk is aria-hidden, so it is never read out as punctuation;
+ *  - the accessible name ends in "(required)", carried by visually hidden text inside
+ *    the label, so the state is part of what the control announces;
+ *  - `required` and `aria-required` put the same fact in the semantics, for anything
+ *    that reads state rather than name;
+ *  - `RequiredKey` below explains the asterisk in words for sighted users.
+ *
+ * The forms are `noValidate`, so the browser never shows its own message: submission is
+ * blocked in the handler and the reason is announced through the `role="alert"` error,
+ * which is also wired to the input with aria-describedby.
+ */
 export function Checkbox({ name, checked, onChange, required, error, children }: CheckboxProps) {
   const errorId = error ? `${name}-error` : undefined;
   return (
@@ -85,6 +103,7 @@ export function Checkbox({ name, checked, onChange, required, error, children }:
           type="checkbox"
           checked={checked}
           required={required}
+          aria-required={required ? true : undefined}
           aria-describedby={errorId}
           aria-invalid={error ? true : undefined}
           onChange={(event) => onChange(event.target.checked)}
@@ -92,7 +111,15 @@ export function Checkbox({ name, checked, onChange, required, error, children }:
           error ? 'border-clay-600' : 'border-ink/25'}`
           } />
 
-        <span className="leading-relaxed">{children}</span>
+        <span className="leading-relaxed">
+          {children}
+          {required ?
+          <>
+              <span aria-hidden="true" className="ml-1 font-semibold text-clay-600">*</span>
+              <span className="sr-only"> (required)</span>
+            </> :
+          null}
+        </span>
       </label>
       {error ?
       <p id={errorId} role="alert" className="pl-7 text-xs font-medium text-clay-600">
@@ -100,6 +127,24 @@ export function Checkbox({ name, checked, onChange, required, error, children }:
         </p> :
       null}
     </div>);
+
+}
+
+/**
+ * The visible key for the asterisk. Put it with any group that contains a required
+ * Checkbox, so the marker is explained rather than assumed.
+ *
+ * Sighted readers see "Boxes marked * are required." A screen reader hears "Boxes marked
+ * with an asterisk are required.", because the character itself is hidden and the words
+ * stand in for it.
+ */
+export function RequiredKey() {
+  return (
+    <p className="text-xs text-ink-muted">
+      Boxes marked{' '}
+      <span aria-hidden="true" className="font-semibold text-clay-600">*</span>
+      <span className="sr-only">with an asterisk</span> are required.
+    </p>);
 
 }
 
