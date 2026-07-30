@@ -100,19 +100,31 @@ describe('FinishSetup (the OAuth completion screen)', () => {
       businessName: 'Willow & Wick',
       termsAccepted: true,
       marketingEmailOptIn: true,
-      advertisingOptIn: false,
     });
   });
 
-  it('records the optional consents as declined when the boxes are left alone', async () => {
+  it('records the optional consent as declined when the box is left alone', async () => {
     renderPage();
     fireEvent.click(terms());
     fireEvent.click(submit());
 
     await waitFor(() => expect(mocks.completeOAuthSignup).toHaveBeenCalled());
     expect(mocks.completeOAuthSignup).toHaveBeenCalledWith(
-      expect.objectContaining({ marketingEmailOptIn: false, advertisingOptIn: false }),
+      expect.objectContaining({ marketingEmailOptIn: false }),
     );
+  });
+
+  it('does not ask about advertising: that is the cookie banner, not this form', () => {
+    renderPage();
+    expect(screen.queryByRole('checkbox', { name: /advertising/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+  });
+
+  it('marks the terms as required in the accessible name, not just with an asterisk', () => {
+    renderPage();
+    expect(
+      screen.getByRole('checkbox', { name: /I accept the Terms of Service.*\(required\)/i }),
+    ).toBeRequired();
   });
 
   it('fires sign_up_completed with method google once the account really exists', async () => {

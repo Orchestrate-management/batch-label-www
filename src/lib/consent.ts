@@ -1,16 +1,19 @@
 /**
- * Google Consent Mode v2 plus Google Tag Manager bootstrap.
+ * Google Consent Mode v2 bootstrap.
  *
  * Order matters and is enforced here:
  *  1. dataLayer is created.
  *  2. Consent Mode v2 defaults are pushed with everything non essential DENIED.
  *  3. Any previously stored choice is replayed as a consent update.
- *  4. Only then is the GTM container script injected into <head>.
+ *  4. Only then is the GA4 tag injected into <head>.
  *
- * GA4 and the Meta Pixel are configured inside the GTM container, so denying a
- * category here actually stops those tags firing rather than just hiding a banner.
- * Meta advanced matching is enabled on the Pixel tag in GTM and reads the hashed
- * email pushed to the dataLayer by lib/analytics.ts on sign up.
+ * There is no tag manager: GA4 is loaded directly, below. See src/TRACKING.md.
+ *
+ * This file owns ADVERTISING for the whole product. The banner's `marketing` toggle
+ * drives ad_storage, ad_user_data and ad_personalization, and it is also what the
+ * account-level advertising_opt_in is derived from — see advertisingConsentFromBanner()
+ * and docs/CONSENT.md. Nothing else asks the user about advertising, so the two records
+ * cannot contradict each other.
  */
 
 /**
@@ -96,6 +99,21 @@ export function getStoredConsent(): ConsentChoice | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The account-level advertising opt-in, derived from the banner.
+ *
+ * There is deliberately no second question about advertising anywhere in the product.
+ * Sharing a hashed email with Meta or Google is account level, the retargeting it powers
+ * is device level, and asking twice produced two records that could disagree — at which
+ * point neither proves anything.
+ *
+ * No stored choice means no. Consent Mode already defaults ad_storage to denied, so
+ * false is the only answer consistent with what the browser is already doing.
+ */
+export function advertisingConsentFromBanner(): boolean {
+  return getStoredConsent()?.marketing ?? false;
 }
 
 function toValue(granted: boolean): ConsentValue {

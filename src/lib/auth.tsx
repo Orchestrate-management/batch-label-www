@@ -4,6 +4,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { supabase, isSupabaseConfigured, MISSING_CONFIG_MESSAGE } from './supabase';
 import { BRAND_SLUG } from './brand';
 import { signupConsents } from './agreements';
+import { advertisingConsentFromBanner } from './consent';
 import { attributionForMetadata } from './attribution';
 import { trackSignUpCompleted, trackSignUpStarted } from './analytics';
 import { fetchMembershipState, membershipRedirect, type MembershipState } from './membership';
@@ -17,12 +18,15 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   configured: boolean;
+  /**
+   * Creates the account. There is no advertisingOptIn argument on purpose: the signup
+   * form does not ask, and this function derives it from the cookie banner instead.
+   */
   signUpWithPassword: (input: {
     email: string;
     password: string;
     businessName: string;
     marketingEmailOptIn: boolean;
-    advertisingOptIn: boolean;
   }) => Promise<AuthResult>;
   signInWithPassword: (input: {email: string;password: string;}) => Promise<AuthResult>;
   /**
@@ -41,7 +45,7 @@ interface AuthContextValue {
    */
   sendMagicLink: (input: {
     email: string;
-    signUp?: {businessName: string;marketingEmailOptIn: boolean;advertisingOptIn: boolean;};
+    signUp?: {businessName: string;marketingEmailOptIn: boolean;};
   }) => Promise<AuthResult>;
   sendPasswordReset: (email: string) => Promise<AuthResult>;
   updatePassword: (password: string) => Promise<AuthResult>;
@@ -81,9 +85,13 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
   }, []);
 
   const signUpWithPassword = useCallback<AuthContextValue['signUpWithPassword']>(
-    async ({ email, password, businessName, marketingEmailOptIn, advertisingOptIn }) => {
+    async ({ email, password, businessName, marketingEmailOptIn }) => {
       if (!supabase) return { error: MISSING_CONFIG_MESSAGE };
       trackSignUpStarted('password');
+      // Read, not asked. The cookie banner owns advertising, so this is the decision the
+      // browser is already acting on, written onto the account so the two start in step.
+      // No banner choice yet means false, which is what Consent Mode is already doing.
+      const advertisingOptIn = advertisingConsentFromBanner();
       // Signup context is written to auth.users.raw_user_meta_data. The Supabase
       // provisioning trigger (see supabase/migrations) reads `brand`, `business_name`,
       // the nested `attribution`, and `consents` to create the profile, brand membership
@@ -142,6 +150,8 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     if (!supabase) return { error: MISSING_CONFIG_MESSAGE };
     const isSignUp = Boolean(signUp);
     if (isSignUp) trackSignUpStarted('magic_link');
+    // Same derivation as the password path, for the same reason.
+    const advertisingOptIn = advertisingConsentFromBanner();
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -154,9 +164,9 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
           brand: BRAND_SLUG,
           business_name: signUp!.businessName,
           attribution: attributionForMetadata(),
-          consents: signupConsents(signUp!.marketingEmailOptIn, signUp!.advertisingOptIn),
+          consents: signupConsents(signUp!.marketingEmailOptIn, advertisingOptIn),
           marketing_email_opt_in: signUp!.marketingEmailOptIn,
-          advertising_opt_in: signUp!.advertisingOptIn
+          advertising_opt_in: advertisingOptIn
         } :
         undefined
       }
@@ -165,7 +175,7 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     if (isSignUp) {
       await trackSignUpCompleted(
         'magic_link', email, undefined,
-        signUp!.marketingEmailOptIn, signUp!.advertisingOptIn
+        signUp!.marketingEmailOptIn, advertisingOptIn
       );
     }
     return { error: null };

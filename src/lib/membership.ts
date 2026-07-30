@@ -17,10 +17,10 @@ import { supabase } from './supabase';
 import { BRAND_SLUG } from './brand';
 import {
   signupAgreementDocuments,
-  MARKETING_EMAIL_AGREEMENT,
-  ADVERTISING_AGREEMENT } from
+  MARKETING_EMAIL_AGREEMENT } from
 './agreements';
 import { updateConsentPreference } from './consent-preferences';
+import { advertisingConsentFromBanner } from './consent';
 import { attributionForMetadata } from './attribution';
 
 /**
@@ -74,7 +74,6 @@ export interface CompletionInput {
   businessName: string;
   termsAccepted: boolean;
   marketingEmailOptIn: boolean;
-  advertisingOptIn: boolean;
 }
 
 /**
@@ -84,9 +83,11 @@ export interface CompletionInput {
  * acceptance timestamp (stamped server-side), and no `accepted` flag buried inside the
  * document snapshots (the booleans below are the only source of that).
  *
- * Attribution survives the Google round trip because it lives in localStorage and a
- * first-party cookie, so the first-touch record captured before the redirect is still
- * there afterwards and lands on the membership exactly as it does for an email signup.
+ * p_advertising_opt_in is derived rather than collected. The completion screen asks for
+ * the shop name, the terms and marketing email; advertising was already decided at the
+ * cookie banner, and that choice survives the Google round trip in localStorage and a
+ * first-party cookie exactly as attribution does. The function signature is unchanged,
+ * so no migration is needed to send a derived value instead of a ticked one.
  */
 export function completionPayload(input: CompletionInput) {
   return {
@@ -94,7 +95,7 @@ export function completionPayload(input: CompletionInput) {
     p_business_name: input.businessName.trim() || null,
     p_terms_accepted: input.termsAccepted,
     p_marketing_email_opt_in: input.marketingEmailOptIn,
-    p_advertising_opt_in: input.advertisingOptIn,
+    p_advertising_opt_in: advertisingConsentFromBanner(),
     p_agreements: signupAgreementDocuments(),
     p_attribution: attributionForMetadata()
   };
@@ -127,15 +128,17 @@ export async function completeOAuthSignup(input: CompletionInput): Promise<Compl
 
   // provisioned === false means a membership already existed (a repeat submit, or a
   // Google identity linked onto an account that had signed up by email). The function
-  // writes nothing in that case, so the marketing choices the user just ticked on this
-  // form would be thrown away. Apply them through the normal consent path instead, so a
+  // writes nothing in that case, so the marketing choice the user just ticked on this
+  // form would be thrown away. Apply it through the normal consent path instead, so a
   // decision someone actually expressed is never silently dropped. Terms are untouched:
   // the existing membership already carries an acceptance.
+  //
+  // Advertising is deliberately NOT written here. Nobody expressed anything about it on
+  // this form, and this browser may simply never have answered the banner — in which
+  // case the derived value is false, and writing it would silently withdraw a consent
+  // the person gave on another device. Advertising only changes when the banner changes.
   if (!provisioned) {
-    await Promise.all([
-    updateConsentPreference(MARKETING_EMAIL_AGREEMENT, input.marketingEmailOptIn),
-    updateConsentPreference(ADVERTISING_AGREEMENT, input.advertisingOptIn)]
-    );
+    await updateConsentPreference(MARKETING_EMAIL_AGREEMENT, input.marketingEmailOptIn);
   }
 
   return { error: null, provisioned };
