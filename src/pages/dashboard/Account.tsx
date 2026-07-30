@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { usePageMeta } from '../../lib/seo';
 import { useAuth } from '../../lib/auth';
 import { openBillingPortal, startCheckout } from '../../lib/billing';

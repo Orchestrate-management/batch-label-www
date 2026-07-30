@@ -1,4 +1,3 @@
-import React from 'react';
 import { usePageMeta } from '../lib/seo';
 import { PageHero } from '../components/PageHero';
 import { Section, Heading, Eyebrow, Lead } from '../components/ui/Section';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Pictogram } from './Pictogram';
 
 interface LabelPreviewProps {

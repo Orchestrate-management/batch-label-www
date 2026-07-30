@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckIcon, MinusIcon } from 'lucide-react';
 import { usePageMeta } from '../lib/seo';
 import { trackViewPricing } from '../lib/analytics';

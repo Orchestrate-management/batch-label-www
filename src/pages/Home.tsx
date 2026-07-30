@@ -1,4 +1,3 @@
-import React from 'react';
 import { usePageMeta } from '../lib/seo';
 import { Hero } from '../components/home/Hero';
 import { TrustStrip } from '../components/home/TrustStrip';

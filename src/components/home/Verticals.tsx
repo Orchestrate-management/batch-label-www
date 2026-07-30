@@ -1,4 +1,3 @@
-import React from 'react';
 import { CheckIcon, ArrowRightIcon } from 'lucide-react';
 import { Section, Heading, Eyebrow, Lead } from '../ui/Section';
 import { Button } from '../ui/Button';

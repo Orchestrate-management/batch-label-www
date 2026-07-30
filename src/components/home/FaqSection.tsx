@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { Section, Heading, Eyebrow } from '../ui/Section';
 import { Accordion, type AccordionItem } from '../ui/Accordion';

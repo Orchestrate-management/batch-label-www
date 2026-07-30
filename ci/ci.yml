@@ -1,0 +1,63 @@
+# -----------------------------------------------------------------------------
+# ACTIVATION REQUIRED: move this file to .github/workflows/ci.yml
+#
+# It lives at ci/ci.yml (not .github/workflows/) only because the token used to
+# open this PR lacks the GitHub `workflow` OAuth scope, so it could not push a
+# file under .github/workflows/. A maintainer with that scope should activate it
+# by running, from the repo root:
+#
+#     git mv ci/ci.yml .github/workflows/ci.yml && git commit && git push
+#
+# ...or by recreating it at .github/workflows/ci.yml via the GitHub web UI
+# (Add file -> Create new file), which carries the required permission.
+# The workflow only runs once it is located at .github/workflows/ci.yml.
+# -----------------------------------------------------------------------------
+
+name: CI
+
+# Run the full quality gate on every push and every pull request.
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, typecheck, test & build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test (with coverage)
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore

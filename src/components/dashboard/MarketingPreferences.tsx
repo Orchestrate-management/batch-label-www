@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Checkbox, Alert } from '../ui/Field';
 import {
   MARKETING_EMAIL_AGREEMENT,

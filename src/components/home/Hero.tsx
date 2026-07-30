@@ -1,4 +1,3 @@
-import React from 'react';
 import { CheckIcon } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { LabelPreview } from '../LabelPreview';
