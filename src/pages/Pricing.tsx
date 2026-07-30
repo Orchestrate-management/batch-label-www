@@ -45,6 +45,16 @@ export function Pricing() {
     'Start free with one watermarked label. The Maker plan is £14 a month or £140 a year, VAT included, for unlimited print ready CLP labels and UFI generation.'
   });
 
+  // Restored after a semantic merge conflict: #12 added this and #13 edited the same
+  // component, so the textual merge kept the imports and dropped the call. The page then
+  // shipped with no Offer or FAQ markup while still looking instrumented.
+  useStructuredData(
+    graph([
+    breadcrumbSchema('Pricing', '/pricing'),
+    softwareApplicationSchema(),
+    faqPageSchema('/pricing', pricingFaqs)])
+  );
+
   const [interval, setInterval] = useState<BillingInterval>('monthly');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
