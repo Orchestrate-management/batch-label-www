@@ -48,6 +48,18 @@ export function Pricing() {
     'Start free with one watermarked label. The Maker plan is £14 a month or £140 a year, VAT included, for unlimited print ready CLP labels and UFI generation.'
   });
 
+  // Restored after a merge of main into this branch dropped the call while keeping the
+  // imports, which left the pricing page — the one page whose prices Google most wants as
+  // structured data — emitting no JSON-LD at all. src/pages/pages.seo.test.tsx pins the
+  // exact shape: BreadcrumbList, SoftwareApplication with its three offers, then FAQPage.
+  useStructuredData(
+    graph([
+    breadcrumbSchema('Pricing', '/pricing'),
+    softwareApplicationSchema(),
+    faqPageSchema('/pricing', pricingFaqs)]
+    )
+  );
+
   const navigate = useNavigate();
   const { session, configured } = useAuth();
   const [interval, setInterval] = useState<BillingInterval>('monthly');
