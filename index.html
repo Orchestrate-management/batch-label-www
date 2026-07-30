@@ -2,9 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <!-- SVG first for browsers that take it; the PNG is the fallback for those that
+         do not. Safari ignores SVG for apple-touch-icon, so that one must be a PNG,
+         and it is full-bleed because iOS masks its own corners and paints any
+         transparency black. -->
+    <link rel="icon" type="image/svg+xml" href="/brand/batchlabel-favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32x32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/brand/apple-touch-icon.png" />
+    <meta name="theme-color" content="#14514F" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Batchlabel Marketing Site</title>
+    <title>Batchlabel</title>
   </head>
   <body>
     <div id="root"></div>
