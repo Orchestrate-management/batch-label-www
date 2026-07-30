@@ -4,6 +4,7 @@ import { AuthProvider, RequireAuth, RequireMembership } from './lib/auth';
 import { captureAttribution } from './lib/attribution';
 import { SiteLayout } from './components/layout/SiteLayout';
 import { CookieBanner } from './components/CookieBanner';
+import { RouteAnnouncer } from './components/RouteAnnouncer';
 import { DashboardLayout } from './components/dashboard/DashboardLayout';
 import { Home } from './pages/Home';
 import { Pricing } from './pages/Pricing';
@@ -49,6 +50,7 @@ export function App() {
       <AuthProvider>
         <AttributionCapture />
         <ScrollToTop />
+        <RouteAnnouncer />
         <Routes>
           <Route element={<SiteLayout />}>
             <Route path="/" element={<Home />} />

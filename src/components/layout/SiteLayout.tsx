@@ -12,7 +12,13 @@ export function SiteLayout() {
         Skip to content
       </a>
       <SiteHeader />
-      <main id="main" className="flex-1">
+      {/*
+        tabIndex={-1} is what makes the skip link work. Without it, <main> is not
+        focusable, and Safari in particular moves the scroll position to the fragment but
+        leaves focus on the skip link, so the next Tab drops the user straight back into
+        the header they were trying to skip.
+      */}
+      <main id="main" tabIndex={-1} className="flex-1">
         <Outlet />
       </main>
       <SiteFooter />
