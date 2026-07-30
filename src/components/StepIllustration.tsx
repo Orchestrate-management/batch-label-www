@@ -1,4 +1,3 @@
-import React from 'react';
 
 type StepKind = 'upload' | 'recipe' | 'download';
 

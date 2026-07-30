@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getStoredConsent, saveConsent } from '../lib/consent';
 import { Button } from './ui/Button';

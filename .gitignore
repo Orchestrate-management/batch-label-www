@@ -4,14 +4,18 @@ node_modules/
 # Build output
 dist/
 
-# Local env (never commit secrets)
-.env
-.env.local
-.env.*.local
+# Test / coverage output
+coverage/
+*.lcov
+
+# Local env (never commit secrets), but keep the template
+.env*
+!.env.example
 
 # Editor / OS
 .DS_Store
 *.log
 .vercel
-.env*
-!.env.example
+
+# Claude Code local state / agent worktrees
+.claude/

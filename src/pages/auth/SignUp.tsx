@@ -3,8 +3,22 @@ import { Link, useNavigate } from 'react-router-dom';
 import { usePageMeta } from '../../lib/seo';
 import { useAuth } from '../../lib/auth';
 import { AuthShell } from '../../components/auth/AuthShell';
-import { Field, Alert } from '../../components/ui/Field';
+import { Field, Alert, Checkbox } from '../../components/ui/Field';
 import { Button } from '../../components/ui/Button';
+
+/** Opens a legal doc in a new tab without toggling the checkbox it lives inside. */
+function LegalLink({ to, children }: {to: string;children: React.ReactNode;}) {
+  return (
+    <Link
+      to={to}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(event) => event.stopPropagation()}
+      className="text-teal-700 underline decoration-teal-700/40 underline-offset-2">
+      {children}
+    </Link>);
+
+}
 
 type Mode = 'password' | 'magic_link';
 
@@ -22,18 +36,33 @@ export function SignUp() {
   const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [marketingEmailOptIn, setMarketingEmailOptIn] = useState(false);
+  const [advertisingOptIn, setAdvertisingOptIn] = useState(false);
+  const [termsError, setTermsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    // Accepting the terms is mandatory. Surface the error and move focus to the control
+    // so assistive tech announces why submission was blocked.
+    if (!termsAccepted) {
+      setTermsError('Please accept the Terms of Service to create your account.');
+      if (typeof document !== 'undefined') {
+        document.getElementById('acceptTerms')?.focus();
+      }
+      return;
+    }
+    setTermsError(null);
     setBusy(true);
     setError(null);
 
     const result =
     mode === 'password' ?
-    await signUpWithPassword({ email, password, businessName }) :
-    await sendMagicLink(email);
+    await signUpWithPassword({ email, password, businessName, marketingEmailOptIn, advertisingOptIn }) :
+    await sendMagicLink({ email, signUp: { businessName, marketingEmailOptIn, advertisingOptIn } });
 
     setBusy(false);
     if (result.error) {
@@ -96,6 +125,36 @@ export function SignUp() {
 
         null}
 
+        <div className="space-y-3 rounded-xl border border-paper-edge bg-paper-deep/40 p-4">
+          <Checkbox
+            name="acceptTerms"
+            checked={termsAccepted}
+            required
+            error={termsError ?? undefined}
+            onChange={(checked) => {
+              setTermsAccepted(checked);
+              if (checked) setTermsError(null);
+            }}>
+            I accept the <LegalLink to="/terms">Terms of Service</LegalLink>.
+          </Checkbox>
+
+          <Checkbox
+            name="marketingEmailOptIn"
+            checked={marketingEmailOptIn}
+            onChange={setMarketingEmailOptIn}>
+            Send me product tips and offers by email. Optional, unsubscribe any time.
+          </Checkbox>
+
+          <Checkbox
+            name="advertisingOptIn"
+            checked={advertisingOptIn}
+            onChange={setAdvertisingOptIn}>
+            Use my email and account details for advertising and retargeting (shared with
+            partners such as Meta and Google). Optional. See our{' '}
+            <LegalLink to="/privacy">Privacy Policy</LegalLink>.
+          </Checkbox>
+        </div>
+
         {error ? <Alert tone="error">{error}</Alert> : null}
 
         <Button type="submit" fullWidth disabled={busy} track={{ label: 'Create account', location: 'sign_up' }}>
@@ -114,8 +173,8 @@ export function SignUp() {
         </button>
 
         <p className="text-xs leading-relaxed text-ink-muted">
-          By creating an account you agree to our terms of service. We do not send marketing email
-          unless you ask us to.
+          Both options above are optional. You can change either one any time from your account
+          settings, or unsubscribe using the link in any marketing email.
         </p>
       </form>
     </AuthShell>);

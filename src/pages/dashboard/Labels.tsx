@@ -1,4 +1,3 @@
-import React from 'react';
 import { FileTextIcon } from 'lucide-react';
 import { usePageMeta } from '../../lib/seo';
 import { Button } from '../../components/ui/Button';

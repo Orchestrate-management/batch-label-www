@@ -1,4 +1,3 @@
-import React from 'react';
 import { CheckIcon } from 'lucide-react';
 import { Section, Heading, Eyebrow, Lead } from '../ui/Section';
 import { LabelPreview } from '../LabelPreview';

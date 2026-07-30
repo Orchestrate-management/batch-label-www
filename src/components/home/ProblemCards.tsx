@@ -1,4 +1,3 @@
-import React from 'react';
 import { Section, Heading, Eyebrow, Lead } from '../ui/Section';
 
 const cards = [
