@@ -24,7 +24,12 @@ DEFAULT_APP_URL).replace(/\/+$/, '');
  * this list rather than trusted — an unchecked `next` is an open redirect, and a
  * convincing one, because it happens immediately after a real login.
  */
-function isAllowedDestination(raw: string): boolean {
+/** True only in a dev build. Vite replaces this at build time. */
+function isDevBuild(): boolean {
+  return Boolean((import.meta as unknown as {env?: Record<string, unknown>;}).env?.DEV);
+}
+
+function isAllowedDestination(raw: string, allowLocalhost: boolean = isDevBuild()): boolean {
   let parsed: URL;
   try {
     parsed = new URL(raw, APP_URL);
@@ -42,13 +47,14 @@ function isAllowedDestination(raw: string): boolean {
   })();
 
   const host = parsed.hostname;
-  return (
-    host === appHost ||
-    host === 'app.batchlabel.xyz' ||
-    // Local development of the app.
-    host === 'localhost' ||
-    host === '127.0.0.1');
+  if (host === appHost || host === 'app.batchlabel.xyz') return true;
 
+  // Local development of the app, and ONLY in a dev build. Left unconditional this is a
+  // production open redirect: a login link could bounce someone to an attacker's
+  // localhost-named host. No token leaks either way — the session cookie is scoped to
+  // .batchlabel.xyz — but sending a freshly authenticated person somewhere unexpected is
+  // exactly the moment they are least likely to notice.
+  return allowLocalhost && (host === 'localhost' || host === '127.0.0.1');
 }
 
 /**

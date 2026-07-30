@@ -46,4 +46,18 @@ describe('app handoff', () => {
   it('allows localhost so the app can be developed against', () => {
     expect(isAllowedDestination('http://localhost:5174/products')).toBe(true);
   });
+
+  /**
+   * The localhost allowance is for developing the app against a local www. Left on in a
+   * production build it is an open redirect — a login link could bounce a freshly
+   * authenticated person to an attacker-controlled host merely named "localhost". The
+   * second argument is what the dev-build check resolves to, so both branches are
+   * testable rather than only the one this test run happens to be in.
+   */
+  it('refuses localhost in a production build', () => {
+    expect(isAllowedDestination('http://localhost:5174/products', false)).toBe(false);
+    expect(isAllowedDestination('http://127.0.0.1:5174/products', false)).toBe(false);
+    // The real app is still fine with the allowance off.
+    expect(isAllowedDestination('https://app.batchlabel.xyz/products', false)).toBe(true);
+  });
 });
