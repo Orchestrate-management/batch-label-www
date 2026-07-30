@@ -13,9 +13,31 @@ import { ATTRIBUTION_STORAGE_KEY } from './attribution';
 
 type DataLayerEntry = Record<string, unknown>;
 
+/**
+ * The last event object on the dataLayer.
+ *
+ * dataLayer has two writers now: our own `{ event, ... }` records, and gtag, which uses
+ * the same array as its command queue and pushes an `arguments` object per call. Taking
+ * the literal last element would pick up gtag's command, so this skips anything
+ * array-like and looks for our record.
+ */
 function lastEvent(): DataLayerEntry {
   const layer = (window.dataLayer ?? []) as DataLayerEntry[];
-  return layer[layer.length - 1];
+  for (let i = layer.length - 1; i >= 0; i--) {
+    const entry = layer[i];
+    const isGtagCommand =
+    typeof entry === 'object' && entry !== null && typeof (entry as unknown as ArrayLike<unknown>).length === 'number';
+    if (!isGtagCommand && typeof entry?.event === 'string') return entry;
+  }
+  return {} as DataLayerEntry;
+}
+
+/** The GA4 commands gtag queued, so a test can assert the event actually reports. */
+function gtagCommands(): unknown[][] {
+  const layer = (window.dataLayer ?? []) as unknown[];
+  return layer.
+  filter((e) => typeof e === 'object' && e !== null && typeof (e as ArrayLike<unknown>).length === 'number').
+  map((e) => Array.from(e as ArrayLike<unknown>));
 }
 
 describe('analytics', () => {
@@ -107,6 +129,44 @@ describe('analytics', () => {
         attr_medium: 'cpc',
         attr_gclid: 'g1',
         attr_fbclid: 'f1',
+      });
+    });
+  });
+
+  /**
+   * There is no tag manager in front of GA4, so a dataLayer push on its own reports
+   * nothing. Every event has to reach gtag too. These guard the bridge, because losing
+   * it fails silently — the site would look instrumented and record nothing.
+   */
+  describe('GA4 bridge', () => {
+    it('sends every event to gtag, not only to the dataLayer', () => {
+      trackCtaClick('Make a label free', 'hero');
+      const events = gtagCommands().filter((c) => c[0] === 'event');
+      expect(events).toHaveLength(1);
+      expect(events[0][1]).toBe('cta_click');
+      expect(events[0][2]).toMatchObject({
+        cta_label: 'Make a label free',
+        cta_location: 'hero',
+      });
+    });
+
+    it('drops null and undefined params, which GA4 ignores but still counts', async () => {
+      await trackSignUpCompleted('password', 'maker@example.com');
+      const event = gtagCommands().find((c) => c[1] === 'sign_up_completed');
+      expect(event).toBeDefined();
+      const params = event![2] as Record<string, unknown>;
+      expect('user_id' in params).toBe(false);
+      expect(Object.values(params).every((v) => v !== null && v !== undefined)).toBe(true);
+      // The dataLayer record keeps the full shape, nulls included.
+      expect(lastEvent()).toMatchObject({ user_id: null });
+    });
+
+    it('sends page_location so GA4 can attribute the route, since send_page_view is off', () => {
+      trackPageView('/pricing', 'Pricing');
+      const event = gtagCommands().find((c) => c[1] === 'page_view');
+      expect(event![2]).toMatchObject({
+        page_path: '/pricing',
+        page_location: 'https://batchlabel.co.uk/pricing',
       });
     });
   });

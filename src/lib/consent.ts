@@ -13,7 +13,24 @@
  * email pushed to the dataLayer by lib/analytics.ts on sign up.
  */
 
-export const GTM_CONTAINER_ID = 'GTM-XXXXXXX'; // TODO: replace with the live Batchlabel container id.
+/**
+ * GA4 measurement id. Public by design (it ships in the page), so it lives in code
+ * rather than an env var — one less thing to forget on a redeploy. Override per
+ * deployment with VITE_GA4_MEASUREMENT_ID if a sub-brand ever needs its own property.
+ */
+export const GA4_MEASUREMENT_ID =
+(import.meta as unknown as {env?: Record<string, string>;}).env?.
+VITE_GA4_MEASUREMENT_ID || 'G-BGDNRH022T';
+
+/**
+ * Local development should not report into the live property. Anything that is not a
+ * localhost hostname counts as a real environment, so preview deploys still measure.
+ */
+function isMeasurableHost(): boolean {
+  if (typeof window === 'undefined') return false;
+  const h = window.location.hostname;
+  return h !== 'localhost' && h !== '127.0.0.1' && h !== '::1' && !h.endsWith('.local');
+}
 export const CONSENT_STORAGE_KEY = 'bl_consent';
 const CONSENT_COOKIE_NAME = 'bl_consent';
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 183; // Six months, then we ask again.
@@ -47,6 +64,20 @@ const gtag = function () {
   // eslint-disable-next-line prefer-rest-params
   window.dataLayer.push(arguments);
 } as (...args: unknown[]) => void;
+
+/**
+ * Sends a GA4 event.
+ *
+ * Without a tag manager in front of it, a plain object pushed to dataLayer is inert —
+ * GA4 only acts on gtag commands. Every event therefore has to go through here as well
+ * as onto dataLayer, or it is recorded nowhere. See lib/analytics.ts.
+ *
+ * Safe to call before the tag has loaded: the command sits on the queue and is replayed
+ * when it boots, and Consent Mode still decides whether anything is actually sent.
+ */
+export function gtagEvent(name: string, params: Record<string, unknown> = {}) {
+  gtag('event', name, params);
+}
 
 function writeCookie(value: string) {
   if (typeof document === 'undefined') return;
@@ -131,10 +162,21 @@ export function initTagging() {
   const stored = getStoredConsent();
   if (stored) updateConsentMode(stored);
 
-  // 3. Load the container. Tags inside it are still gated by Consent Mode above.
-  pushToDataLayer({ 'gtm.start': Date.now(), event: 'gtm.js' });
+  // 3. Load GA4. Order matters: the consent defaults above are already on the queue, so
+  //    gtag applies them the moment it boots and will not read or write storage until
+  //    the maker grants analytics. Loading the tag in index.html instead — as Google's
+  //    copy-paste snippet does — would put it ahead of those defaults and measure people
+  //    who never consented.
+  if (!isMeasurableHost()) return;
+
   const script = document.createElement('script');
   script.async = true;
-  script.src = `https://www.googletagmanager.com/gtm.js?id=${GTM_CONTAINER_ID}`;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${GA4_MEASUREMENT_ID}`;
   document.head.appendChild(script);
+
+  gtag('js', new Date());
+  // send_page_view is off because this is a single page app: the initial GA4 page view
+  // would double count against the page_view that usePageMeta sends on every route
+  // change, including the first one.
+  gtag('config', GA4_MEASUREMENT_ID, { send_page_view: false });
 }

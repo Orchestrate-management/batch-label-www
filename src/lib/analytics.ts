@@ -29,28 +29,53 @@
  */
 
 import { getAttribution } from './attribution';
+import { gtagEvent } from './consent';
 
 export type AnalyticsPayload = Record<string, string | number | boolean | null | undefined>;
+
+/** GA4 ignores null and undefined params but still counts them against the 25 per event. */
+function compact(payload: AnalyticsPayload): Record<string, string | number | boolean> {
+  return Object.entries(payload).reduce<Record<string, string | number | boolean>>(
+    (acc, [key, value]) => {
+      if (value !== null && value !== undefined) acc[key] = value;
+      return acc;
+    },
+    {}
+  );
+}
 
 function push(event: string, payload: AnalyticsPayload = {}) {
   if (typeof window === 'undefined') return;
   window.dataLayer = window.dataLayer || [];
   const attribution = getAttribution();
-  window.dataLayer.push({
-    event,
+  const withAttribution: AnalyticsPayload = {
     ...payload,
-    // First touch click identifiers travel with every event so GTM can stamp them onto
-    // GA4 user properties without re-reading storage.
+    // First touch click identifiers travel with every event, so the ad that produced a
+    // signup is on the event itself rather than having to be re-read from storage.
     attr_source: attribution.utm_source,
     attr_medium: attribution.utm_medium,
     attr_campaign: attribution.utm_campaign,
     attr_gclid: attribution.gclid,
     attr_fbclid: attribution.fbclid
-  });
+  };
+
+  // dataLayer keeps the full record, nulls and all. It is what a tag manager would read
+  // if one is ever put in front of this, and it is what the tests assert against.
+  window.dataLayer.push({ event, ...withAttribution });
+
+  // GA4 only acts on gtag commands, so this is the call that actually reports. Without
+  // it the dataLayer push above would be inert and every event below would be lost.
+  gtagEvent(event, compact(withAttribution));
 }
 
 export function trackPageView(path: string, title: string) {
-  push('page_view', { page_path: path, page_title: title });
+  push('page_view', {
+    page_path: path,
+    page_title: title,
+    // GA4's own page_view dimension. The SPA sends this itself (config sets
+    // send_page_view: false), so the full URL has to be supplied per route change.
+    page_location: typeof window === 'undefined' ? null : window.location.href
+  });
 }
 
 export function trackViewPricing(path: string) {
