@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePageMeta } from '../../lib/seo';
 import { useAuth } from '../../lib/auth';
+import { goToApp } from '../../lib/app-handoff';
 import { completeOAuthSignup } from '../../lib/membership';
 import { trackSignUpCompleted } from '../../lib/analytics';
 import { AuthShell } from '../../components/auth/AuthShell';
@@ -85,7 +86,7 @@ export function FinishSetup() {
         'google', user.email, user.id, marketingEmailOptIn, advertisingOptIn
       );
     }
-    navigate('/dashboard');
+    goToApp();
   };
 
   const handleSignOut = async () => {

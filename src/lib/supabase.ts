@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { sharedCookieStorage } from './session-storage';
 
 /**
  * Supabase browser client.
@@ -18,7 +19,11 @@ createClient(url as string, anonKey as string, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    // Session lives in a cookie on .batchlabel.xyz rather than localStorage, so
+    // app.batchlabel.xyz sees the same login. See lib/session-storage.ts — that
+    // file is duplicated in the product app and the two must stay identical.
+    storage: sharedCookieStorage
   }
 }) :
 null;
