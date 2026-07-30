@@ -9,8 +9,8 @@ interface StepIllustrationProps {
  * Small line illustrations for the three steps. Flat, two colour, no photography.
  */
 export function StepIllustration({ kind }: StepIllustrationProps) {
-  const stroke = '#134F49';
-  const accent = '#B85F3A';
+  const stroke = '#14514F';
+  const accent = '#B4674A';
 
   return (
     <svg
@@ -21,7 +21,7 @@ export function StepIllustration({ kind }: StepIllustrationProps) {
       aria-hidden="true"
       focusable="false">
       
-      <rect x="1.5" y="1.5" width="53" height="53" rx="14" fill="#EFF5F4" />
+      <rect x="1.5" y="1.5" width="53" height="53" rx="14" fill="#EAF1F0" />
       {kind === 'upload' ?
       <g stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20 14h11l6 6v22a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V16a2 2 0 0 1 2-2z" />

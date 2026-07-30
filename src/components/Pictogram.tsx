@@ -24,7 +24,7 @@ export function Pictogram({ kind, size = 44, label }: PictogramProps) {
       <g transform="rotate(45 32 32)">
         <rect x="12" y="12" width="40" height="40" rx="2" fill="#ffffff" stroke="#D0021B" strokeWidth="5" />
       </g>
-      <g fill="#1B2523">
+      <g fill="#1E1B18">
         {kind === 'irritant' ?
         <>
             <rect x="29.5" y="19" width="5" height="18" rx="2.5" />
