@@ -91,7 +91,7 @@ export function Pricing() {
             <h3 className="font-display text-lg font-semibold text-ink">Free</h3>
             <p className="mt-1 text-sm text-ink-muted">To check we handle your fragrance properly.</p>
             <p className="mt-5 font-display text-[2.2rem] font-semibold leading-none text-ink">£0</p>
-            <p className="mt-1 text-sm text-ink-muted">No card required for free.</p>
+            <p className="mt-1 text-sm text-ink-muted">No card needed.</p>
 
             <Button
               to="/sign-up"
@@ -126,7 +126,7 @@ export function Pricing() {
             <div className="flex items-center justify-between gap-3">
               <h3 className="font-display text-lg font-semibold text-ink">Maker</h3>
               <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800">
-                Most makers pick this
+                Unlimited labels
               </span>
             </div>
             <p className="mt-1 text-sm text-ink-muted">For everything you actually sell.</p>

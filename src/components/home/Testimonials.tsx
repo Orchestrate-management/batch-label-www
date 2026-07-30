@@ -23,8 +23,8 @@ export function Testimonials() {
       <Eyebrow>Early days</Eyebrow>
       <Heading id="testimonials-heading">We would rather leave this blank than invent it</Heading>
       <Lead className="mt-3">
-        Batchlabel is new. When makers tell us what changed for them, their words go here, with their
-        name and their shop. Nothing borrowed, nothing made up.
+        Batchlabel is new. When makers tell us what changed for them, their words go here, with
+        their name and their shop.
       </Lead>
 
       <ul className="mt-8 grid gap-4 sm:grid-cols-3">

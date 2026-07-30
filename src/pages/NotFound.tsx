@@ -17,7 +17,7 @@ export function NotFound() {
           We cannot find that page
         </h1>
         <p className="mt-3 text-[1.02rem] leading-relaxed text-ink-soft">
-          The link may be old, or we may have moved something. Either way, here is the way back.
+          The link may be old, or we may have moved something.
         </p>
         <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
           <Button to="/" size="lg">

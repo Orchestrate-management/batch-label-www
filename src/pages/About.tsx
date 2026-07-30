@@ -7,15 +7,15 @@ import { verticals, type Vertical } from '../content/verticals';
 
 const statusStyles: Record<Vertical['status'], string> = {
   'live': 'border-teal-600/25 bg-teal-50 text-teal-800',
-  'coming-soon': 'border-clay-500/25 bg-clay-100 text-clay-600',
-  'planned': 'border-paper-edge bg-paper text-ink-muted'
+  'interest': 'border-clay-500/25 bg-clay-100 text-clay-600',
+  'idea': 'border-paper-edge bg-paper text-ink-muted'
 };
 
 export function About() {
   usePageMeta({
     title: 'About us',
     description:
-    'Batchlabel is the first product from Orchestrate, making compliance labelling manageable for small batch makers. Candles and home fragrance today, cosmetics next, wider categories later. Honest about what the tool does and does not do.'
+    'Batchlabel started with a candle business and a very long evening reading a safety data sheet. We make CLP labels for candles, wax melts and diffusers, and we are straight about what the tool does not do.'
   });
 
   return (
@@ -23,7 +23,7 @@ export function About() {
       <PageHero
         eyebrow="About"
         title="Built by people who have printed the wrong label"
-        intro="Batchlabel is a small UK company on a straightforward mission: take the compliance labelling that trips up small makers and make it quick and correct. We started with candles because that is where the pain was sharpest. We are not a compliance firm and we are not pretending to be one." />
+        intro="We are a small UK company. We make the labelling part of selling candles quicker to get right. We are not a compliance firm and we do not pretend to be one." />
 
 
       <Section>
@@ -41,39 +41,32 @@ export function About() {
           <p>
             Somewhere along the way we noticed the hard part was never the candle. It was turning the
             data behind a product into the exact words a regulation demands, then setting them at the
-            right size on a label. That problem is not unique to candles. A soap maker, a skincare
-            brand, anyone selling a physical product runs into a version of it. So the tool we built
-            for candles is really a compliance labelling platform that happens to have started with
-            candles.
+            right size on a label. A soap maker or a skincare brand runs into a version of the same
+            problem.
           </p>
           <p>
-            Batchlabel is the first product from Orchestrate, the company behind it. The plan is to
-            open the same engine up one category at a time, carefully, keeping candles first class
-            while we go. Cosmetics is next, built with makers who already trust us for their candle
-            labels. Wider consumer goods and, further out, technical products like electronics follow
-            from there.
+            Batchlabel is the first product from Orchestrate. We would like to take on more
+            categories one day, and cosmetics is the one makers ask us for most. We have not started
+            it. We are not going to give you a date, and you will not find a countdown anywhere on
+            this site. Candles is what works, and it stays the priority.
           </p>
           <p>
             We are based in the UK and we work with UK CLP and EU CLP, the rules on Classification,
-            Labelling and Packaging, with more regulatory frames added as each category arrives. We
-            read the published requirements and turn them into a label from the information you give
-            us. We do not approve labels, we do not certify anything, and we will tell you when a
-            product is beyond what we handle rather than take your money. That scope stays the same
-            whatever the category: labelling, done properly, and nothing we cannot stand behind.
+            Labelling and Packaging. We read the published requirements and turn them into a label
+            from the information you give us. We do not approve labels, we do not certify anything,
+            and we will tell you when a product is beyond what we handle rather than take your money.
           </p>
           <p>
-            There is no sales team. If you email us, one of us replies, usually the same day and
-            always as a person.
+            There is no sales team. If you email us, one of us replies, usually the same day.
           </p>
         </div>
       </Section>
 
       <Section className="bg-white" ariaLabelledBy="ladder-heading">
-        <Eyebrow>The plan</Eyebrow>
-        <Heading id="ladder-heading">The categories, and the order we are taking them in</Heading>
+        <Eyebrow>Categories</Eyebrow>
+        <Heading id="ladder-heading">Where things actually stand</Heading>
         <Lead className="mt-3">
-          We would rather do one category properly than ten badly. Here is where things stand and
-          where they are going.
+          We would rather do one category properly than ten badly.
         </Lead>
 
         <ol className="mt-8 space-y-3">
@@ -108,11 +101,11 @@ export function About() {
           },
           {
             title: 'Honest limits',
-            body: 'You will never see us claim a label is guaranteed anything, in any category. We show our workings instead.'
+            body: 'You will never see us claim a label is guaranteed anything. We show our workings instead.'
           },
           {
             title: 'Fair price',
-            body: 'One price, £14 a month. No tiers designed to catch you out as your shop grows.'
+            body: 'One price, £14 a month. No tiers that punish you for growing.'
           }].
           map((card) =>
           <div key={card.title} className="rounded-2xl border border-paper-edge bg-paper p-5">

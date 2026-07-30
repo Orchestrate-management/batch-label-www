@@ -22,8 +22,7 @@ export function ProblemCards() {
       <Eyebrow>The bit nobody enjoys</Eyebrow>
       <Heading id="problem-heading">Labelling is where good products get stuck</Heading>
       <Lead className="mt-3">
-        You did not start making candles so you could read regulations at eleven at night. Here is
-        what usually goes wrong.
+        You did not start making candles so you could read regulations at eleven at night.
       </Lead>
 
       <ul className="mt-8 grid gap-4 sm:grid-cols-3">
