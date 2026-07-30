@@ -21,6 +21,14 @@ A new signup is provisioned automatically: a trigger on `auth.users` mirrors a `
 row and, using the `brand` sent by the front-end, creates the matching `brand_membership`
 with the first-touch attribution captured at signup.
 
+**OAuth signups are the exception.** `signInWithOAuth` has nowhere to put that signup
+context, so the trigger never sees a brand and creates no membership — and no Terms
+acceptance. Those users are routed to a completion screen that calls
+`complete_oauth_signup()` (see `migrations/20260731120000_google_oauth_provisioning.sql`),
+which writes the membership and the consent audit rows in one transaction, keyed on
+`auth.uid()`, refusing to provision at all unless the terms were accepted. Console setup
+for the Google provider lives in [`../docs/GOOGLE_OAUTH_SETUP.md`](../docs/GOOGLE_OAUTH_SETUP.md).
+
 ## Apply the migration (Supabase CLI)
 
 ```bash

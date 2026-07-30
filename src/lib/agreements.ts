@@ -89,3 +89,36 @@ advertisingOptIn: boolean)
     advertising: consentSnapshot(ADVERTISING_AGREEMENT, advertisingOptIn)
   };
 }
+
+/** A document snapshot with no acceptance attached. Which version was shown, nothing more. */
+export interface AgreementDocument {
+  id: string;
+  title: string;
+  version: string;
+  url: string;
+}
+
+export function agreementDocument(agreement: Agreement): AgreementDocument {
+  return {
+    id: agreement.id,
+    title: agreement.title,
+    version: agreement.version,
+    url: agreementUrl(agreement)
+  };
+}
+
+/**
+ * The three documents shown on the OAuth completion screen, WITHOUT any accepted flag.
+ *
+ * The OAuth path deliberately does not send `accepted` inside the snapshot the way the
+ * email path does. complete_oauth_signup takes the acceptance as explicit boolean
+ * arguments and rebuilds this jsonb itself, adding `accepted` and a server timestamp, so
+ * a hand-crafted request cannot claim a tick the user never made.
+ */
+export function signupAgreementDocuments() {
+  return {
+    terms: agreementDocument(TERMS_AGREEMENT),
+    marketing_email: agreementDocument(MARKETING_EMAIL_AGREEMENT),
+    advertising: agreementDocument(ADVERTISING_AGREEMENT)
+  };
+}
