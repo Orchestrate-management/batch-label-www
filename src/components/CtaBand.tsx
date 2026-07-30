@@ -12,7 +12,7 @@ export function CtaBand({
   location
 }: CtaBandProps) {
   return (
-    <section className="bl-grain bg-teal-800 px-5 py-14 sm:px-6 sm:py-16">
+    <section className="bl-grain bl-reversed bg-teal-800 px-5 py-14 sm:px-6 sm:py-16">
       <div className="mx-auto w-full max-w-3xl text-center">
         <h2 className="font-display text-[1.7rem] font-semibold leading-tight tracking-[-0.015em] text-white sm:text-[2.15rem]">
           {heading}
