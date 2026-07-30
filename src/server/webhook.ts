@@ -39,7 +39,18 @@ export type ApplyOutcome =
 'duplicate' |
 'stale' |
 'superseded' |
-'no_membership';
+'no_membership' |
+'unknown_brand';
+
+/**
+ * Outcomes that mean "we will never be able to act on this event".
+ *
+ * They are acknowledged with a 200 rather than a 500. Retrying cannot help — there is no
+ * account to attach the event to, or no such brand — and a run of 5xx gets the endpoint
+ * automatically disabled by Stripe, which takes billing down for everybody over one
+ * unattributable event.
+ */
+const UNACTIONABLE: readonly ApplyOutcome[] = ['no_membership', 'unknown_brand'];
 
 export interface EntitlementStore {
   apply: (intent: EntitlementIntent) => Promise<ApplyOutcome>;
@@ -106,14 +117,13 @@ export async function handleStripeWebhook(request: Request, deps: WebhookDeps): 
     return json({ error: 'Could not record the subscription.' }, 500);
   }
 
-  if (outcome === 'no_membership') {
-    // 200 on purpose. Retrying cannot help — there is no account to attach this to — and a
-    // string of 5xx would get the endpoint disabled. Logged loudly instead, and the event
-    // is NOT recorded as processed, so "Resend" from the Stripe dashboard will work once
-    // the account exists.
-    console.warn('[stripe-webhook] no membership matched this event', {
+  if (UNACTIONABLE.includes(outcome)) {
+    // Logged loudly instead of retried. The event is NOT recorded as processed either, so
+    // "Resend" from the Stripe dashboard will work once the account exists.
+    console.warn(`[stripe-webhook] ${outcome}`, {
       event: event.id,
       type: event.type,
+      brand: intent.brand,
       customer: intent.customerId,
       subscription: intent.subscriptionId,
       email: intent.email ? 'present' : 'absent'

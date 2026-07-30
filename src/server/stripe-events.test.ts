@@ -122,6 +122,24 @@ describe('customer.subscription.created / updated', () => {
     (event.data.object as {metadata: Record<string, string>;}).metadata.brand = 'another-brand';
     expect(intentFromEvent(event, config)?.brand).toBe('another-brand');
   });
+
+  /**
+   * Orchestrate runs one Stripe account across sub-brands, and planForPrice falls back to
+   * the Maker plan for an unrecognised price. Reading the plan we wrote at checkout first
+   * means that fallback is only reached for a subscription created outside this codebase.
+   */
+  it('prefers the plan recorded at checkout over the unknown-price fallback', () => {
+    const event = subscriptionEvent({ priceId: 'price_for_a_different_product' });
+    (event.data.object as {metadata: Record<string, string>;}).metadata.plan = 'maker';
+    expect(intentFromEvent(event, config)?.plan).toBe('maker');
+  });
+
+  it('ignores a plan that is not one we sell', () => {
+    const event = subscriptionEvent();
+    (event.data.object as {metadata: Record<string, string>;}).metadata.plan = 'enterprise_unlimited';
+    // Falls back to the price map / Maker, never to the invented tier.
+    expect(intentFromEvent(event, config)?.plan).toBe('maker');
+  });
 });
 
 describe('customer.subscription.deleted', () => {

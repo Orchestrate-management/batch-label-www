@@ -66,7 +66,12 @@ the highest-value, most testable units:
   - Idempotency and ordering end to end: a replayed event changes nothing, a late
     `customer.subscription.updated` cannot resurrect a plan a `deleted` already ended, a partial
     event cannot blank a period end an earlier event wrote, and a cancellation for a superseded
-    subscription does not take the current one down. These drive an in-memory model of
+    subscription does not take the current one down. Plus the two-clock regression: a
+    `checkout.session.completed` landing before the `customer.subscription.created` behind it
+    must not discard it (Stripe always generates the subscription event *first*, so under a
+    single ordering clock that delivery order throws away the only copy of the billing period
+    that will ever be sent) — while an out-of-order checkout event still may not resurrect a
+    cancelled plan. These drive an in-memory model of
     `apply_stripe_entitlement()`; the enforcing copy is the SQL, since only the database can make
     the claim-and-apply atomic — see the comment on `modelStore` for exactly what that does and
     does not prove.

@@ -103,4 +103,20 @@ describe('checkoutMetadata', () => {
     expect(metadata.brand).toBe('batchlabel');
     expect(metadata.plan).toBe('maker');
   });
+
+  /**
+   * The above passes today only because ATTRIBUTION_KEYS happens to contain no key called
+   * `brand`. This asserts the structural property instead: the trusted block wins even for
+   * a key the allow-list DOES pass through, so adding a marketing field named `brand` later
+   * cannot quietly hand a request body control of the tenant the webhook writes to.
+   */
+  it('the trusted block wins even for a key the attribution allow-list accepts', () => {
+    const metadata = checkoutMetadata({
+      ...base,
+      // utm_source IS on the allow-list, so this proves the spread order, not the filter.
+      attribution: { utm_source: 'google', supabase_user_id: 'someone-else' }
+    });
+    expect(metadata.utm_source).toBe('google');
+    expect(metadata.supabase_user_id).toBe('11111111-1111-4111-8111-111111111111');
+  });
 });

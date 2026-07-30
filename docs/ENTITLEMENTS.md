@@ -24,7 +24,8 @@ Two ways in. They answer identically; pick whichever suits the call site.
 | `user_id` | `uuid` | The Supabase user. Always the caller's own. |
 | `brand` | `text` | Orchestrate sub-brand slug. `batchlabel` here. |
 | `plan` | `text` | `free` or `maker`. |
-| `status` | `text` | The Stripe subscription status. See the table below. |
+| `status` | `text` | The **Stripe subscription** status. See the table below. |
+| `membership_status` | `text` | The **account lifecycle**: `active`, `suspended` or `left`. Separate from `status` — it is about us, not about Stripe. |
 | `active` | `boolean` | **Read this one.** Whether the user is entitled right now. |
 | `current_period_end` | `timestamptz` | End of the paid period. Null on the free plan. |
 | `cancel_at_period_end` | `boolean` | True when the subscription stops at `current_period_end`. |
@@ -67,6 +68,7 @@ export interface Entitlement {
   brand: string;
   plan: 'free' | 'maker';
   status: string | null;
+  membership_status: 'active' | 'suspended' | 'left';
   active: boolean;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
@@ -82,7 +84,7 @@ export interface Entitlement {
 export async function fetchEntitlement(): Promise<Entitlement | null> {
   const { data, error } = await supabase
     .from('entitlements')
-    .select('brand, plan, status, active, current_period_end, cancel_at_period_end, trial_end')
+    .select('brand, plan, status, membership_status, active, current_period_end, cancel_at_period_end, trial_end')
     .eq('brand', 'batchlabel')
     .maybeSingle();
 
@@ -137,13 +139,25 @@ customer sees "active" on one screen and a paywall on the next.
 | `incomplete_expired` | `false` | Same, and Stripe has expired it. | Free tier. |
 | `paused` | `false` | Subscription paused. | Free tier. |
 
-Two more things `active` already accounts for, so you do not have to:
+And independently of all of the above, `membership_status`:
+
+| `membership_status` | `active` | What the UI should do |
+| --- | --- | --- |
+| `active` | as per the table above | Normal. |
+| `suspended` | always `false` | "Your account is suspended — get in touch." Do **not** show a paywall or an upgrade button; they may already be paying. |
+| `left` | always `false` | Treat as no account for this brand. |
+
+Three more things `active` already accounts for, so you do not have to:
 
 - **`cancel_at_period_end = true` with `status = 'active'` is still entitled.** They cancelled
   but have paid up to `current_period_end`. Show "your plan ends on {date}", keep the features
   on until then.
 - **A one-day grace past `current_period_end`.** Absorbs webhook lag and clock skew so a
   renewal we have not been told about yet does not read as an expiry.
+- **`membership_status` must be `active`.** A suspended or departed member is not entitled
+  even with a live Stripe subscription — otherwise suspending an account would do nothing.
+  It is exposed as its own column so the UI can tell "your subscription ended" from "your
+  account is suspended", which need very different messages.
 
 ---
 

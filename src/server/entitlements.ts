@@ -31,6 +31,16 @@ export const FREE_PLAN = 'free';
 export const MAKER_PLAN = 'maker';
 
 /**
+ * Every paid tier this deployment is willing to grant.
+ *
+ * An allow-list rather than a free-text field: the plan can be read from Stripe metadata
+ * (which we wrote, and which arrives inside a signature-verified event), but a value that
+ * is not on this list is ignored rather than stored. That keeps a hand-edited subscription
+ * in the Stripe dashboard from inventing a tier the product has no idea how to price.
+ */
+export const PAID_PLANS: readonly string[] = [MAKER_PLAN];
+
+/**
  * Stripe statuses that entitle. Deliberately the same list as
  * public.entitlement_is_active() in 20260801120000_entitlements.sql — see the comment
  * there for why past_due is on it.

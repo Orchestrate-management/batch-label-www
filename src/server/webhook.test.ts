@@ -76,6 +76,7 @@ function modelStore(initial: Partial<StoredRow> = {}) {
     cancel_at_period_end: false,
     stripe_event_id: null,
     stripe_event_at: null,
+    stripe_status_at: null,
     ...initial
   };
 
@@ -85,41 +86,54 @@ function modelStore(initial: Partial<StoredRow> = {}) {
       if (processed.has(intent.eventId)) return 'duplicate';
       processed.set(intent.eventId, 'applied');
 
-      // 2. Monotonic on event.created: never rewind to an older event.
-      if (row.stripe_event_at && intent.eventAt < row.stripe_event_at) {
-        processed.set(intent.eventId, 'stale');
-        return 'stale';
-      }
-      if (
-      row.stripe_event_at &&
-      intent.eventAt === row.stripe_event_at &&
-      row.plan_status === 'canceled' &&
-      (intent.planStatus ?? row.plan_status) !== 'canceled')
-      {
-        processed.set(intent.eventId, 'stale');
-        return 'stale';
-      }
+      let plan = intent.plan;
+      let planStatus = intent.planStatus;
+      let cancelAtPeriodEnd = intent.cancelAtPeriodEnd;
+      const isSubscriptionEvent = intent.eventType.startsWith('customer.subscription.');
 
-      // 3. A cancellation for a subscription this membership no longer holds.
-      if (
-      intent.eventType === 'customer.subscription.deleted' &&
-      intent.subscriptionId &&
-      row.stripe_subscription_id &&
-      intent.subscriptionId !== row.stripe_subscription_id)
-      {
-        processed.set(intent.eventId, 'superseded');
-        return 'superseded';
+      if (isSubscriptionEvent) {
+        // 2. Monotonic on event.created, scoped to the subscription family.
+        if (row.stripe_status_at && intent.eventAt < row.stripe_status_at) {
+          processed.set(intent.eventId, 'stale');
+          return 'stale';
+        }
+        if (
+        row.stripe_status_at &&
+        intent.eventAt === row.stripe_status_at &&
+        row.plan_status === 'canceled' &&
+        (planStatus ?? row.plan_status) !== 'canceled')
+        {
+          processed.set(intent.eventId, 'stale');
+          return 'stale';
+        }
+        // 3. A cancellation for a subscription this membership no longer holds.
+        if (
+        intent.eventType === 'customer.subscription.deleted' &&
+        intent.subscriptionId &&
+        row.stripe_subscription_id &&
+        intent.subscriptionId !== row.stripe_subscription_id)
+        {
+          processed.set(intent.eventId, 'superseded');
+          return 'superseded';
+        }
+      } else if (row.stripe_status_at && intent.eventAt <= row.stripe_status_at) {
+        // 4. An additive event that predates the subscription clock keeps its factual half
+        //    and loses its opinion about the plan.
+        plan = null;
+        planStatus = null;
+        cancelAtPeriodEnd = null;
       }
 
       // Partial update: null means "this event says nothing about that column".
-      row.plan = intent.plan ?? row.plan;
-      row.plan_status = intent.planStatus ?? row.plan_status;
+      row.plan = plan ?? row.plan;
+      row.plan_status = planStatus ?? row.plan_status;
       row.stripe_customer_id = intent.customerId ?? row.stripe_customer_id;
       row.stripe_subscription_id = intent.subscriptionId ?? row.stripe_subscription_id;
       row.current_period_end = intent.currentPeriodEnd ?? row.current_period_end;
-      row.cancel_at_period_end = intent.cancelAtPeriodEnd ?? row.cancel_at_period_end;
+      row.cancel_at_period_end = cancelAtPeriodEnd ?? row.cancel_at_period_end;
       row.stripe_event_id = intent.eventId;
       row.stripe_event_at = intent.eventAt;
+      if (isSubscriptionEvent) row.stripe_status_at = intent.eventAt;
       return 'applied';
     }
   };
@@ -136,6 +150,7 @@ interface StoredRow {
   cancel_at_period_end: boolean;
   stripe_event_id: string | null;
   stripe_event_at: string | null;
+  stripe_status_at: string | null;
 }
 
 function deps(store: EntitlementStore) {
@@ -313,6 +328,24 @@ describe('what the store is asked to do', () => {
     expect(warn).toHaveBeenCalled();
   });
 
+  /**
+   * Same reasoning as no_membership: an event naming a brand we do not run can never
+   * succeed, so retrying it for three days only risks getting the endpoint disabled.
+   */
+  it('returns 200 for an event naming an unknown brand, and says so loudly', async () => {
+    const { store } = recordingStore('unknown_brand');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const response = await handleStripeWebhook(
+      signedRequest(JSON.stringify(subscriptionEvent())),
+      deps(store)
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ outcome: 'unknown_brand' });
+    expect(warn).toHaveBeenCalled();
+  });
+
   it('reports the outcome back to Stripe so the dashboard event log is readable', async () => {
     for (const outcome of ['applied', 'duplicate', 'stale', 'superseded'] as ApplyOutcome[]) {
       const { store } = recordingStore(outcome);
@@ -423,6 +456,55 @@ describe('idempotency and ordering, end to end', () => {
 
     expect(model.row.current_period_end).toBe(PERIOD_END_ISO);
     expect(model.row.plan).toBe('maker');
+  });
+
+  /**
+   * REGRESSION. Stripe creates the subscription BEFORE the checkout session completes, so
+   * customer.subscription.created is always the OLDER of the two. Deliver them in the other
+   * order under a single global clock and the subscription event is discarded as stale -
+   * taking with it the only copy of current_period_end, stripe_price_id and trial_end that
+   * will ever be sent. The customer pays and their renewal date is blank forever.
+   *
+   * Only customer.subscription.* events advance the ordering clock, so this works.
+   */
+  it('a checkout event landing FIRST does not discard the subscription event behind it', async () => {
+    const model = modelStore();
+
+    // Delivered first, generated second.
+    await deliver(checkoutSessionCompleted({ id: 'evt_checkout', created: 1001 }), model.store);
+    // Delivered second, generated first.
+    const outcome = await deliver(
+      subscriptionEvent({ id: 'evt_sub_created', created: 1000, type: 'customer.subscription.created' }),
+      model.store
+    );
+
+    expect(outcome.outcome).toBe('applied');
+    expect(model.row.current_period_end).toBe(PERIOD_END_ISO);
+    expect(model.row.plan).toBe('maker');
+  });
+
+  /**
+   * ...but an additive event may not use its head start to contradict a newer subscription
+   * event. It keeps the factual half (the Stripe customer id, without which the billing
+   * portal can never work) and loses its opinion about the plan.
+   */
+  it('an out-of-order checkout event records the customer id without resurrecting a cancelled plan', async () => {
+    const model = modelStore();
+    await deliver(subscriptionEvent({ id: 'evt_active', created: 2000, status: 'active' }), model.store);
+    await deliver(
+      subscriptionEvent({ id: 'evt_deleted', created: 3000, type: 'customer.subscription.deleted' }),
+      model.store
+    );
+
+    const outcome = await deliver(
+      checkoutSessionCompleted({ id: 'evt_late_checkout', created: 2500 }),
+      model.store
+    );
+
+    expect(outcome.outcome).toBe('applied');
+    expect(model.row.stripe_customer_id).toBe('cus_test_1');
+    expect(model.row.plan).toBe('free');
+    expect(model.row.plan_status).toBe('canceled');
   });
 
   it('a cancellation for a superseded subscription does not take the current one down', async () => {

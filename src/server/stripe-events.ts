@@ -20,6 +20,7 @@ import type Stripe from 'stripe';
 import {
   FREE_PLAN,
   MAKER_PLAN,
+  PAID_PLANS,
   idOf,
   invoiceSubscriptionId,
   isRenewalFailure,
@@ -91,6 +92,26 @@ export function readUserId(metadata: Stripe.Metadata | null | undefined): string
 function readBrand(metadata: Stripe.Metadata | null | undefined, fallback: string): string {
   const raw = metadata?.brand;
   if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  return fallback;
+}
+
+/**
+ * The paid tier a subscription sells, preferring what we recorded at checkout.
+ *
+ * Order matters. `planForPrice` falls back to the Maker plan for an unrecognised price, on
+ * the grounds that a customer who has paid and gets nothing is the worse failure. But
+ * Orchestrate runs one Stripe account across sub-brands, so "any subscription with an
+ * unknown price grants Batchlabel Maker" is a real cross-brand hazard as soon as there is a
+ * second product. Our own checkout writes `plan` into the subscription metadata, so reading
+ * that first means the fallback is only reached for a subscription created outside this
+ * codebase — and the value is allow-listed, so it can only ever name a tier we sell.
+ */
+export function readPlan(
+metadata: Stripe.Metadata | null | undefined,
+fallback: string)
+: string {
+  const raw = metadata?.plan;
+  if (typeof raw === 'string' && PAID_PLANS.includes(raw.trim())) return raw.trim();
   return fallback;
 }
 
@@ -201,7 +222,10 @@ function fromSubscription(event: Stripe.Event, config: IntentConfig): Entitlemen
   intent.planStatus = deleted ? 'canceled' : subscription.status ?? null;
   intent.plan = deleted ?
   FREE_PLAN :
-  planForStatus(intent.planStatus, planForPrice(intent.priceId, config.prices));
+  planForStatus(
+    intent.planStatus,
+    readPlan(subscription.metadata, planForPrice(intent.priceId, config.prices))
+  );
 
   intent.currentPeriodEnd = subscriptionPeriodEnd(subscription);
   intent.cancelAtPeriodEnd = deleted ? false : Boolean(subscription.cancel_at_period_end);

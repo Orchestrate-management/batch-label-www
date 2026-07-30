@@ -94,6 +94,11 @@ Settings → **Billing** → **Customer portal**.
 - Set the **business information** links to `https://www.batchlabel.xyz/terms` and
   `https://www.batchlabel.xyz/privacy`.
 
+**Do this in Test mode as well as Live.** The portal has no default configuration until you
+save one, and the code does not pass a `configuration` id — it relies on the saved default.
+Skip it in test mode and the first "Manage billing" click fails with *"No configuration
+provided and your test mode default configuration has not been created."*
+
 ---
 
 ## 4. Webhook endpoint
@@ -192,6 +197,16 @@ select relname, reloptions from pg_class where relname = 'entitlements';
 -- Should list ONLY 'authenticated'. If 'anon' appears, stop and re-run the migration.
 select grantee, privilege_type from information_schema.role_table_grants
 where table_name = 'entitlements';
+
+-- Both must be FALSE. apply_stripe_entitlement is the function that grants paid plans;
+-- if the browser roles can execute it, the anon key is a "give me Maker" endpoint.
+-- (Supabase's default privileges hand EXECUTE to these roles, which is why the migration
+-- revokes them by name rather than relying on `revoke ... from public`.)
+select has_function_privilege('anon', p.oid, 'execute')          as anon_can_execute,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_can_execute
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.proname = 'apply_stripe_entitlement';
 ```
 
 ---
@@ -233,7 +248,9 @@ Other outcomes and what they mean:
 | `"outcome":"applied"` | Written. |
 | `"outcome":"duplicate"` | Stripe sent the same event id twice. Correct behaviour, nothing rewritten. |
 | `"outcome":"stale"` | A newer event was already applied. Correct behaviour for an out-of-order delivery. |
+| `"outcome":"superseded"` | A cancellation for a subscription this account no longer holds (they resubscribed). Correct behaviour. |
 | `"outcome":"no_membership"` | The event matched no account. Expected for `stripe trigger`, which invents a customer that has never signed up. Not expected for a real purchase. |
+| `"outcome":"unknown_brand"` | The event's metadata named a brand this deployment does not run. |
 | `"outcome":"ignored"` | An event type this endpoint does not act on. |
 | `400 Invalid signature.` | Wrong secret. Locally you must use the one `stripe listen` printed. |
 
@@ -260,7 +277,7 @@ Supabase → **SQL Editor**:
 select
   user_id, plan, plan_status, current_period_end, cancel_at_period_end,
   stripe_customer_id, stripe_subscription_id, stripe_price_id,
-  stripe_event_id, stripe_event_at, data -> 'billing' as billing
+  stripe_event_id, stripe_event_at, stripe_status_at, data -> 'billing' as billing
 from public.brand_memberships
 where brand_slug = 'batchlabel'
 order by updated_at desc

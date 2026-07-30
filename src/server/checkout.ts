@@ -87,11 +87,17 @@ export interface CheckoutMetadataInput {
  * and is indistinguishable from a bug.
  */
 export function checkoutMetadata(input: CheckoutMetadataInput): Record<string, string> {
-  const metadata: Record<string, string> = {
+  const trusted: Record<string, string> = {
     brand: input.brand,
     plan: input.plan,
     billing_interval: input.interval
   };
-  if (input.userId) metadata.supabase_user_id = input.userId;
-  return { ...metadata, ...sanitiseAttribution(input.attribution) };
+  if (input.userId) trusted.supabase_user_id = input.userId;
+
+  // The trusted block is spread LAST so it always wins. Today ATTRIBUTION_KEYS happens to
+  // contain no key called `brand`, `plan` or `supabase_user_id`, so the order does not
+  // change the result — but the day somebody adds a marketing field called `brand` to that
+  // list, the other order would silently hand a request body control of the value the
+  // webhook treats as the tenant. Structurally impossible beats incidentally true.
+  return { ...sanitiseAttribution(input.attribution), ...trusted };
 }
