@@ -10,9 +10,10 @@
  *  view_pricing       { page_path }                          Pricing page viewed.
  *  cta_click          { cta_label, cta_location, page_path }  Any primary or secondary CTA.
  *  sign_up_started    { method: 'password' | 'magic_link' }   Sign up form submitted.
- *  sign_up_completed  { method, user_id, em_sha256 }          Account created. em_sha256
- *                                                            feeds Meta advanced matching
- *                                                            and Google Enhanced Conversions.
+ *  sign_up_completed  { method, user_id, em_sha256,           Account created. em_sha256
+ *                       marketing_email_opt_in,                feeds Meta advanced matching
+ *                       advertising_opt_in }                   and Google Enhanced Conversions.
+ *                                                            advertising_opt_in gates ad use.
  *  begin_checkout     { plan, interval, value, currency }     Paid plan CTA pressed.
  *  purchase_redirect  { plan, interval, value, currency,      Immediately before the
  *                       checkout_session_id }                 redirect to Stripe Checkout.
@@ -66,12 +67,16 @@ export function trackSignUpStarted(method: 'password' | 'magic_link') {
 export async function trackSignUpCompleted(
 method: 'password' | 'magic_link',
 email: string,
-userId?: string)
+userId?: string,
+marketingEmailOptIn?: boolean,
+advertisingOptIn?: boolean)
 {
   push('sign_up_completed', {
     method,
     user_id: userId ?? null,
-    em_sha256: await sha256(email.trim().toLowerCase())
+    em_sha256: await sha256(email.trim().toLowerCase()),
+    marketing_email_opt_in: marketingEmailOptIn ?? null,
+    advertising_opt_in: advertisingOptIn ?? null
   });
 }
 
