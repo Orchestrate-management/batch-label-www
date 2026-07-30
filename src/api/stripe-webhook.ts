@@ -40,6 +40,20 @@ export async function handler(request: Request): Promise<Response> {
   if (event?.type === 'checkout.session.completed' && event.data?.object) {
     const session = event.data.object;
     // TODO: mark the Supabase account as Maker plan and store session.customer.
+    //
+    // CONSENT GATE — read this before implementing either call below.
+    //
+    // Both forward personal data (a hashed email, at minimum) to an advertising
+    // platform. That is exactly what brand_memberships.advertising_opt_in records, and
+    // it is the only thing that flag is for. Neither call may run for a user whose flag
+    // is false. Look it up with the service-role key by the supabase_user_id already in
+    // the Checkout Session metadata, and skip the forwarding when it is false or the
+    // lookup fails — fail closed, not open.
+    //
+    // Today these are stubs, so the flag gates nothing on the server. Browser-side ad
+    // use is separately gated by Consent Mode v2 (see lib/consent.ts), which is the same
+    // decision: the cookie banner's marketing toggle is what sets advertising_opt_in.
+    // See docs/CONSENT.md.
     await forwardToMetaConversionsApi(session);
     await forwardToGoogleEnhancedConversions(session);
   }
@@ -69,6 +83,7 @@ export async function handler(request: Request): Promise<Response> {
 async function forwardToMetaConversionsApi(session: StripeCheckoutSession): Promise<void> {
   void session;
   // TODO: implement once META_PIXEL_ID and META_CAPI_ACCESS_TOKEN are set.
+  // Gate on brand_memberships.advertising_opt_in first — see the note in handler().
 }
 
 /**
@@ -87,6 +102,7 @@ async function forwardToGoogleEnhancedConversions(session: StripeCheckoutSession
   void session;
   // TODO: implement once GOOGLE_ADS_CUSTOMER_ID, developer token and OAuth refresh
   // token are set.
+  // Gate on brand_memberships.advertising_opt_in first — see the note in handler().
 }
 
 function json(payload: unknown, status: number): Response {
