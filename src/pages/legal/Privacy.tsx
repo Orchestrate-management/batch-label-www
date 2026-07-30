@@ -1,4 +1,5 @@
-import { usePageMeta } from '../../lib/seo';
+import { usePageMeta, useStructuredData } from '../../lib/seo';
+import { breadcrumbSchema, graph } from '../../lib/structured-data';
 import { LegalLayout, LegalSection, LegalList } from '../../components/legal/LegalLayout';
 import { openCookieSettings } from '../../components/CookieBanner';
 
@@ -8,6 +9,8 @@ export function Privacy() {
     description:
     'What personal data Batchlabel collects, why we collect it, how long we keep it, who processes it, and the rights you have under UK GDPR.'
   });
+
+  useStructuredData(graph([breadcrumbSchema('Privacy policy', '/privacy')]));
 
   return (
     <LegalLayout

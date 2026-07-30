@@ -1,4 +1,5 @@
-import { usePageMeta } from '../../lib/seo';
+import { usePageMeta, useStructuredData } from '../../lib/seo';
+import { breadcrumbSchema, graph } from '../../lib/structured-data';
 import { LegalLayout, LegalSection, LegalList } from '../../components/legal/LegalLayout';
 
 export function AcceptableUse() {
@@ -7,6 +8,8 @@ export function AcceptableUse() {
     description:
     'The short list of things you must not do with Batchlabel, including misrepresenting our output as an approval or certification.'
   });
+
+  useStructuredData(graph([breadcrumbSchema('Acceptable use', '/acceptable-use')]));
 
   return (
     <LegalLayout
