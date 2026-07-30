@@ -31,8 +31,31 @@ body {
   outline-offset: 2px;
   border-radius: 4px;
 }
+/* Teal focus ring on the deep teal call-to-action band measured 1.32:1 against its own
+   background, so keyboard focus was effectively invisible there. Paper on teal-800 is
+   10.38:1. Add .bl-reversed to any band that reverses out of the palette. */
+.bl-reversed *:focus-visible {
+  outline-color: #f3eee6;
+}
+/* The skip link's target. Moving focus to <main> is what makes the link work, but the
+   ring around a whole page region reads as a rendering fault, so the focus is silent —
+   the announcement comes from the live region in components/RouteAnnouncer.tsx. */
+main:focus,
+main:focus-visible {
+  outline: none;
+}
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+  /* Belt and braces: the site only animates colour today, but this covers anything a
+     later component brings with it without needing to remember this file. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { CheckIcon, MinusIcon } from 'lucide-react';
-import { usePageMeta } from '../lib/seo';
+import { usePageMeta, useStructuredData } from '../lib/seo';
+import {
+  breadcrumbSchema,
+  faqPageSchema,
+  graph,
+  softwareApplicationSchema } from
+'../lib/structured-data';
 import { trackViewPricing } from '../lib/analytics';
 import { startCheckout, PRICES, type BillingInterval } from '../lib/billing';
 import { useAuth } from '../lib/auth';
@@ -37,8 +43,17 @@ export function Pricing() {
   usePageMeta({
     title: 'Pricing, £14 a month or £140 a year',
     description:
-    'Start free with one watermarked label. The Maker plan is £14 a month or £140 a year for unlimited print ready CLP labels, UFI generation and saved recipes. VAT included.'
+    'Start free with one watermarked label. The Maker plan is £14 a month or £140 a year, VAT included, for unlimited print ready CLP labels and UFI generation.'
   });
+
+  // Both prices come from PRICES in lib/billing.ts, the same constant the cards below
+  // render, so the markup cannot state a price the page does not show.
+  useStructuredData(
+    graph([
+    breadcrumbSchema('Pricing', '/pricing'),
+    softwareApplicationSchema(),
+    faqPageSchema('/pricing', pricingFaqs)])
+  );
 
   const { user } = useAuth();
   const [interval, setInterval] = useState<BillingInterval>('monthly');
@@ -104,19 +119,27 @@ export function Pricing() {
             </Button>
 
             <ul className="mt-6 space-y-2.5">
+              {/*
+                The tick and the dash are aria-hidden, so without the visually hidden
+                words below, a screen reader read this list as eight features the free
+                plan has. Four of them are the opposite.
+              */}
               {freeFeatures.map((feature) =>
               <li
                 key={feature.label}
                 className={`flex items-start gap-2.5 text-sm ${
-                feature.included ? 'text-ink-soft' : 'text-ink-muted/70'}`
+                feature.included ? 'text-ink-soft' : 'text-ink-muted'}`
                 }>
-                
+
                   {feature.included ?
                 <CheckIcon size={16} className="mt-0.5 shrink-0 text-teal-700" aria-hidden="true" /> :
 
-                <MinusIcon size={16} className="mt-0.5 shrink-0 text-ink-muted/60" aria-hidden="true" />
+                <MinusIcon size={16} className="mt-0.5 shrink-0 text-ink-muted" aria-hidden="true" />
                 }
-                  <span>{feature.label}</span>
+                  <span>
+                    <span className="sr-only">{feature.included ? 'Included. ' : 'Not included. '}</span>
+                    {feature.label}
+                  </span>
                 </li>
               )}
             </ul>

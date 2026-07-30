@@ -1,4 +1,5 @@
-import { usePageMeta } from '../lib/seo';
+import { usePageMeta, useStructuredData } from '../lib/seo';
+import { breadcrumbSchema, graph } from '../lib/structured-data';
 import { PageHero } from '../components/PageHero';
 import { Section, Heading, Eyebrow, Lead } from '../components/ui/Section';
 import { CtaBand } from '../components/CtaBand';
@@ -12,10 +13,12 @@ const statusStyles: Record<Vertical['status'], string> = {
 
 export function About() {
   usePageMeta({
-    title: 'About us',
+    title: 'About us, CLP labelling for small makers',
     description:
-    'Batchlabel started with a candle business and a very long evening reading a safety data sheet. We make CLP labels for candles, wax melts and diffusers, and we are straight about what the tool does not do.'
+    'Batchlabel started with a candle business and a long evening reading a safety data sheet. We make CLP labels for candles, and we are straight about the limits.'
   });
+
+  useStructuredData(graph([breadcrumbSchema('About', '/about')]));
 
   return (
     <>

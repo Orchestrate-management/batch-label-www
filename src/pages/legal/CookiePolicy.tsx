@@ -1,4 +1,5 @@
-import { usePageMeta } from '../../lib/seo';
+import { usePageMeta, useStructuredData } from '../../lib/seo';
+import { breadcrumbSchema, graph } from '../../lib/structured-data';
 import { LegalLayout, LegalSection } from '../../components/legal/LegalLayout';
 import { openCookieSettings } from '../../components/CookieBanner';
 import { Button } from '../../components/ui/Button';
@@ -49,6 +50,8 @@ export function CookiePolicy() {
     description:
     'Every cookie Batchlabel sets, what it does, how long it lasts, and how to change your choices at any time.'
   });
+
+  useStructuredData(graph([breadcrumbSchema('Cookie policy', '/cookie-policy')]));
 
   return (
     <LegalLayout

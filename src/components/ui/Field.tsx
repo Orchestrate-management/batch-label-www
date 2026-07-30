@@ -46,17 +46,19 @@ export function Field({
         aria-describedby={describedBy}
         aria-invalid={error ? true : undefined}
         onChange={(event) => onChange(event.target.value)}
-        className={`w-full rounded-xl border bg-white px-3.5 py-2.5 text-[0.97rem] text-ink placeholder:text-ink-muted/70 ${
-        error ? 'border-clay-600' : 'border-ink/15'}`
+        className={`w-full rounded-xl border bg-white px-3.5 py-2.5 text-[0.97rem] text-ink placeholder:text-ink-muted ${
+        error ? 'border-clay-600' : 'border-ink-line'}`
         } />
-      
+
       {hint ?
       <p id={hintId} className="text-xs text-ink-muted">
           {hint}
         </p> :
       null}
+      {/* role="alert" so the message is announced when it appears, not only when the
+          field happens to be read again. Matches the checkbox below. */}
       {error ?
-      <p id={errorId} className="text-xs font-medium text-clay-600">
+      <p id={errorId} role="alert" className="text-xs font-medium text-clay-600">
           {error}
         </p> :
       null}
@@ -89,7 +91,7 @@ export function Checkbox({ name, checked, onChange, required, error, children }:
           aria-invalid={error ? true : undefined}
           onChange={(event) => onChange(event.target.checked)}
           className={`mt-0.5 h-4 w-4 shrink-0 rounded border accent-teal-700 ${
-          error ? 'border-clay-600' : 'border-ink/25'}`
+          error ? 'border-clay-600' : 'border-ink-line'}`
           } />
 
         <span className="leading-relaxed">{children}</span>

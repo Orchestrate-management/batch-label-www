@@ -1,0 +1,22 @@
+# Batchlabel — https://www.batchlabel.xyz
+# The apex domain 308-redirects to www, so www is the canonical host.
+
+User-agent: *
+Allow: /
+
+# Signed-in and transactional routes. Nothing here is useful in a result page, and
+# every one of them also sets <meta name="robots" content="noindex, nofollow">.
+Disallow: /dashboard
+Disallow: /log-in
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /check-your-email
+Disallow: /finish-setup
+Disallow: /checkout/
+
+# Tracking parameters produce duplicate URLs for pages that are already canonicalised.
+Disallow: /*?utm_
+Disallow: /*?gclid=
+Disallow: /*?fbclid=
+
+Sitemap: https://www.batchlabel.xyz/sitemap.xml

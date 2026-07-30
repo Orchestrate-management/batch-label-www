@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { usePageMeta } from '../../lib/seo';
+import { usePageMeta, useStructuredData } from '../../lib/seo';
+import { breadcrumbSchema, graph } from '../../lib/structured-data';
 import { LegalLayout, LegalSection, LegalList } from '../../components/legal/LegalLayout';
 
 export function Terms() {
@@ -8,6 +9,8 @@ export function Terms() {
     description:
     'The terms on which you use Batchlabel, including what the label generator does, the limits of our role, subscriptions, cancellation and liability.'
   });
+
+  useStructuredData(graph([breadcrumbSchema('Terms of service', '/terms')]));
 
   return (
     <LegalLayout
