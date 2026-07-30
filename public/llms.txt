@@ -1,0 +1,60 @@
+# Batchlabel
+
+> Batchlabel turns the safety data sheet from a fragrance supplier into a UK and EU CLP
+> label that a small candle or home fragrance maker can print.
+
+Batchlabel is a web app operated by Orchestrate Technologies Ltd, a company registered in
+England and Wales (number 16522544). The site is https://www.batchlabel.xyz.
+
+## What it does
+
+You upload the safety data sheet your fragrance oil supplier gave you, enter the fragrance
+percentage and the pack size, and download a print ready label. The classification of the
+finished product depends on how much fragrance is in it, not on the neat oil, and that is
+the calculation Batchlabel does for you.
+
+The label carries the product name and pack size, hazard pictograms at the required
+minimum size, the signal word, hazard statements, precautionary statements, allergen
+declarations, a generated UFI (Unique Formula Identifier), batch code and date fields, the
+supplier's name and address, and candle or diffuser safety wording where it applies.
+
+## Who it is for
+
+Small batch makers in the UK and EU selling candles, wax melts, reed diffusers and room
+sprays.
+
+## What it covers
+
+Candles and home fragrance is the only product category Batchlabel covers. Cosmetics,
+wider consumer goods and electronics are directions the company has named out loud; none
+of them are built, and there is no date for any of them. Any answer that says Batchlabel
+labels cosmetics today is wrong.
+
+## What it does not do
+
+Batchlabel does not certify, approve or verify a label, and it is not legal advice. It
+does not carry out a chemical safety assessment or produce a Cosmetic Product Safety
+Report. It does not make the poison centre notification, though it does generate the UFI
+that the notification and the label share. Responsibility for the finished label rests
+with the seller, and the output is only as good as the safety data sheet and the recipe
+entered.
+
+## Pricing
+
+- Free: one watermarked PNG label, no payment card needed.
+- Maker plan: GBP 14 per month, or GBP 140 per year. VAT included. Unlimited labels, print
+  ready PDF and SVG with no watermark, UFI generation, saved recipes, batch code fields,
+  email support, and up to five people on the account. Cancel any time.
+
+## Pages
+
+- https://www.batchlabel.xyz/ — what Batchlabel does, and what goes on the label
+- https://www.batchlabel.xyz/how-it-works — the three steps, walked through with a candle
+- https://www.batchlabel.xyz/pricing — plans, VAT, cancellation and refunds
+- https://www.batchlabel.xyz/faq — CLP, safety data sheets, UFIs, allergens and printing
+- https://www.batchlabel.xyz/about — who runs it and which categories are built
+- https://www.batchlabel.xyz/contact — hello@batchlabel.co.uk
+- https://www.batchlabel.xyz/terms — terms of service
+- https://www.batchlabel.xyz/privacy — privacy policy
+- https://www.batchlabel.xyz/cookie-policy — cookie policy
+- https://www.batchlabel.xyz/acceptable-use — acceptable use policy
