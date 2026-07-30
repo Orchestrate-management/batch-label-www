@@ -1,18 +1,21 @@
 /**
- * Product categories (verticals) that Batchlabel serves, or intends to serve.
+ * The product categories Batchlabel covers, and the ones we would like to cover.
  *
- * Batchlabel's core is category-agnostic: take the regulatory or safety data that
- * governs a product, and turn it into a print ready, compliant label in minutes.
- * Candles and home fragrance are the first live vertical and the flagship; other
- * categories are added over time.
+ * Only candles and home fragrance are built. Everything else in this file is a
+ * direction, not a product. Nothing here should carry a date or imply that a
+ * category is in beta, in build, or about to arrive.
  *
- * This is the single source of truth for anything on the site that talks about
- * "which products we cover". Adding a category later (for example, moving Cosmetics
- * from `coming-soon` to `live`) is a data change here, not a rebuild: the homepage
- * categories section, the About roadmap and related copy all render from this array.
+ * This is the single source of truth for anything on the site that says which
+ * products we cover. The homepage categories section and the About page both
+ * render from this array, so they cannot drift apart.
  */
 
-export type VerticalStatus = 'live' | 'coming-soon' | 'planned';
+/**
+ * `live`     — built, and you can label this today.
+ * `interest` — not built and not started. We collect interest, nothing more.
+ * `idea`     — a direction we have named out loud. No work has happened.
+ */
+export type VerticalStatus = 'live' | 'interest' | 'idea';
 
 export interface Vertical {
   /** Stable slug, also used as the React key. */
@@ -27,25 +30,15 @@ export interface Vertical {
   tagline: string;
   /** A sentence or two of detail, in plain English. */
   description: string;
-  /**
-   * The document or dataset a maker starts from in this category. The whole
-   * product turns "this input" into a compliant label, whatever the category.
-   */
+  /** The document a maker starts from in this category. */
   inputName: string;
-  /** The regulatory frame the label is built against. */
+  /** The rules the label is built against. */
   regulation: string;
   /** Concrete example products, used as chips. */
   examples: string[];
-  /** Optional call to action. Live categories link into the funnel; others to a waitlist. */
+  /** Optional call to action. */
   cta?: { label: string; to?: string; href?: string; location: string };
 }
-
-/**
- * The category-agnostic promise, kept in one place so hero, About and metadata
- * can stay consistent as the wording is tuned.
- */
-export const coreValueProp =
-  'Turn the safety and regulatory data behind a product into a print ready, compliant label in minutes.';
 
 export const verticals: Vertical[] = [
   {
@@ -53,9 +46,9 @@ export const verticals: Vertical[] = [
     name: 'Candles & home fragrance',
     status: 'live',
     statusLabel: 'Available now',
-    tagline: 'The flagship. Live, and the category we know best.',
+    tagline: 'The category Batchlabel is built for.',
     description:
-      'Upload the safety data sheet from your fragrance supplier, enter your recipe and pack size, and download a UK and EU CLP label. Built with and for small batch makers.',
+      'Upload the safety data sheet from your fragrance supplier, enter your recipe and pack size, and download a UK and EU CLP label.',
     inputName: 'fragrance supplier safety data sheet',
     regulation: 'UK CLP and EU CLP',
     examples: ['Candles', 'Wax melts', 'Reed diffusers', 'Room sprays'],
@@ -64,28 +57,28 @@ export const verticals: Vertical[] = [
   {
     id: 'cosmetics',
     name: 'Cosmetics & skincare',
-    status: 'coming-soon',
-    statusLabel: 'Coming next',
-    tagline: 'In build now, with makers who already use us for candles.',
+    status: 'interest',
+    statusLabel: 'Not built',
+    tagline: 'The one makers ask us for most.',
     description:
-      'Ingredient and safety data in, a compliant cosmetics label out, with the allergen and INCI wording the rules expect. Labelling only, the same honest scope as today.',
+      'We have not started this and we will not give you a date. Tell us you want it and we will let you know if that changes. It would cover the label only, so it would never replace a Cosmetic Product Safety Report.',
     inputName: 'ingredient and product information',
-    regulation: 'UK and EU Cosmetics Regulation labelling',
+    regulation: 'UK and EU cosmetics labelling rules',
     examples: ['Soaps', 'Balms & butters', 'Skincare', 'Bath products'],
     cta: {
-      label: 'Join the cosmetics waitlist',
-      href: 'mailto:hello@batchlabel.co.uk?subject=Cosmetics%20waitlist',
+      label: 'Tell us you want this',
+      href: 'mailto:hello@batchlabel.co.uk?subject=Cosmetics%20labelling',
       location: 'verticals_cosmetics'
     }
   },
   {
     id: 'cpg',
     name: 'Wider consumer goods',
-    status: 'planned',
-    statusLabel: 'On the roadmap',
-    tagline: 'The same engine, more product types.',
+    status: 'idea',
+    statusLabel: 'Idea',
+    tagline: 'Named, not started.',
     description:
-      'As the core matures, more everyday consumer products follow, wherever safety or regulatory data has to become correct label copy.',
+      'Household products, detergents and food contact items turn safety data into label copy too. Same problem, different rules.',
     inputName: 'product safety and regulatory data',
     regulation: 'category specific labelling rules',
     examples: ['Household products', 'Food contact items', 'Detergents']
@@ -93,19 +86,19 @@ export const verticals: Vertical[] = [
   {
     id: 'electronics',
     name: 'Electronics & batteries',
-    status: 'planned',
-    statusLabel: 'On the roadmap',
-    tagline: 'Where compliance marks meet the label.',
+    status: 'idea',
+    statusLabel: 'Idea',
+    tagline: 'Named, not started.',
     description:
-      'Further out, technical product labelling: the marks, warnings and conformity details that regulated electronics have to carry.',
+      'Conformity marks, warnings and disposal wording, on products that carry a CE or UKCA mark.',
     inputName: 'conformity and technical documentation',
     regulation: 'CE and UKCA marking, WEEE and battery rules',
     examples: ['Consumer electronics', 'Batteries', 'Chargers']
   }
 ];
 
-/** Categories a maker can act on today or join a list for. */
-export const activeVerticals = verticals.filter((v) => v.status !== 'planned');
+/** Categories with a card of their own: the one you can use, and the one you can ask for. */
+export const activeVerticals = verticals.filter((v) => v.status !== 'idea');
 
-/** Longer term categories, shown as a lighter "where this is heading" row. */
-export const plannedVerticals = verticals.filter((v) => v.status === 'planned');
+/** Directions we have named but not started. Rendered as a lighter row. */
+export const plannedVerticals = verticals.filter((v) => v.status === 'idea');

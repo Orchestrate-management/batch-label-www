@@ -15,12 +15,12 @@ export const homeFaqs: AccordionItem[] = [
 {
   question: 'Is Batchlabel a substitute for a compliance consultant?',
   answer:
-  'No. Batchlabel builds your label against published UK CLP and EU CLP requirements using the information you give us. It does not certify or approve anything, and responsibility for the finished label stays with you as the seller. Plenty of makers use us for everyday labels and still take advice on an unusual product.'
+  'No. Batchlabel builds your label against published UK CLP and EU CLP requirements using the information you give us. It does not certify or approve anything, and responsibility for the finished label stays with you as the seller. You can use us for everyday labels and still take advice on an unusual product.'
 },
 {
   question: 'Which products does it cover?',
   answer:
-  'Today, candles, wax melts, reed diffusers and room sprays, all built against UK and EU CLP. Cosmetics and skincare are the next category we are opening up, and you can join the waitlist for it. The core is the same whatever you make, so more categories follow over time. If you make something unusual, send us the safety data sheet and we will tell you honestly whether we can handle it yet.'
+  'Candles, wax melts, reed diffusers and room sprays, built against UK and EU CLP. That is the lot. We would like to cover cosmetics and other categories one day, but none of that is built and we are not promising a date. If you make something unusual, send us the safety data sheet and we will tell you honestly whether we can handle it.'
 },
 {
   question: 'What if I change my recipe?',
@@ -30,7 +30,7 @@ export const homeFaqs: AccordionItem[] = [
 {
   question: 'Can I print the labels at home?',
   answer:
-  'Yes. Paid plans give you a print ready PDF at true size plus an SVG if your printer asks for vector artwork. Both keep the pictograms and the minimum text sizes intact, so nothing shrinks below what the rules allow.'
+  'Yes. Paid plans give you a print ready PDF at true size plus an SVG if your printer asks for vector artwork. Both keep the pictograms and regulated text at the minimum sizes the rules require.'
 }];
 
 
@@ -42,17 +42,17 @@ export const faqGroups: {title: string;items: AccordionItem[];}[] = [
   {
     question: 'Which product categories can I label today?',
     answer:
-    'Candles, wax melts, reed diffusers and room sprays are live now, built against UK CLP and EU CLP. That is the category we know best and where most of our makers are. Other categories are on the way, in a deliberate order.'
+    'Candles, wax melts, reed diffusers and room sprays, all built against UK CLP and EU CLP. Nothing else, yet.'
   },
   {
     question: 'Do you do cosmetics labelling?',
     answer:
-    'Not yet, but it is the next category we are building, with makers who already use us for their candle labels. It will take ingredient and product information and produce a compliant cosmetics label, with the allergen and INCI wording the rules expect. The scope stays the same as today: labelling only, so it will still not replace a Cosmetic Product Safety Report. Email hello@batchlabel.co.uk to join the cosmetics waitlist and we will tell you when it opens.'
+    'No. It is the category makers ask us for most and the one we would most like to add, but we have not started building it and there is no date. Email hello@batchlabel.co.uk if you want it and we will let you know if that changes. Whenever it arrives it would cover the label only, so it would still not replace a Cosmetic Product Safety Report.'
   },
   {
     question: 'Will Batchlabel work for other products, like wider consumer goods or electronics?',
     answer:
-    'That is the direction. The hard part of any label is turning safety and regulatory data into the exact words the rules require, and that engine is not specific to candles. Wider consumer goods come after cosmetics, and technical products such as electronics, with their conformity marks and warnings, are further out on the roadmap. We would rather add one category properly than promise all of them at once.'
+    'One day, we hope. The hard part of any label is turning safety data into the exact words the rules require, and that is not specific to candles. But nothing beyond candles and home fragrance exists, and we would rather say so than sell you a roadmap.'
   }]
 
 },
@@ -72,7 +72,7 @@ export const faqGroups: {title: string;items: AccordionItem[];}[] = [
   {
     question: 'How long does the first label take?',
     answer:
-    'Most makers get to a finished label in under ten minutes on their first go, and a couple of minutes after that.'
+    'About ten minutes on your first go, and a couple of minutes after that.'
   }]
 
 },
@@ -92,7 +92,7 @@ export const faqGroups: {title: string;items: AccordionItem[];}[] = [
   {
     question: 'Do I also need a CPSR for cosmetics?',
     answer:
-    'Yes. A CPSR is a Cosmetic Product Safety Report, and it is a separate requirement from labelling. Batchlabel does not produce one, and it will not when cosmetics labelling launches either. We handle the label text and layout only, whatever the category.'
+    'If you sell cosmetics, yes. A CPSR is a Cosmetic Product Safety Report and it is separate from labelling. Batchlabel does not produce one, and we do not label cosmetics at all today.'
   },
   {
     question: 'What about poison centre notification?',
@@ -127,7 +127,7 @@ export const faqGroups: {title: string;items: AccordionItem[];}[] = [
   {
     question: 'Is there a free option?',
     answer:
-    'Yes. You can make one label and see the full preview without entering a card. It is watermarked and PNG only, which is enough to check that we handle your fragrance properly.'
+    'Yes. You can make one label and see the full preview without entering a card. It is watermarked and PNG only, but the wording on it is the real thing.'
   },
   {
     question: 'Is VAT included?',
