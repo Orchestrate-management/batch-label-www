@@ -67,6 +67,7 @@ create table if not exists public.profiles (
 
 comment on table public.profiles is 'Global, brand-agnostic identity. One row per auth.users.';
 
+drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at
   before update on public.profiles
   for each row execute function public.set_updated_at();
@@ -113,6 +114,7 @@ create index if not exists brand_memberships_user_idx      on public.brand_membe
 create index if not exists brand_memberships_plan_idx      on public.brand_memberships (brand_slug, plan);
 create index if not exists brand_memberships_stripe_cus_idx on public.brand_memberships (stripe_customer_id);
 
+drop trigger if exists brand_memberships_set_updated_at on public.brand_memberships;
 create trigger brand_memberships_set_updated_at
   before update on public.brand_memberships
   for each row execute function public.set_updated_at();
