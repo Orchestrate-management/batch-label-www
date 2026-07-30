@@ -6,6 +6,7 @@ import { BRAND_SLUG } from './brand';
 import { signupConsents } from './agreements';
 import { attributionForMetadata } from './attribution';
 import { trackSignUpCompleted, trackSignUpStarted } from './analytics';
+import { fetchMembershipState, membershipRedirect, type MembershipState } from './membership';
 
 interface AuthResult {
   error: string | null;
@@ -24,6 +25,15 @@ interface AuthContextValue {
     advertisingOptIn: boolean;
   }) => Promise<AuthResult>;
   signInWithPassword: (input: {email: string;password: string;}) => Promise<AuthResult>;
+  /**
+   * Starts the Google redirect. Nothing about the account can be decided here: an OAuth
+   * call has no options.data, so no brand, business name or consent reaches
+   * raw_user_meta_data and the provisioning trigger cannot fire. Both signup and login
+   * therefore land on /dashboard, where the membership gate sends anyone without a
+   * membership to /finish-setup to accept the terms. `intent` only decides whether this
+   * counts as a signup for analytics.
+   */
+  signInWithGoogle: (input: {intent: 'sign_up' | 'log_in';}) => Promise<AuthResult>;
   /**
    * Sends a one time sign in link. Pass `signUp` to create the account (carrying the
    * signup consents); omit it on the log in path so an unknown email is NOT silently
@@ -110,6 +120,24 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     []
   );
 
+  const signInWithGoogle = useCallback<AuthContextValue['signInWithGoogle']>(async ({ intent }) => {
+    if (!supabase) return { error: MISSING_CONFIG_MESSAGE };
+    if (intent === 'sign_up') trackSignUpStarted('google');
+    // sign_up_completed is deliberately NOT fired here. The account is not really made
+    // until the terms are accepted on /finish-setup, and this call ends in a full page
+    // redirect to Google anyway.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectTo('/dashboard'),
+        // Always show the account chooser. Makers often have a personal and a shop
+        // Google account and silently reusing the last one is how you end up with two.
+        queryParams: { prompt: 'select_account' }
+      }
+    });
+    return { error: error ? error.message : null };
+  }, []);
+
   const sendMagicLink = useCallback<AuthContextValue['sendMagicLink']>(async ({ email, signUp }) => {
     if (!supabase) return { error: MISSING_CONFIG_MESSAGE };
     const isSignUp = Boolean(signUp);
@@ -170,6 +198,7 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
       configured: isSupabaseConfigured,
       signUpWithPassword,
       signInWithPassword,
+      signInWithGoogle,
       sendMagicLink,
       sendPasswordReset,
       updatePassword,
@@ -180,6 +209,7 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     loading,
     signUpWithPassword,
     signInWithPassword,
+    signInWithGoogle,
     sendMagicLink,
     sendPasswordReset,
     updatePassword,
@@ -216,6 +246,66 @@ export function RequireAuth({ children }: {children: React.ReactNode;}) {
   if (configured && !session) {
     return <Navigate to="/log-in" replace state={{ from: location.pathname }} />;
   }
+
+  return <>{children}</>;
+}
+
+/**
+ * The second half of the gate, for OAuth users.
+ *
+ * RequireAuth proves there is a session. It does not prove the person has a brand
+ * membership, and after a Google redirect they will not have one — no membership, and no
+ * terms accepted. Dropping them on the dashboard would show an account area with nothing
+ * in it, so they go to /finish-setup instead.
+ *
+ * Wrap the dashboard with page="dashboard" and the completion screen with
+ * page="finish_setup". Both use the same rule (membershipRedirect), which is what keeps
+ * them from bouncing a user back and forth: neither redirects on `unknown`, and they
+ * redirect on opposite states otherwise.
+ */
+export function RequireMembership({
+  page,
+  children
+
+
+
+}: {page: 'dashboard' | 'finish_setup';children: React.ReactNode;}) {
+  const { session, loading: authLoading, configured } = useAuth();
+  const [state, setState] = useState<MembershipState | null>(null);
+
+  // Key on the user id, NOT the session object. supabase-js hands us a freshly parsed
+  // session object on every tab refocus and token refresh, so depending on the object
+  // would re-run this on each one. Combined with blanking the state that would unmount
+  // the children — wiping a half-filled consent form the moment someone opens the terms
+  // in a new tab to read them, which is exactly what we ask them to do.
+  const userId = session?.user?.id ?? null;
+
+  useEffect(() => {
+    if (!configured || !userId) {
+      setState('unknown');
+      return;
+    }
+    let active = true;
+    // Deliberately no setState(null) here: revalidate in the background and keep showing
+    // the answer we already have. Only the very first resolution shows the spinner.
+    fetchMembershipState().then((next) => {
+      if (active) setState(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, [configured, userId]);
+
+  if (authLoading || state === null) {
+    return (
+      <div className="flex min-h-[60vh] w-full items-center justify-center bg-paper">
+        <p className="text-sm text-ink-muted">Checking your account...</p>
+      </div>);
+
+  }
+
+  const destination = membershipRedirect(state, page);
+  if (destination) return <Navigate to={destination} replace />;
 
   return <>{children}</>;
 }

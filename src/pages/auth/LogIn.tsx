@@ -5,6 +5,7 @@ import { useAuth } from '../../lib/auth';
 import { AuthShell } from '../../components/auth/AuthShell';
 import { Field, Alert } from '../../components/ui/Field';
 import { Button } from '../../components/ui/Button';
+import { GoogleButton, AuthDivider, isGoogleAuthEnabled } from '../../components/auth/GoogleButton';
 
 export function LogIn() {
   usePageMeta({
@@ -15,13 +16,27 @@ export function LogIn() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { signInWithPassword, sendMagicLink, configured } = useAuth();
+  const { signInWithPassword, sendMagicLink, signInWithGoogle, configured } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   const destination = (location.state as {from?: string;} | null)?.from ?? '/dashboard';
+
+  // Google always returns to /dashboard, so a deep link the user was aiming at is lost
+  // on this path. Losing it is better than trusting a redirect target through an
+  // external provider, and the dashboard is one click from anywhere in the app.
+  const handleGoogle = async () => {
+    setGoogleBusy(true);
+    setError(null);
+    const result = await signInWithGoogle({ intent: 'log_in' });
+    if (result.error) {
+      setError(result.error);
+      setGoogleBusy(false);
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -65,13 +80,25 @@ export function LogIn() {
         </p>
       }>
       
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        {!configured ?
-        <Alert tone="info">
+      {!configured ?
+      <div className="mb-4">
+          <Alert tone="info">
             Sign in is not connected in this environment yet. Add the Supabase keys to switch it on.
-          </Alert> :
-        null}
+          </Alert>
+        </div> :
+      null}
 
+      {isGoogleAuthEnabled() ?
+      <>
+          <GoogleButton disabled={googleBusy} location="log_in" onClick={handleGoogle} />
+
+          <div className="my-5">
+            <AuthDivider />
+          </div>
+        </> :
+      null}
+
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <Field
           label="Email"
           name="email"

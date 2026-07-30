@@ -27,6 +27,8 @@ export default defineConfig({
         'src/lib/analytics.ts',
         'src/lib/billing.ts',
         'src/lib/consent.ts',
+        'src/lib/agreements.ts',
+        'src/lib/membership.ts',
         'src/components/ui/Button.tsx',
       ],
       thresholds: {

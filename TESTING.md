@@ -42,6 +42,17 @@ the highest-value, most testable units:
 - `src/lib/consent.ts` — `getStoredConsent` parsing (valid/invalid) and `saveConsent` persistence.
 - `src/components/ui/Button.tsx` — renders label/variant, fires `onClick`, pushes `cta_click`, and
   renders router links / anchors.
+- `src/lib/membership.ts` — the OAuth completion gate: `membershipRedirect` (including that no
+  state ever makes both pages redirect at once, so there is no loop), `fetchMembershipState`
+  failing to `unknown` rather than to a signup screen, the `completionPayload` shape (no user id,
+  no `accepted` flag inside the document snapshots, attribution carried through), and
+  `completeOAuthSignup` refusing to call the database with the terms unticked.
+- `src/lib/auth.tsx` — `RequireMembership` routing a Google user with no membership to
+  `/finish-setup`, letting a provisioned user through, and not re-asking a returning user.
+- `src/pages/auth/FinishSetup.tsx` — terms cannot be submitted unticked, the consent booleans sent
+  match the boxes, and `sign_up_completed` fires only when the call actually provisioned.
+- `src/pages/auth/{SignUp,LogIn}.tsx` — the Google button starts the redirect with the right
+  intent, and the email signup path still refuses an unticked terms box.
 
 ### Coverage thresholds
 
@@ -54,7 +65,7 @@ work:
 lines: 50   functions: 50   statements: 50   branches: 45
 ```
 
-Current coverage sits comfortably above these (~92% lines). Raise the thresholds and widen
+Current coverage sits comfortably above these (~90% lines). Raise the thresholds and widen
 `coverage.include` as more of the app gets test coverage.
 
 ## CI — runs on every push and PR

@@ -5,6 +5,7 @@ import { useAuth } from '../../lib/auth';
 import { AuthShell } from '../../components/auth/AuthShell';
 import { Field, Alert, Checkbox } from '../../components/ui/Field';
 import { Button } from '../../components/ui/Button';
+import { GoogleButton, AuthDivider, isGoogleAuthEnabled } from '../../components/auth/GoogleButton';
 
 /** Opens a legal doc in a new tab without toggling the checkbox it lives inside. */
 function LegalLink({ to, children }: {to: string;children: React.ReactNode;}) {
@@ -31,7 +32,7 @@ export function SignUp() {
   });
 
   const navigate = useNavigate();
-  const { signUpWithPassword, sendMagicLink, configured } = useAuth();
+  const { signUpWithPassword, sendMagicLink, signInWithGoogle, configured } = useAuth();
   const [mode, setMode] = useState<Mode>('password');
   const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
@@ -42,6 +43,21 @@ export function SignUp() {
   const [termsError, setTermsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  // Google cannot carry the consent boxes through its redirect, so this path collects
+  // nothing here and asks for it on /finish-setup instead.
+  const handleGoogle = async () => {
+    setGoogleBusy(true);
+    setGoogleError(null);
+    const result = await signInWithGoogle({ intent: 'sign_up' });
+    if (result.error) {
+      setGoogleError(result.error);
+      setGoogleBusy(false);
+    }
+    // On success the browser is already leaving for Google; leave the button disabled.
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -85,14 +101,36 @@ export function SignUp() {
         </p>
       }>
       
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        {!configured ?
-        <Alert tone="info">
+      {!configured ?
+      <div className="mb-4">
+          <Alert tone="info">
             Sign in is not connected in this environment yet. The form below is complete and will
             work as soon as the Supabase keys are set.
-          </Alert> :
-        null}
+          </Alert>
+        </div> :
+      null}
 
+      {isGoogleAuthEnabled() ?
+      <>
+          <div className="space-y-3">
+            <GoogleButton
+            disabled={googleBusy}
+            location="sign_up"
+            onClick={handleGoogle} />
+
+            <p className="text-xs leading-relaxed text-ink-muted">
+              We will ask for your shop name and the terms on the next screen.
+            </p>
+            {googleError ? <Alert tone="error">{googleError}</Alert> : null}
+          </div>
+
+          <div className="my-5">
+            <AuthDivider />
+          </div>
+        </> :
+      null}
+
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <Field
           label="Business or shop name"
           name="businessName"

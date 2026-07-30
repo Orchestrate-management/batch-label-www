@@ -7,6 +7,7 @@ import {
   trackBeginCheckout,
   trackPurchaseRedirect,
   trackSignUpCompleted,
+  trackSignUpStarted,
 } from './analytics';
 import { ATTRIBUTION_STORAGE_KEY } from './attribution';
 
@@ -125,6 +126,23 @@ describe('analytics', () => {
     it('defaults user_id to null when absent', async () => {
       await trackSignUpCompleted('magic_link', 'a@b.com');
       expect(lastEvent().user_id).toBeNull();
+    });
+
+    it('accepts google as a method, for the OAuth completion step', async () => {
+      await trackSignUpCompleted('google', 'maker@example.com', 'user-1', true, false);
+      expect(lastEvent()).toMatchObject({
+        event: 'sign_up_completed',
+        method: 'google',
+        marketing_email_opt_in: true,
+        advertising_opt_in: false,
+      });
+    });
+  });
+
+  describe('trackSignUpStarted', () => {
+    it('records which route the signup started from', () => {
+      trackSignUpStarted('google');
+      expect(lastEvent()).toMatchObject({ event: 'sign_up_started', method: 'google' });
     });
   });
 });
