@@ -4,8 +4,8 @@ import { Button } from '../ui/Button';
 import { LabelPreview } from '../LabelPreview';
 
 const reassurances = [
-'No card needed for your first label',
-'Built for candles, melts, diffusers and sprays',
+'First label free, no card',
+'Candles, wax melts, reed diffusers and room sprays',
 'UK and EU CLP wording'];
 
 
@@ -21,12 +21,12 @@ export function Hero() {
             Correct CLP labels for your candles, in minutes.
           </h1>
           <p className="mt-4 max-w-prose text-[1.08rem] leading-relaxed text-ink-soft">
-            Upload the safety data sheet from your fragrance supplier, enter your recipe and pack
-            size, and download a print ready label. No consultant, no spreadsheet, no guesswork.
+            Upload the safety data sheet from your fragrance supplier, enter how much fragrance is
+            in the product and how big the pack is, then download a print ready label.
           </p>
           <p className="mt-3 max-w-prose text-[0.98rem] leading-relaxed text-ink-muted">
-            The same engine that gets candle labels right is built to extend across categories.
-            Candles and home fragrance today, cosmetics labelling coming next.
+            Candles and home fragrance is the only category we cover. We would like to add more,
+            but nothing else is built yet.
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">

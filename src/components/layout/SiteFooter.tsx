@@ -30,8 +30,8 @@ export function SiteFooter() {
           <div>
             <Logo />
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-ink-muted">
-              Compliance labelling for small batch makers in the UK and EU. Candles today, more
-              categories on the way.
+              UK and EU CLP labels for small batch makers. Candles, wax melts, reed diffusers and
+              room sprays.
             </p>
           </div>
 
