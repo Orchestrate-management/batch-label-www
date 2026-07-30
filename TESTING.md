@@ -38,7 +38,8 @@ the highest-value, most testable units:
   `getAttribution` storage→cookie fallback, and `attributionForMetadata` flattening/null-omission.
 - `src/lib/analytics.ts` — `sha256` hashing and the dataLayer shape of every `track*` helper.
 - `src/lib/billing.ts` — `PRICES` plus the success/error branches of `startCheckout` and
-  `openBillingPortal` with `fetch` mocked.
+  `openBillingPortal` with `fetch` mocked, and that neither one sends a `user_id` in the body:
+  identity travels as a bearer token so it cannot be edited in devtools.
 - `src/lib/consent.ts` — `getStoredConsent` parsing (valid/invalid) and `saveConsent` persistence.
 - `src/components/ui/Button.tsx` — renders label/variant, fires `onClick`, pushes `cta_click`, and
   renders router links / anchors.
@@ -53,6 +54,31 @@ the highest-value, most testable units:
   match the boxes, and `sign_up_completed` fires only when the call actually provisioned.
 - `src/pages/auth/{SignUp,LogIn}.tsx` — the Google button starts the redirect with the right
   intent, and the email signup path still refuses an unticked terms box.
+- `src/server/*` — the billing back end, run under the `node` environment (`// @vitest-environment
+  node` at the top of each file):
+  - `webhook.ts` — signature verification against a **real** Stripe SDK signature (generated
+    locally by `stripe.webhooks.generateTestHeaderString`, so no account or network is involved):
+    a missing, forged or wrong-secret signature is a 400 and reaches no store, a missing
+    `STRIPE_WEBHOOK_SECRET` fails closed with a 500, and — the one that catches the classic
+    regression — a body that has been re-serialised rather than passed through raw fails
+    verification. Plus the outcome contract: 500 on a write failure (Stripe retries), 200 on
+    `no_membership` (retrying cannot help and a run of 5xx gets the endpoint disabled).
+  - Idempotency and ordering end to end: a replayed event changes nothing, a late
+    `customer.subscription.updated` cannot resurrect a plan a `deleted` already ended, a partial
+    event cannot blank a period end an earlier event wrote, and a cancellation for a superseded
+    subscription does not take the current one down. These drive an in-memory model of
+    `apply_stripe_entitlement()`; the enforcing copy is the SQL, since only the database can make
+    the claim-and-apply atomic — see the comment on `modelStore` for exactly what that does and
+    does not prove.
+  - `entitlements.ts` / `stripe-events.ts` — which Stripe statuses entitle (`incomplete` does
+    not), both API-version shapes for `current_period_end` and `invoice.subscription`, and that an
+    `invoice.*` event can never grant a plan.
+  - `cors.ts` — the exact allow-list including `https://app.batchlabel.xyz`, never a wildcard on a
+    credentialed endpoint, lookalike origins rejected, and `Vary: Origin` always present.
+  - `config.ts` / `checkout.ts` — env reading, open-redirect rejection on the checkout return
+    paths, and that the attribution blob cannot overwrite the brand or plan in Stripe metadata.
+  - `supabase-admin.ts` — identity comes from the verified bearer token, and there is no code path
+    from a request body to a user id.
 
 ### Coverage thresholds
 
@@ -65,8 +91,12 @@ work:
 lines: 50   functions: 50   statements: 50   branches: 45
 ```
 
-Current coverage sits comfortably above these (~90% lines). Raise the thresholds and widen
-`coverage.include` as more of the app gets test coverage.
+Current coverage sits comfortably above these (~93% lines; the `src/server` billing modules are
+~98%). Raise the thresholds and widen `coverage.include` as more of the app gets test coverage.
+
+`src/server/supabase-admin.ts` is deliberately outside `coverage.include`: it is Supabase client
+wiring whose only real logic (`bearerToken`, `userFromRequest`) is tested directly, and measuring
+the query builder calls around it would only measure the mocks.
 
 ## CI — runs on every push and PR
 

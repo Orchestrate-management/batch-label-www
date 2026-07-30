@@ -30,6 +30,17 @@ export default defineConfig({
         'src/lib/agreements.ts',
         'src/lib/membership.ts',
         'src/components/ui/Button.tsx',
+        // The billing server half. These decide who keeps a paid plan, so they are held to
+        // the same gate as the client units. src/server/supabase-admin.ts is deliberately
+        // absent: it is Supabase wiring whose only testable logic (bearerToken,
+        // userFromRequest) is covered directly, and measuring the client calls around it
+        // would only measure the mocks.
+        'src/server/entitlements.ts',
+        'src/server/stripe-events.ts',
+        'src/server/checkout.ts',
+        'src/server/cors.ts',
+        'src/server/config.ts',
+        'src/server/webhook.ts',
       ],
       thresholds: {
         lines: 50,
