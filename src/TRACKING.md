@@ -94,16 +94,29 @@ server side.
 
 ## Server side conversion forwarding
 
-`api/stripe-webhook.ts` contains documented placeholders for:
+**Not implemented yet.** The data it needs is already being captured and stored, which is the
+part that cannot be added retrospectively:
+
+- `api/create-checkout-session.ts` writes the allow-listed first-touch keys into **both** the
+  Checkout Session metadata and `subscription_data.metadata` (see `src/server/checkout.ts`).
+  Session metadata reaches `checkout.session.completed` only; the subscription copy is what
+  every later `customer.subscription.*` event carries, so a renewal or an upgrade months later
+  still knows which ad produced the customer.
+- The verified event reaches `src/server/webhook.ts`, which is where a forwarder would hook in
+  — after `handleStripeWebhook` has confirmed the signature and the store has returned
+  `applied`. Forwarding on `duplicate` or `stale` would double-count a Stripe retry, so the
+  outcome must be checked, not just the event type.
+
+When it is built:
 
 - **Meta Conversions API**: `Purchase` with `event_id` set to the Stripe session id so it
-  dedupes against any browser event, `fbc` rebuilt from the stored `fbclid`, and hashed
-  email for advanced matching.
-- **Google Ads**: `uploadClickConversions` using the stored `gclid`, or `gbraid` and
-  `wbraid` where a `gclid` is absent, plus hashed email for Enhanced Conversions.
+  dedupes against any browser event, `fbc` rebuilt from the stored `fbclid`, and hashed email
+  for advanced matching.
+- **Google Ads**: `uploadClickConversions` using the stored `gclid`, or `gbraid` and `wbraid`
+  where a `gclid` is absent, plus hashed email for Enhanced Conversions.
 
-Both read the click identifiers written to the Checkout Session metadata, so conversions
-can still be reported when browser tags were blocked.
+Both would read the click identifiers from the metadata above, so conversions can still be
+reported when browser tags were blocked.
 
 ## GTM container checklist
 
