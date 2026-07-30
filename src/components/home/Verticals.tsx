@@ -103,7 +103,7 @@ export function Verticals() {
           <ul className="mt-3 grid gap-3 sm:grid-cols-2">
             {plannedVerticals.map((vertical) =>
           <li key={vertical.id} className="flex items-start gap-2.5 text-sm text-ink-soft">
-                <ArrowRightIcon size={16} className="mt-0.5 shrink-0 text-ink-muted/70" aria-hidden="true" />
+                <ArrowRightIcon size={16} className="mt-0.5 shrink-0 text-ink-muted" aria-hidden="true" />
                 <span>
                   <span className="font-medium text-ink">{vertical.name}.</span> {vertical.description}
                 </span>

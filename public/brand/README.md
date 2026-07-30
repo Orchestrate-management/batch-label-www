@@ -39,6 +39,36 @@ cp /tmp/touch512.svg.png apple-touch-icon.png && sips -z 180 180 apple-touch-ico
 Repeat with `batchlabel-favicon.svg` at `-z 32 32` for `favicon-32x32.png`. Always open
 the result and look at it — a bad render is silent.
 
+### Regenerating the Open Graph card
+
+`public/og/batchlabel-share.png` is the 1200×630 image every link preview uses. Its source
+is `public/og/batchlabel-share.svg`.
+
+`qlmanage -t -s N` always renders into an N×N box, so a 1200×630 SVG comes out
+corner-pasted into a 1200×1200 square at nearly twice the size. Render it inside a square
+canvas instead and cut the middle back out:
+
+```sh
+cd public/og
+# Wrap the 630-tall artwork in a 1200x1200 canvas, vertically centred at y=285.
+python3 - <<'PY' > /tmp/og-square.svg
+import re
+art = open('batchlabel-share.svg').read()
+body = art[art.index('>', art.index('<svg')) + 1 : art.rindex('</svg>')]
+defs = ''
+print('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="1200" height="1200">')
+print('<rect width="1200" height="1200" fill="#FFFFFF"></rect>')
+print('<g transform="translate(0 285)">' + body + '</g></svg>')
+PY
+qlmanage -t -s 1200 -o /tmp /tmp/og-square.svg
+cp /tmp/og-square.svg.png batchlabel-share.png
+sips -c 630 1200 batchlabel-share.png   # -c crops from the centre, which is the artwork
+```
+
+Outfit is a webfont and is not installed locally, so Quick Look falls back to Helvetica
+Neue, the same fallback `batchlabel-lockup-horizontal.svg` has always used. Open the PNG
+and look at it before committing.
+
 In the app the lockup is rendered by `src/components/layout/Logo.tsx` rather than by
 loading an SVG file, so the wordmark uses the live Outfit webfont. The component and
 `batchlabel-lockup-horizontal.svg` are the same artwork — keep them in step if either
@@ -54,12 +84,38 @@ changes.
 | Warm paper (page background) | `#F3EEE6` | `paper` |
 | Card white | `#FBF8F3` | `white` |
 | Ink | `#1E1B18` | `ink` |
+| Muted ink (captions, hints) | `#6F6559` | `ink-muted` |
+| Form control boundary | `#8A8378` | `ink-line` |
 
 `white` is deliberately mapped to the brand's card white, not `#FFF` — cards sit on warm
 paper, and it is the same value the reversed mark knocks out to. Pure white is only used
 where a regulation demands it (see below).
 
-Teal on paper is roughly 8.5:1, so it passes WCAG AA and AAA for body text.
+### Measured contrast
+
+Ratios below are WCAG 2.1 relative luminance, computed against the hexes in this table.
+
+| Pair | Ratio | Verdict |
+| --- | --- | --- |
+| Teal `#14514F` on paper | 7.84:1 | AA and AAA body |
+| Teal on card white | 8.55:1 | AA and AAA body |
+| Ink on paper | 14.84:1 | AAA |
+| `ink-soft` on paper | 8.32:1 | AAA |
+| `ink-muted` on paper | 4.94:1 | AA body |
+| `ink-muted` on card white | 5.38:1 | AA body |
+| `ink-muted` on `paper-deep` | 4.65:1 | AA body |
+| `ink-line` on card white | 3.54:1 | AA non-text (1.4.11) |
+| Card white on `teal-700` | 8.55:1 | AA and AAA body |
+| `clay-600` on paper | 5.01:1 | AA body |
+| `clay-300` on `teal-800` | 5.57:1 | AA body |
+
+Two corrections to what this file used to say. Teal on paper is 7.84:1, not 8.5:1 — 8.55:1
+is teal on *card white*. And `ink-muted` was `#8A7F72`, which measured 3.39:1 on paper and
+3.19:1 on the footer band; it is used for normal size body text throughout, so it needed
+4.5:1 and did not have it. It is now `#6F6559`.
+
+Do not use opacity modifiers (`text-ink-muted/70` and friends) on text. Every one of them
+measured under 3:1.
 
 ## Type
 
