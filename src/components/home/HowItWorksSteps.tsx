@@ -1,4 +1,4 @@
-import { Section, Heading, Eyebrow } from '../ui/Section';
+import { Section, Heading, Eyebrow, Lead } from '../ui/Section';
 import { StepIllustration } from '../StepIllustration';
 import { Button } from '../ui/Button';
 
@@ -25,6 +25,10 @@ export function HowItWorksSteps({ withCta = true }: {withCta?: boolean;}) {
     <Section id="how-it-works" className="bg-white" ariaLabelledBy="how-heading">
       <Eyebrow>Three steps</Eyebrow>
       <Heading id="how-heading">How Batchlabel works</Heading>
+      <Lead className="mt-3">
+        Data in, compliant label out. The flow is the same for every category we take on. Here it is
+        with candles, the worked example we know best.
+      </Lead>
 
       <ol className="mt-8 grid gap-6 sm:grid-cols-3">
         {steps.map((step, index) =>

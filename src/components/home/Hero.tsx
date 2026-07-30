@@ -23,6 +23,10 @@ export function Hero() {
             Upload the safety data sheet from your fragrance supplier, enter your recipe and pack
             size, and download a print ready label. No consultant, no spreadsheet, no guesswork.
           </p>
+          <p className="mt-3 max-w-prose text-[0.98rem] leading-relaxed text-ink-muted">
+            The same engine that gets candle labels right is built to extend across categories.
+            Candles and home fragrance today, cosmetics labelling coming next.
+          </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
             <Button

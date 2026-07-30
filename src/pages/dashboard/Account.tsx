@@ -4,6 +4,7 @@ import { useAuth } from '../../lib/auth';
 import { openBillingPortal, startCheckout } from '../../lib/billing';
 import { Button } from '../../components/ui/Button';
 import { Alert } from '../../components/ui/Field';
+import { MarketingPreferences } from '../../components/dashboard/MarketingPreferences';
 
 export function Account() {
   usePageMeta({
@@ -66,6 +67,8 @@ export function Account() {
           for you while the self service settings are being built.
         </p>
       </section>
+
+      <MarketingPreferences />
 
       <section aria-labelledby="plan" className="rounded-2xl border border-paper-edge bg-white p-5 sm:p-6">
         <h2 id="plan" className="font-display text-[1.1rem] font-semibold text-ink">

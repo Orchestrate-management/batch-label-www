@@ -16,3 +16,6 @@ coverage/
 .DS_Store
 *.log
 .vercel
+
+# Claude Code local state / agent worktrees
+.claude/

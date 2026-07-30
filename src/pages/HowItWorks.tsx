@@ -43,16 +43,16 @@ export function HowItWorks() {
   usePageMeta({
     title: 'How it works',
     description:
-    'Three steps: upload your fragrance supplier safety data sheet, enter your fragrance percentage and pack size, then download a print ready UK and EU CLP label as PDF or SVG.'
+    'The flow that turns safety and regulatory data into a compliant label: upload the source document, enter your recipe and pack size, then download a print ready label as PDF or SVG. Shown here for candles, our first category, with cosmetics next.'
   });
 
   return (
     <>
       <PageHero
         eyebrow="How it works"
-        title="From supplier PDF to printed label"
-        intro="No compliance knowledge needed to follow this. If you can read the safety data sheet your supplier emailed you, you can make a label.">
-        
+        title="From source document to printed label"
+        intro="The same three steps work for any category we take on: turn the data that governs a product into a compliant label. Below, we walk it through with candles, where we started. No compliance knowledge needed. If you can read the safety data sheet your supplier emailed you, you can make a label.">
+
         <Button to="/sign-up" size="lg" track={{ label: 'Make a label free', location: 'how_it_works_hero' }}>
           Make a label free
         </Button>

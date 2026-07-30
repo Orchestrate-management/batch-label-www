@@ -9,7 +9,7 @@ export function Faq() {
   usePageMeta({
     title: 'Frequently asked questions',
     description:
-    'Plain answers about CLP labelling for candles, wax melts and diffusers: safety data sheets, UFI codes, allergens, printing, pricing, VAT and cancellation.'
+    'Plain answers about compliance labelling: which product categories we cover, cosmetics labelling coming next, safety data sheets, UFI codes, allergens, printing, pricing, VAT and cancellation. Candles, wax melts and diffusers live today.'
   });
 
   return (
