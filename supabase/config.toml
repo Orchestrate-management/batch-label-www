@@ -1,0 +1,14 @@
+# Supabase CLI configuration.
+# Full reference: https://supabase.com/docs/guides/cli/config
+#
+# `project_id` is only a local label for the CLI. The actual project this repo pushes to
+# is set by `supabase link --project-ref <ref>` (stored in supabase/.temp, gitignored).
+# Run `supabase init` if you want the CLI to regenerate a full config with local-dev
+# sections (studio, auth, storage, etc.); this minimal file is enough for `db push`.
+
+project_id = "batchlabel"
+
+[db]
+# Postgres major version of the linked Supabase project. Check it under
+# Project Settings -> Database in the dashboard and adjust if different.
+major_version = 15
