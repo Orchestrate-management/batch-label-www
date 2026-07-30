@@ -27,6 +27,7 @@ export default defineConfig({
         'src/lib/analytics.ts',
         'src/lib/billing.ts',
         'src/lib/consent.ts',
+        'src/lib/consent-preferences.ts',
         'src/lib/agreements.ts',
         'src/lib/membership.ts',
         'src/lib/entitlements.ts',

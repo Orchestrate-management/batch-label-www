@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePageMeta } from '../../lib/seo';
 import { useAuth } from '../../lib/auth';
+import { goToApp } from '../../lib/app-handoff';
 import { completeOAuthSignup } from '../../lib/membership';
 import { trackSignUpCompleted } from '../../lib/analytics';
 import { AuthShell } from '../../components/auth/AuthShell';
-import { Field, Alert, Checkbox } from '../../components/ui/Field';
+import { Field, Alert, Checkbox, RequiredKey } from '../../components/ui/Field';
+import { advertisingConsentFromBanner } from '../../lib/consent';
 import { Button } from '../../components/ui/Button';
 
 /** Opens a legal doc in a new tab without toggling the checkbox it lives inside. */
@@ -45,7 +47,6 @@ export function FinishSetup() {
   const [businessName, setBusinessName] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [marketingEmailOptIn, setMarketingEmailOptIn] = useState(false);
-  const [advertisingOptIn, setAdvertisingOptIn] = useState(false);
   const [termsError, setTermsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,8 +70,7 @@ export function FinishSetup() {
     const result = await completeOAuthSignup({
       businessName,
       termsAccepted,
-      marketingEmailOptIn,
-      advertisingOptIn
+      marketingEmailOptIn
     });
 
     setBusy(false);
@@ -82,10 +82,10 @@ export function FinishSetup() {
     // submit returns provisioned:false and must not inflate the conversion.
     if (result.provisioned && user?.email) {
       await trackSignUpCompleted(
-        'google', user.email, user.id, marketingEmailOptIn, advertisingOptIn
+        'google', user.email, user.id, marketingEmailOptIn, advertisingConsentFromBanner()
       );
     }
-    navigate('/dashboard');
+    goToApp();
   };
 
   const handleSignOut = async () => {
@@ -132,6 +132,8 @@ export function FinishSetup() {
           placeholder="Willow & Wick" />
 
         <div className="space-y-3 rounded-xl border border-paper-edge bg-paper-deep/40 p-4">
+          <RequiredKey />
+
           <Checkbox
             name="acceptTerms"
             checked={termsAccepted}
@@ -150,15 +152,6 @@ export function FinishSetup() {
             onChange={setMarketingEmailOptIn}>
             Send me product tips and offers by email. Optional, unsubscribe any time.
           </Checkbox>
-
-          <Checkbox
-            name="advertisingOptIn"
-            checked={advertisingOptIn}
-            onChange={setAdvertisingOptIn}>
-            Use my email and account details for advertising and retargeting (shared with
-            partners such as Meta and Google). Optional. See our{' '}
-            <LegalLink to="/privacy">Privacy Policy</LegalLink>.
-          </Checkbox>
         </div>
 
         {error ? <Alert tone="error">{error}</Alert> : null}
@@ -168,8 +161,9 @@ export function FinishSetup() {
         </Button>
 
         <p className="text-xs leading-relaxed text-ink-muted">
-          Both optional boxes above can be changed any time from your account settings, or
-          unsubscribe using the link in any marketing email.
+          The email box is optional and can be changed any time from your account settings,
+          or unsubscribe using the link in any marketing email. Advertising and retargeting
+          follows your cookie choice, which you can change from the footer of any page.
         </p>
       </form>
     </AuthShell>);

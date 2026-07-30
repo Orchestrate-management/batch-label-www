@@ -8,6 +8,7 @@ import {
   DASHBOARD_PATH } from
 './membership';
 import { ATTRIBUTION_STORAGE_KEY } from './attribution';
+import { CONSENT_STORAGE_KEY } from './consent';
 import { TERMS_AGREEMENT } from './agreements';
 
 const mocks = vi.hoisted(() => ({
@@ -32,7 +33,6 @@ const ACCEPTED = {
   businessName: 'Willow & Wick',
   termsAccepted: true,
   marketingEmailOptIn: false,
-  advertisingOptIn: false,
 };
 
 describe('membership', () => {
@@ -97,7 +97,6 @@ describe('membership', () => {
         businessName: '  Willow & Wick  ',
         termsAccepted: true,
         marketingEmailOptIn: true,
-        advertisingOptIn: false,
       });
       expect(payload).toMatchObject({
         p_brand: 'batchlabel',
@@ -106,6 +105,18 @@ describe('membership', () => {
         p_marketing_email_opt_in: true,
         p_advertising_opt_in: false,
       });
+    });
+
+    it('derives advertising from the cookie banner, which survives the Google redirect', () => {
+      window.localStorage.setItem(
+        CONSENT_STORAGE_KEY,
+        JSON.stringify({ analytics: true, marketing: true, decided_at: '2026-07-30', version: 1 }),
+      );
+      expect(completionPayload(ACCEPTED).p_advertising_opt_in).toBe(true);
+    });
+
+    it('sends false for advertising when the banner has never been answered', () => {
+      expect(completionPayload(ACCEPTED).p_advertising_opt_in).toBe(false);
     });
 
     it('sends a null business name rather than an empty string', () => {
@@ -167,6 +178,21 @@ describe('membership', () => {
     it('reports provisioned:false when the membership already existed, so a repeat submit is not a signup', async () => {
       mocks.rpc.mockResolvedValue({ data: false, error: null });
       expect(await completeOAuthSignup(ACCEPTED)).toEqual({ error: null, provisioned: false });
+    });
+
+    it('re-applies only the email choice on a repeat submit, never advertising', async () => {
+      // Nobody expressed anything about advertising on this form, and this browser may
+      // never have answered the banner. Writing a derived false would silently withdraw
+      // a consent given on another device.
+      mocks.rpc.mockResolvedValue({ data: false, error: null });
+      await completeOAuthSignup({ ...ACCEPTED, marketingEmailOptIn: true });
+
+      const consentWrites = mocks.rpc.mock.calls.filter(([name]) => name === 'set_consent');
+      expect(consentWrites).toHaveLength(1);
+      expect(consentWrites[0][1]).toMatchObject({
+        p_consent_id: 'marketing_emails',
+        p_accepted: true,
+      });
     });
 
     it('turns a database error into a sentence a maker can read', async () => {

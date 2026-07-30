@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getStoredConsent, saveConsent } from '../lib/consent';
+import { syncAdvertisingConsent } from '../lib/consent-preferences';
 import { Button } from './ui/Button';
 
 const OPEN_EVENT = 'bl:open-cookie-settings';
@@ -54,6 +55,11 @@ export function CookieBanner() {
 
   const decide = (choice: {analytics: boolean;marketing: boolean;}) => {
     saveConsent(choice);
+    // The marketing toggle is the only place advertising is asked, so a signed-in
+    // maker's account record follows it. Not awaited: the banner has already applied
+    // the choice to the browser, and a slow network must not hold the dialog open.
+    // No-ops for a signed-out visitor. See lib/consent-preferences.ts.
+    void syncAdvertisingConsent(choice.marketing);
     setVisible(false);
     setShowDetail(false);
     // Put focus back on the footer button that opened this, so a keyboard user is not

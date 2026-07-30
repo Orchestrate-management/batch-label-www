@@ -53,6 +53,17 @@ Mapping used for Consent Mode v2:
 | Marketing | `ad_storage`, `ad_user_data`, `ad_personalization`          |
 | Necessary | `security_storage` only, always granted                    |
 
+### The marketing toggle is the only advertising question
+
+It drives the three ad signals above **and** the account-level
+`brand_memberships.advertising_opt_in`. Signup does not ask: it derives the value with
+`advertisingConsentFromBanner()`, and every later banner decision is carried onto a
+signed-in maker's account through `syncAdvertisingConsent()` and the `set_consent` RPC.
+
+This used to be asked twice — once here, once as a signup checkbox — with nothing
+reconciling the two. The signup form now has exactly two boxes: Terms (required) and
+marketing email (optional). Full model in [`../docs/CONSENT.md`](../docs/CONSENT.md).
+
 ## First touch attribution
 
 `captureAttribution()` runs once per browser on first load and stores, to both
@@ -76,7 +87,7 @@ Session metadata (see `api/create-checkout-session.ts`), so the webhook can repl
 | `view_pricing`      | Pricing page mount                            | `page_path`                                                        |
 | `cta_click`         | Every `Button` with a `track` prop            | `cta_label`, `cta_location`, `page_path`                            |
 | `sign_up_started`   | Sign up form submit, magic link request       | `method` (`password` or `magic_link`)                               |
-| `sign_up_completed` | Successful Supabase sign up                   | `method`, `user_id`, `em_sha256`                                    |
+| `sign_up_completed` | Successful Supabase sign up                   | `method`, `user_id`, `em_sha256`, `marketing_email_opt_in`, `advertising_opt_in` |
 | `begin_checkout`    | Maker plan CTA pressed                        | `plan`, `interval`, `value`, `currency`                             |
 | `purchase_redirect` | Just before the redirect to Stripe Checkout   | `plan`, `interval`, `value`, `currency`, `checkout_session_id`      |
 | `consent_update`    | Cookie choice saved                           | `consent_analytics`, `consent_marketing`                            |
@@ -118,7 +129,15 @@ When it is built:
 Both would read the click identifiers from the metadata above, so conversions can still be
 reported when browser tags were blocked.
 
-## GTM container checklist
+**Neither may run for a user whose `advertising_opt_in` is false.** Consent Mode gates the
+browser, and nothing gates a server-to-server call except the code making it. The gate is
+described at the call site in `api/stripe-webhook.ts` and in
+[`../docs/CONSENT.md`](../docs/CONSENT.md).
+
+## If a tag manager is ever added
+
+There is none today (see above), so this is a checklist for that day, not a description of
+what exists:
 
 1. Google tag (GA4) with the measurement id, triggered on Consent Mode `analytics_storage`.
 2. GA4 event tags for each custom event above, with the parameters mapped.

@@ -64,6 +64,23 @@ export interface WebhookDeps {
   config: IntentConfig;
 }
 
+/**
+ * CONSENT GATE — read this before adding conversion forwarding here.
+ *
+ * A paid conversion is the obvious place to call Meta's Conversions API or Google's
+ * Enhanced Conversions, and both forward personal data (a hashed email at minimum) to an
+ * advertising platform. That is exactly what `brand_memberships.advertising_opt_in`
+ * records, and it is the only thing that flag is for.
+ *
+ * Neither call may run for a user whose flag is false. Look it up with the service-role
+ * key by the supabase user id already carried in the Checkout Session metadata, and skip
+ * the forwarding when it is false OR when the lookup fails — fail closed, not open.
+ *
+ * Nothing forwards today, so the flag currently gates nothing on the server. Browser-side
+ * ad use is separately gated by Consent Mode v2 (`src/lib/consent.ts`), driven by the same
+ * decision: the cookie banner's marketing toggle is what sets `advertising_opt_in`. There
+ * is deliberately no second question at signup. See docs/CONSENT.md.
+ */
 export async function handleStripeWebhook(request: Request, deps: WebhookDeps): Promise<Response> {
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, 405);

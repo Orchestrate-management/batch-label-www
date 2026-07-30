@@ -1,8 +1,9 @@
 /**
  * Batchlabel event layer.
  *
- * Every event is pushed to the GTM dataLayer. Nothing is sent to a vendor directly, so
- * consent gating lives in one place (the GTM container plus Consent Mode v2).
+ * Every event goes onto the dataLayer AND through gtagEvent, because GA4 is loaded
+ * directly and acts only on gtag commands — see src/TRACKING.md. Consent gating is
+ * Consent Mode v2 (lib/consent.ts), which holds the tag denied until the maker chooses.
  *
  * EVENT REFERENCE (create a matching Custom Event trigger in GTM for each one):
  *
@@ -14,7 +15,9 @@
  *  sign_up_completed  { method, user_id, em_sha256,           Account created. em_sha256
  *                       marketing_email_opt_in,                feeds Meta advanced matching
  *                       advertising_opt_in }                   and Google Enhanced Conversions.
- *                                                            advertising_opt_in gates ad use.
+ *                                                            advertising_opt_in is DERIVED
+ *                                                            from the cookie banner, never a
+ *                                                            signup box — see docs/CONSENT.md.
  *                                                            method 'google' fires at the END
  *                                                            of the completion step, not at the
  *                                                            redirect, because that is where

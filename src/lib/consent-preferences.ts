@@ -11,7 +11,7 @@
 import { supabase } from './supabase';
 import { BRAND_SLUG } from './brand';
 import type { Agreement } from './agreements';
-import { agreementUrl } from './agreements';
+import { agreementUrl, ADVERTISING_AGREEMENT } from './agreements';
 
 export interface ConsentPreferences {
   marketingEmail: boolean;
@@ -58,4 +58,36 @@ accepted: boolean)
     return { error: 'Could not save your preference. Please try again.' };
   }
   return { error: null };
+}
+
+/** What the sync below did, so a test can tell the four cases apart. */
+export type AdvertisingSyncResult = 'skipped' | 'unchanged' | 'written' | 'failed';
+
+/**
+ * Carries a cookie banner decision onto the account record.
+ *
+ * The banner is the only place advertising is asked, so it is also the only place that
+ * may change advertising_opt_in. Called from CookieBanner every time a choice is saved.
+ *
+ * It goes through set_consent like every other consent write, which means the flag, the
+ * consents snapshot and the append-only consent_events row move together and the server
+ * stamps the time. There is deliberately no client-side write path for this.
+ *
+ * Four outcomes:
+ *  - `skipped`   nobody is signed in, or they have no membership yet. Nothing to keep in
+ *                step. The banner choice still governs the browser; docs/CONSENT.md
+ *                describes what happens on the account when they next decide.
+ *  - `unchanged` the account already says this. Writing an identical row would fill the
+ *                audit log with re-affirmations and make a real change harder to find.
+ *  - `written`   the decision changed and is now recorded.
+ *  - `failed`    the write did not land. Silent by design: this is a background sync, and
+ *                the banner has already done the thing the user pressed the button for.
+ */
+export async function syncAdvertisingConsent(marketing: boolean): Promise<AdvertisingSyncResult> {
+  const current = await fetchConsentPreferences();
+  if (!current) return 'skipped';
+  if (current.advertising === marketing) return 'unchanged';
+
+  const { error } = await updateConsentPreference(ADVERTISING_AGREEMENT, marketing);
+  return error ? 'failed' : 'written';
 }

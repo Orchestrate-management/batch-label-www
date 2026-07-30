@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { usePageMeta } from '../../lib/seo';
 import { useAuth } from '../../lib/auth';
 import { AuthShell } from '../../components/auth/AuthShell';
-import { Field, Alert, Checkbox } from '../../components/ui/Field';
+import { Field, Alert, Checkbox, RequiredKey } from '../../components/ui/Field';
 import { Button } from '../../components/ui/Button';
 import { GoogleButton, AuthDivider, isGoogleAuthEnabled } from '../../components/auth/GoogleButton';
 
@@ -39,7 +39,6 @@ export function SignUp() {
   const [password, setPassword] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [marketingEmailOptIn, setMarketingEmailOptIn] = useState(false);
-  const [advertisingOptIn, setAdvertisingOptIn] = useState(false);
   const [termsError, setTermsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,10 +74,12 @@ export function SignUp() {
     setBusy(true);
     setError(null);
 
+    // Advertising is not on this form. useAuth derives it from the cookie banner choice,
+    // which is the only place we ask about it.
     const result =
     mode === 'password' ?
-    await signUpWithPassword({ email, password, businessName, marketingEmailOptIn, advertisingOptIn }) :
-    await sendMagicLink({ email, signUp: { businessName, marketingEmailOptIn, advertisingOptIn } });
+    await signUpWithPassword({ email, password, businessName, marketingEmailOptIn }) :
+    await sendMagicLink({ email, signUp: { businessName, marketingEmailOptIn } });
 
     setBusy(false);
     if (result.error) {
@@ -164,6 +165,8 @@ export function SignUp() {
         null}
 
         <div className="space-y-3 rounded-xl border border-paper-edge bg-paper-deep/40 p-4">
+          <RequiredKey />
+
           <Checkbox
             name="acceptTerms"
             checked={termsAccepted}
@@ -181,15 +184,6 @@ export function SignUp() {
             checked={marketingEmailOptIn}
             onChange={setMarketingEmailOptIn}>
             Send me product tips and offers by email. Optional, unsubscribe any time.
-          </Checkbox>
-
-          <Checkbox
-            name="advertisingOptIn"
-            checked={advertisingOptIn}
-            onChange={setAdvertisingOptIn}>
-            Use my email and account details for advertising and retargeting (shared with
-            partners such as Meta and Google). Optional. See our{' '}
-            <LegalLink to="/privacy">Privacy Policy</LegalLink>.
           </Checkbox>
         </div>
 
@@ -211,8 +205,9 @@ export function SignUp() {
         </button>
 
         <p className="text-xs leading-relaxed text-ink-muted">
-          Both options above are optional. You can change either one any time from your account
-          settings, or unsubscribe using the link in any marketing email.
+          The email box is optional. Change it any time from your account settings, or
+          unsubscribe using the link in any marketing email. Advertising and retargeting
+          follows your cookie choice, which you can change from the footer of any page.
         </p>
       </form>
     </AuthShell>);

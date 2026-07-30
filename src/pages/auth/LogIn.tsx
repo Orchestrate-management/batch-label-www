@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePageMeta } from '../../lib/seo';
 import { useAuth } from '../../lib/auth';
+import { goToApp } from '../../lib/app-handoff';
 import { AuthShell } from '../../components/auth/AuthShell';
 import { Field, Alert } from '../../components/ui/Field';
 import { Button } from '../../components/ui/Button';
@@ -23,7 +24,10 @@ export function LogIn() {
   const [error, setError] = useState<string | null>(null);
   const [googleBusy, setGoogleBusy] = useState(false);
 
-  const destination = (location.state as {from?: string;} | null)?.from ?? '/dashboard';
+  // The product lives on app.batchlabel.xyz, so a completed login ends there
+  // rather than on this site. `next` is set when the app bounced someone here to
+  // sign in; it is validated against an allowlist before being followed.
+  const next = new URLSearchParams(location.search).get('next');
 
   // Google always returns to /dashboard, so a deep link the user was aiming at is lost
   // on this path. Losing it is better than trusting a redirect target through an
@@ -48,7 +52,7 @@ export function LogIn() {
       setError(result.error);
       return;
     }
-    navigate(destination);
+    goToApp(next);
   };
 
   const handleMagicLink = async () => {
