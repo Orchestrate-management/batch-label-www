@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getStoredConsent, saveConsent, CONSENT_STORAGE_KEY } from './consent';
+import {
+  getStoredConsent,
+  saveConsent,
+  advertisingConsentFromBanner,
+  CONSENT_STORAGE_KEY } from
+'./consent';
 
 describe('consent', () => {
   beforeEach(() => {
@@ -63,6 +68,34 @@ describe('consent', () => {
     it('also mirrors the choice into a cookie', () => {
       saveConsent({ analytics: true, marketing: false });
       expect(document.cookie).toContain('bl_consent=');
+    });
+  });
+
+  describe('advertisingConsentFromBanner (the single source of truth)', () => {
+    it('is false before anyone has answered the banner, matching the denied default', () => {
+      expect(advertisingConsentFromBanner()).toBe(false);
+    });
+
+    it('is true once marketing cookies are accepted', () => {
+      saveConsent({ analytics: false, marketing: true });
+      expect(advertisingConsentFromBanner()).toBe(true);
+    });
+
+    it('is false once they are rejected', () => {
+      saveConsent({ analytics: true, marketing: false });
+      expect(advertisingConsentFromBanner()).toBe(false);
+    });
+
+    it('follows marketing, not analytics: they are different purposes', () => {
+      saveConsent({ analytics: true, marketing: false });
+      expect(advertisingConsentFromBanner()).toBe(false);
+      saveConsent({ analytics: false, marketing: true });
+      expect(advertisingConsentFromBanner()).toBe(true);
+    });
+
+    it('is false when the stored record is unreadable, rather than assuming yes', () => {
+      window.localStorage.setItem(CONSENT_STORAGE_KEY, 'not-json');
+      expect(advertisingConsentFromBanner()).toBe(false);
     });
   });
 });
