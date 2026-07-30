@@ -29,6 +29,28 @@ which writes the membership and the consent audit rows in one transaction, keyed
 `auth.uid()`, refusing to provision at all unless the terms were accepted. Console setup
 for the Google provider lives in [`../docs/GOOGLE_OAUTH_SETUP.md`](../docs/GOOGLE_OAUTH_SETUP.md).
 
+## Consent columns
+
+Three consents are recorded per membership, but only two are **asked** on a signup form:
+
+| Column | Asked where |
+| --- | --- |
+| `consents.terms` | Signup form, and `/finish-setup` after Google. Required. |
+| `marketing_email_opt_in` | Signup form, one optional box. |
+| `advertising_opt_in` | **Not on any form.** Derived from the cookie banner's marketing toggle. |
+
+Advertising used to be a third checkbox as well as a banner toggle, with nothing
+reconciling the two. It is now written only from the banner choice — at signup through the
+usual metadata and RPC arguments, and afterwards through `set_consent`. No schema change
+was needed: `complete_oauth_signup(p_advertising_opt_in ...)` carries a derived value
+where it used to carry a ticked one.
+
+Every consent write still goes through `set_consent()` or `complete_oauth_signup()`.
+Neither table has an INSERT or UPDATE policy for `authenticated`, so there is no
+client-side write path, and `consent_events` is append-only by construction. The full
+model, including what the product app may and may not do, is in
+[`../docs/CONSENT.md`](../docs/CONSENT.md).
+
 ## Apply the migration (Supabase CLI)
 
 ```bash

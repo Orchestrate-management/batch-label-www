@@ -262,8 +262,10 @@ Testing, it must be on the Test users list.
    where the terms are collected.
 5. Try pressing **Finish and start my label** with the terms box unticked. It must refuse.
 6. Tick the terms, enter a shop name, submit. You should land on `/dashboard`.
-7. Go to **Account and billing**. The marketing toggles must load (not "we could not load
-   your preferences"). That is the membership row being read back.
+7. Go to **Account and billing**. The marketing email box must load (not "we could not
+   load your preferences"), and the advertising row must show "Currently on" or
+   "Currently off" with a button to cookie settings. That is the membership row being
+   read back.
 
 ### What should be in the database
 
@@ -294,7 +296,8 @@ Expect:
 - `brand_slug` = `batchlabel`
 - `business_name` = whatever you typed on `/finish-setup`
 - `signup_source` = `web`, `method` = `oauth`
-- the two opt-in booleans matching the boxes you ticked
+- `marketing_email_opt_in` matching the box you ticked, and `advertising_opt_in`
+  matching your cookie banner choice
 - `attribution` carrying the first-touch record. **It should survive the Google round
   trip** — attribution lives in localStorage and a first-party cookie, so it is still
   there when the browser comes back. To prove it, start the whole test from
@@ -305,9 +308,13 @@ Expect:
   visited the site you will correctly see the original record instead of `test` — that is
   the feature working, not a failure.
 - `consents` with three entries. `terms` must have `"accepted": true` and an
-  `accepted_at` timestamp, plus the `version` (`2026-07-30`) and the `url` of the terms
+  `accepted_at` timestamp, plus the `version` (`2026-07-30.2`) and the `url` of the terms
   page that was on screen. A declined optional consent has `"accepted": false` and
   `"accepted_at": null`.
+- `advertising` reflecting your **cookie banner** choice, not a box on `/finish-setup` —
+  there is no advertising box there. Accept marketing cookies before starting and it is
+  `true`; reject them, or never answer the banner, and it is `false`. See
+  [`CONSENT.md`](CONSENT.md).
 
 ```sql
 -- 4. The audit trail.
@@ -329,8 +336,9 @@ Log out, then press **Continue with Google** again with the same account.
   `complete_oauth_signup` writes nothing when a membership already exists.
 - Re-run query 3. Still one membership, `business_name` unchanged.
 
-Changing a marketing toggle in **Account and billing** *does* add a row to
-`consent_events`, with `source = 'account_settings'`. That is the intended difference:
+Changing the marketing email box in **Account and billing** *does* add a row to
+`consent_events`, with `source = 'account_settings'`. So does changing the marketing
+cookie toggle, which is where advertising is changed. That is the intended difference:
 every real decision is logged once, and a login is not a decision.
 
 ---
