@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import type { Session, User } from '@supabase/supabase-js';
 import { Navigate, useLocation } from 'react-router-dom';
 import { supabase, isSupabaseConfigured, MISSING_CONFIG_MESSAGE } from './supabase';
+import { BRAND_SLUG } from './brand';
 import { attributionForMetadata } from './attribution';
 import { trackSignUpCompleted, trackSignUpStarted } from './analytics';
 
@@ -62,16 +63,19 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     async ({ email, password, businessName }) => {
       if (!supabase) return { error: MISSING_CONFIG_MESSAGE };
       trackSignUpStarted('password');
-      // Every first touch marketing value is written to the account record here, so the
-      // sale can be tied back to the ad that started it.
+      // Signup context is written to auth.users.raw_user_meta_data. The Supabase
+      // provisioning trigger (see supabase/migrations) reads `brand`, `business_name`
+      // and the nested `attribution` to create the profile and brand membership, so the
+      // sale can be tied back to the ad that started it and to the right sub-brand.
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: redirectTo('/dashboard'),
           data: {
+            brand: BRAND_SLUG,
             business_name: businessName,
-            ...attributionForMetadata()
+            attribution: attributionForMetadata()
           }
         }
       });
@@ -98,7 +102,10 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
       email,
       options: {
         emailRedirectTo: redirectTo('/dashboard'),
-        data: attributionForMetadata()
+        data: {
+          brand: BRAND_SLUG,
+          attribution: attributionForMetadata()
+        }
       }
     });
     if (error) return { error: error.message };
