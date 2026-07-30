@@ -152,6 +152,22 @@ export function idOf(value: string | {id?: string;} | null | undefined): string 
   return typeof value.id === 'string' ? value.id : null;
 }
 
+/**
+ * The subscription metadata Stripe snapshots onto an invoice at finalisation.
+ *
+ * Present only for invoices created since June 2023, and only where the subscription had
+ * metadata — so callers must treat `null` as "unknown", never as "not ours".
+ */
+export function invoiceSubscriptionMetadata(
+invoice: Stripe.Invoice | unknown)
+: Stripe.Metadata | null {
+  const inv = invoice as {
+    parent?: {subscription_details?: {metadata?: Stripe.Metadata | null;} | null;} | null;
+    subscription_details?: {metadata?: Stripe.Metadata | null;} | null;
+  };
+  return inv.parent?.subscription_details?.metadata ?? inv.subscription_details?.metadata ?? null;
+}
+
 /** Handles both `invoice.subscription` (old) and `invoice.parent...` (2025-03-31.basil+). */
 export function invoiceSubscriptionId(invoice: Stripe.Invoice | unknown): string | null {
   const inv = invoice as {

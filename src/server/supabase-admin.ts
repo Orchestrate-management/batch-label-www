@@ -88,6 +88,40 @@ brand: string)
   return (data as MembershipBilling | null) ?? null;
 }
 
+export interface Entitlement {
+  brand: string;
+  plan: string | null;
+  status: string | null;
+  membership_status: string | null;
+  active: boolean;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+}
+
+/**
+ * Whether this user is already entitled, according to the database's own definition.
+ *
+ * Read from the `entitlements` view rather than recomputed from the membership columns, so
+ * "are they already paying?" has exactly one answer across the webhook, the product app and
+ * this endpoint. The view is `security_invoker`, and the service role bypasses RLS, so the
+ * user_id filter below is doing real work — without it this would return every row.
+ */
+export async function findEntitlement(
+admin: SupabaseClient,
+userId: string,
+brand: string)
+: Promise<Entitlement | null> {
+  const { data, error } = await admin.
+  from('entitlements').
+  select('brand, plan, status, membership_status, active, current_period_end, cancel_at_period_end').
+  eq('user_id', userId).
+  eq('brand', brand).
+  maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return (data as Entitlement | null) ?? null;
+}
+
 /**
  * The only entitlement write path in the codebase.
  *
@@ -106,7 +140,8 @@ export function createEntitlementStore(admin: SupabaseClient): EntitlementStore 
         p_user_id: intent.userId,
         p_customer_id: intent.customerId,
         p_subscription_id: intent.subscriptionId,
-        p_email: intent.email,
+        // No p_email. The function takes no such argument: an address typed into Stripe
+        // Checkout is a claim by whoever is holding the card, never an identity.
         p_plan: intent.plan,
         p_plan_status: intent.planStatus,
         p_price_id: intent.priceId,

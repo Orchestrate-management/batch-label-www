@@ -208,8 +208,19 @@ openBilling('/api/create-portal-session', { return_path: '/settings/billing' });
 
 Notes:
 
+- **Both endpoints require a session and answer 401 without one.** `create-checkout-session`
+  used to allow an anonymous purchase; it no longer does. The webhook then had to work out
+  afterwards who had paid, and the only thing it had for that was the email typed into Stripe
+  Checkout — which was exploitable, and which could not link a buyer who had no account at
+  all. So send a signed-out user to sign in *before* offering checkout, rather than letting
+  the call fail. (The marketing site remembers which interval they picked across the signup;
+  see `src/lib/checkout-intent.ts` if you want the same behaviour.)
 - **Never send a `user_id`.** Both endpoints ignore any such field and resolve identity from
   the token. There is no parameter to get wrong.
+- **`create-checkout-session` returns 409 if the user already has an active subscription.**
+  Do not treat that as an error to retry — show "you are already on the Maker plan" and offer
+  the billing portal instead. Read `active` before rendering an upgrade button so they are
+  never invited to buy a second one.
 - `success_path` / `cancel_path` / `return_path` must be **paths**, not URLs. They are joined
   onto your own origin (which must be on the allow-list); an absolute or protocol-relative
   value is rejected and the default is used, so these cannot be turned into an open redirect.
@@ -237,6 +248,13 @@ Notes:
   change; `entitlements` is the stable contract. (Reading it for non-billing fields the app
   already uses is fine.)
 - **Do not duplicate the "is active" rule.** See above.
+- **Do not offer checkout to someone who is already `active`.** The endpoint refuses with a
+  409, but a UI that offers the button at all is how a paying customer ends up with two
+  subscriptions and two charges a month. Plan changes go through the billing portal, which
+  handles proration.
+- **Do not write `profiles.email`.** It is server-maintained from `auth.users` and
+  `authenticated` no longer holds the column privilege. `full_name` and `attributes` are
+  yours to write.
 
 ---
 

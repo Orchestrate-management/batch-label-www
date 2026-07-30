@@ -54,6 +54,13 @@ the highest-value, most testable units:
   match the boxes, and `sign_up_completed` fires only when the call actually provisioned.
 - `src/pages/auth/{SignUp,LogIn}.tsx` — the Google button starts the redirect with the right
   intent, and the email signup path still refuses an unticked terms box.
+- `src/lib/entitlements.ts` — that the account screen reads the real plan through the
+  `entitlements` view (never `brand_memberships`, never with a user id), and that
+  `summarisePlan` never offers an upgrade to somebody who is already entitled, to a suspended
+  account, or when the read simply failed. That last one is the expensive branch: treating a
+  failed read as "free plan" is how a paying customer is invited to buy a second subscription.
+- `src/lib/checkout-intent.ts` — the interval survives a signup, expires, and rejects a
+  tampered or malformed value.
 - `src/server/*` — the billing back end, run under the `node` environment (`// @vitest-environment
   node` at the top of each file):
   - `webhook.ts` — signature verification against a **real** Stripe SDK signature (generated
@@ -78,6 +85,14 @@ the highest-value, most testable units:
   - `entitlements.ts` / `stripe-events.ts` — which Stripe statuses entitle (`incomplete` does
     not), both API-version shapes for `current_period_end` and `invoice.subscription`, and that an
     `invoice.*` event can never grant a plan.
+  - The two-subscriptions-on-one-customer case: an abandoned `incomplete` subscription's
+    invoice cannot rebind `stripe_subscription_id`, so its eventual cancellation cannot revoke
+    the live plan — while a genuine resubscribe, where the stored subscription is already
+    dead, still takes over.
+  - The shared Stripe account: a checkout session or subscription belonging to another
+    Orchestrate brand (the account also carries Starter and Scale) is ignored rather than
+    turned into a Batchlabel entitlement, and a session with no brand metadata at all is not
+    one we created.
   - `cors.ts` — the exact allow-list including `https://app.batchlabel.xyz`, never a wildcard on a
     credentialed endpoint, lookalike origins rejected, and `Vary: Origin` always present.
   - `config.ts` / `checkout.ts` — env reading, open-redirect rejection on the checkout return
