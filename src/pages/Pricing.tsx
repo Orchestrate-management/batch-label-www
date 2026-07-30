@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CheckIcon, MinusIcon } from 'lucide-react';
 import { usePageMeta } from '../lib/seo';
 import { trackViewPricing } from '../lib/analytics';
 import { startCheckout, PRICES, type BillingInterval } from '../lib/billing';
+import { useAuth } from '../lib/auth';
+import { clearCheckoutIntent, readCheckoutIntent, saveCheckoutIntent } from '../lib/checkout-intent';
 import { PageHero } from '../components/PageHero';
 import { Section, Heading, Eyebrow } from '../components/ui/Section';
 import { Button } from '../components/ui/Button';
@@ -39,6 +42,8 @@ export function Pricing() {
     'Start free with one watermarked label. The Maker plan is £14 a month or £140 a year for unlimited print ready CLP labels, UFI generation and saved recipes. VAT included.'
   });
 
+  const navigate = useNavigate();
+  const { session, configured } = useAuth();
   const [interval, setInterval] = useState<BillingInterval>('monthly');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,11 +52,31 @@ export function Pricing() {
     trackViewPricing('/pricing');
   }, []);
 
+  // Coming back from signing up: put the toggle back where they left it, so the maker who
+  // chose annual before being interrupted is not silently sold monthly.
+  useEffect(() => {
+    if (!session) return;
+    const remembered = readCheckoutIntent();
+    if (remembered) {
+      setInterval(remembered);
+      clearCheckoutIntent();
+    }
+  }, [session]);
+
+  const signedOut = configured && !session;
+
   const handleCheckout = async () => {
+    // Checkout requires a session. Rather than letting the endpoint 401 at them, send them
+    // to sign up and remember which plan they were about to buy. No identity is ever passed
+    // in the body: the endpoint reads it from the Supabase access token.
+    if (signedOut) {
+      saveCheckoutIntent(interval);
+      navigate('/sign-up', { state: { from: '/pricing' } });
+      return;
+    }
+
     setBusy(true);
     setError(null);
-    // No identity is passed: the endpoint reads it from the Supabase access token, and a
-    // signed-out visitor can still buy (the webhook links the payment by the email that paid).
     const result = await startCheckout(interval);
     if (result.error) setError(result.error);
     setBusy(false);
@@ -147,8 +172,14 @@ export function Pricing() {
               onClick={handleCheckout}
               track={{ label: `Maker plan ${interval}`, location: 'pricing_maker' }}>
               
-              {busy ? 'Opening checkout...' : 'Get the Maker plan'}
+              {busy ? 'Opening checkout...' : signedOut ? 'Sign up to get the Maker plan' : 'Get the Maker plan'}
             </Button>
+
+            {signedOut ?
+            <p className="mt-2 text-center text-xs text-ink-muted">
+                You will make an account first, then come straight back here to pay.
+              </p> :
+            null}
 
             {error ?
             <div className="mt-4">

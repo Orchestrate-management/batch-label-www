@@ -122,9 +122,17 @@ export function invoicePaymentFailed(options: {
   billingReason?: string | null;
   subscriptionId?: string | null;
   modernShape?: boolean;
+  /**
+   * The subscription-metadata snapshot Stripe copies onto an invoice at finalisation.
+   * Absent by default, because it is absent on invoices finalised before June 2023 and on
+   * subscriptions that carry no metadata — the case the code has to tolerate.
+   */
+  brand?: string;
 } = {}): Stripe.Event {
   const subscriptionId = options.subscriptionId === null ? null : options.subscriptionId ?? SUBSCRIPTION_ID;
   const modern = options.modernShape !== false;
+  const details: Record<string, unknown> = { subscription: subscriptionId };
+  if (options.brand) details.metadata = { brand: options.brand };
 
   return envelope(options.id ?? 'evt_invoice_1', 'invoice.payment_failed', options.created ?? 3000, {
     id: 'in_test_1',
@@ -135,7 +143,7 @@ export function invoicePaymentFailed(options: {
     hosted_invoice_url: 'https://invoice.stripe.com/i/test',
     ...(subscriptionId ?
     modern ?
-    { parent: { type: 'subscription_details', subscription_details: { subscription: subscriptionId } } } :
+    { parent: { type: 'subscription_details', subscription_details: details } } :
     { subscription: subscriptionId } :
     { parent: null })
   });

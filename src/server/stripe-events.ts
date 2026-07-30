@@ -23,6 +23,7 @@ import {
   PAID_PLANS,
   idOf,
   invoiceSubscriptionId,
+  invoiceSubscriptionMetadata,
   isRenewalFailure,
   planForPrice,
   planForStatus,
@@ -89,10 +90,54 @@ export function readUserId(metadata: Stripe.Metadata | null | undefined): string
   return UUID_RE.test(trimmed) ? trimmed : null;
 }
 
-function readBrand(metadata: Stripe.Metadata | null | undefined, fallback: string): string {
-  const raw = metadata?.brand;
-  if (typeof raw === 'string' && raw.trim()) return raw.trim();
-  return fallback;
+/**
+ * Is this event about a product THIS deployment sells?
+ *
+ * It has to be asked, because the Stripe account is shared across Orchestrate brands — it
+ * already carries Starter (£480/mo) and Scale (£1,800/mo) alongside Batchlabel Maker — and a
+ * webhook endpoint receives every event for the whole account, not just the ones for the
+ * product it was set up for. Without this check, somebody buying Starter would be handed a
+ * Batchlabel Maker entitlement, because the mapping below happily granted `maker` for any
+ * subscription-mode checkout that completed.
+ *
+ * Two ways to qualify, in order:
+ *   * the metadata names a brand — our own checkout writes `brand` on both the session and
+ *     the subscription, so this is the normal path, and it is exact: another brand's
+ *     subscription is ignored here and handled by that brand's own deployment;
+ *   * no brand metadata at all, but the price is one of ours — covers a subscription created
+ *     by hand in the dashboard against a Batchlabel price.
+ *
+ * Anything else is not ours. It is IGNORED rather than rejected: erroring would return a
+ * non-2xx to Stripe for a perfectly valid event about somebody else's product, and a run of
+ * those gets the endpoint disabled, taking Batchlabel billing down with it.
+ */
+export function belongsToThisBrand(
+metadata: Stripe.Metadata | null | undefined,
+priceId: string | null,
+config: IntentConfig)
+: boolean {
+  const brand = typeof metadata?.brand === 'string' ? metadata.brand.trim() : '';
+  if (brand) return brand === config.brand;
+  return Boolean(priceId && config.prices[priceId]);
+}
+
+/**
+ * The weaker test, for events that cannot prove ownership either way.
+ *
+ * An invoice carries a snapshot of the subscription's metadata, but only for invoices
+ * finalised since June 2023 and only if the subscription had metadata at all. Absent that,
+ * an invoice event has no brand and no price to check — and it can only ever ANNOTATE an
+ * existing membership (it never carries a plan), so rejecting it outright would lose real
+ * dunning information for a hypothetical mismatch. It is let through, and the database's
+ * subscription-identity guard is what stops it touching a membership whose subscription it
+ * is not about. Only an explicit, different brand is rejected here.
+ */
+export function namesAnotherBrand(
+metadata: Stripe.Metadata | null | undefined,
+config: IntentConfig)
+: boolean {
+  const brand = typeof metadata?.brand === 'string' ? metadata.brand.trim() : '';
+  return Boolean(brand) && brand !== config.brand;
 }
 
 /**
@@ -176,7 +221,13 @@ function fromCheckoutSession(event: Stripe.Event, config: IntentConfig): Entitle
   // but "we added a paid template pack" should not silently grant a subscription.
   if (session.mode !== 'subscription') return null;
 
-  const intent = baseIntent(event, config, readBrand(session.metadata, config.brand));
+  // Somebody else's product on the shared Orchestrate Stripe account. A session carries no
+  // line items on the webhook payload, so the brand metadata our own checkout writes is the
+  // only signal available here — and a session with no brand metadata at all is, by
+  // definition, not one we created.
+  if (!belongsToThisBrand(session.metadata, null, config)) return null;
+
+  const intent = baseIntent(event, config, config.brand);
   intent.userId = readUserId(session.metadata);
   intent.customerId = idOf(session.customer);
   intent.subscriptionId = idOf(session.subscription);
@@ -209,13 +260,17 @@ function fromSubscription(event: Stripe.Event, config: IntentConfig): Entitlemen
   const subscription = event.data.object as Stripe.Subscription;
   if (!subscription?.id) return null;
 
+  const priceId = subscriptionPriceId(subscription);
+  // Another Orchestrate product on the same Stripe account. Ignored, not errored.
+  if (!belongsToThisBrand(subscription.metadata, priceId, config)) return null;
+
   const deleted = event.type === 'customer.subscription.deleted';
-  const intent = baseIntent(event, config, readBrand(subscription.metadata, config.brand));
+  const intent = baseIntent(event, config, config.brand);
 
   intent.userId = readUserId(subscription.metadata);
   intent.customerId = idOf(subscription.customer);
   intent.subscriptionId = subscription.id;
-  intent.priceId = subscriptionPriceId(subscription);
+  intent.priceId = priceId;
 
   // `deleted` is terminal by definition. Trusting the event type over the payload's status
   // means a replayed or oddly-shaped delete still ends the entitlement.
@@ -257,6 +312,13 @@ function fromFailedInvoice(event: Stripe.Event, config: IntentConfig): Entitleme
   const subscriptionId = invoiceSubscriptionId(invoice);
   // No subscription on the invoice means it is not about an entitlement at all.
   if (!subscriptionId) return null;
+
+  // Stripe snapshots the subscription's metadata onto the invoice at finalisation, so an
+  // invoice for another Orchestrate product can be recognised and ignored here. When that
+  // snapshot is absent (invoices created before June 2023, or a subscription made by hand)
+  // the event still passes, and the subscription-identity guard in the database is what
+  // stops it touching a membership whose subscription it is not about.
+  if (namesAnotherBrand(invoiceSubscriptionMetadata(invoice), config)) return null;
 
   const intent = baseIntent(event, config, config.brand);
   intent.subscriptionId = subscriptionId;

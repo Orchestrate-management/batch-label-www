@@ -94,15 +94,42 @@ describe('billing', () => {
       expect(body).toHaveProperty('attribution');
     });
 
-    it('still opens checkout for a signed-out visitor, with no Authorization header', async () => {
+    /**
+     * Checkout requires a session, and that is a security decision as much as a product
+     * one: selling to a signed-out visitor forced the webhook to work out afterwards who
+     * had paid, and the only thing it had for that was the email typed into Stripe
+     * Checkout — which was exploitable, because profiles.email is user-writable.
+     */
+    it('refuses to open checkout with no session, and does not call the server', async () => {
       mocks.session = null;
-      const fetchMock = vi.fn().mockResolvedValue(fakeResponse({ url: 'https://x', id: 'y' }));
+      const fetchMock = vi.fn();
       vi.stubGlobal('fetch', fetchMock);
 
       const result = await startCheckout('monthly');
 
-      expect(result).toEqual({ error: null });
-      expect(lastRequest(fetchMock).headers.Authorization).toBeUndefined();
+      expect(result.error).toMatch(/sign in/i);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('does not fire begin_checkout when there is no session to check out with', async () => {
+      mocks.session = null;
+      vi.stubGlobal('fetch', vi.fn());
+
+      await startCheckout('annual');
+
+      const events = (window.dataLayer ?? []) as Array<Record<string, unknown>>;
+      expect(events.some((e) => e.event === 'begin_checkout')).toBe(false);
+    });
+
+    it('surfaces the server refusal when the caller already has a subscription', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          fakeResponse({ error: 'You are already on the Maker plan. Use Manage billing...' }, false)
+        )
+      );
+      const result = await startCheckout('monthly');
+      expect(result.error).toMatch(/already on the Maker plan/i);
     });
 
     it('returns the server error message when the response is not ok', async () => {
