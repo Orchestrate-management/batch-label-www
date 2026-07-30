@@ -5,7 +5,7 @@ import { useAuth } from '../../lib/auth';
 import { AuthShell } from '../../components/auth/AuthShell';
 import { Field, Alert } from '../../components/ui/Field';
 import { Button } from '../../components/ui/Button';
-import { GoogleButton, AuthDivider } from '../../components/auth/GoogleButton';
+import { GoogleButton, AuthDivider, isGoogleAuthEnabled } from '../../components/auth/GoogleButton';
 
 export function LogIn() {
   usePageMeta({
@@ -88,11 +88,15 @@ export function LogIn() {
         </div> :
       null}
 
-      <GoogleButton disabled={googleBusy} location="log_in" onClick={handleGoogle} />
+      {isGoogleAuthEnabled() ?
+      <>
+          <GoogleButton disabled={googleBusy} location="log_in" onClick={handleGoogle} />
 
-      <div className="my-5">
-        <AuthDivider />
-      </div>
+          <div className="my-5">
+            <AuthDivider />
+          </div>
+        </> :
+      null}
 
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <Field

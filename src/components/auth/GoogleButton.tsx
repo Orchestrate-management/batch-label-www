@@ -1,6 +1,22 @@
 import { Button } from '../ui/Button';
 
 /**
+ * Whether to show the Google option at all.
+ *
+ * Off unless VITE_GOOGLE_AUTH_ENABLED is exactly "true". The button is useless until the
+ * provider is switched on in Supabase and the OAuth client exists in Google Cloud
+ * Console, and a "Continue with Google" that errors is worse than no button. Gating on
+ * an env var means shipping this code cannot put a broken button in front of a maker:
+ * the flag is flipped after the console work is done, not before.
+ */
+export function isGoogleAuthEnabled(): boolean {
+  return (
+    (import.meta as unknown as {env?: Record<string, string>;}).env?.
+    VITE_GOOGLE_AUTH_ENABLED === 'true');
+
+}
+
+/**
  * Google's own four-colour G. Their branding terms require the unmodified mark next to
  * the words "Continue with Google" or "Sign in with Google", so it is inlined here as
  * paths rather than restyled or swapped for a generic icon.

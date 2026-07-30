@@ -15,7 +15,12 @@
 
 import { supabase } from './supabase';
 import { BRAND_SLUG } from './brand';
-import { signupAgreementDocuments } from './agreements';
+import {
+  signupAgreementDocuments,
+  MARKETING_EMAIL_AGREEMENT,
+  ADVERTISING_AGREEMENT } from
+'./agreements';
+import { updateConsentPreference } from './consent-preferences';
 import { attributionForMetadata } from './attribution';
 
 /**
@@ -117,5 +122,21 @@ export async function completeOAuthSignup(input: CompletionInput): Promise<Compl
   if (error) {
     return { error: 'Could not finish setting up your account. Please try again.', provisioned: false };
   }
-  return { error: null, provisioned: data === true };
+
+  const provisioned = data === true;
+
+  // provisioned === false means a membership already existed (a repeat submit, or a
+  // Google identity linked onto an account that had signed up by email). The function
+  // writes nothing in that case, so the marketing choices the user just ticked on this
+  // form would be thrown away. Apply them through the normal consent path instead, so a
+  // decision someone actually expressed is never silently dropped. Terms are untouched:
+  // the existing membership already carries an acceptance.
+  if (!provisioned) {
+    await Promise.all([
+    updateConsentPreference(MARKETING_EMAIL_AGREEMENT, input.marketingEmailOptIn),
+    updateConsentPreference(ADVERTISING_AGREEMENT, input.advertisingOptIn)]
+    );
+  }
+
+  return { error: null, provisioned };
 }

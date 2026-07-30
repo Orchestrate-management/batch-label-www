@@ -273,20 +273,28 @@ export function RequireMembership({
   const { session, loading: authLoading, configured } = useAuth();
   const [state, setState] = useState<MembershipState | null>(null);
 
+  // Key on the user id, NOT the session object. supabase-js hands us a freshly parsed
+  // session object on every tab refocus and token refresh, so depending on the object
+  // would re-run this on each one. Combined with blanking the state that would unmount
+  // the children — wiping a half-filled consent form the moment someone opens the terms
+  // in a new tab to read them, which is exactly what we ask them to do.
+  const userId = session?.user?.id ?? null;
+
   useEffect(() => {
-    if (!configured || !session) {
+    if (!configured || !userId) {
       setState('unknown');
       return;
     }
     let active = true;
-    setState(null);
+    // Deliberately no setState(null) here: revalidate in the background and keep showing
+    // the answer we already have. Only the very first resolution shows the spinner.
     fetchMembershipState().then((next) => {
       if (active) setState(next);
     });
     return () => {
       active = false;
     };
-  }, [configured, session]);
+  }, [configured, userId]);
 
   if (authLoading || state === null) {
     return (

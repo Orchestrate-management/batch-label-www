@@ -21,6 +21,15 @@ vi.mock('../../lib/auth', () => ({
   }),
 }));
 
+// The button is gated on VITE_GOOGLE_AUTH_ENABLED in production so it cannot appear
+// before the provider is switched on in Supabase. import.meta.env is not settable from a
+// test, so force the flag here and keep the real button component. The disabled path is
+// covered separately in GoogleGate.test.tsx.
+vi.mock('../../components/auth/GoogleButton', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../components/auth/GoogleButton')>()),
+  isGoogleAuthEnabled: () => true,
+}));
+
 function renderPage(ui: React.ReactElement) {
   return render(<MemoryRouter>{ui}</MemoryRouter>);
 }

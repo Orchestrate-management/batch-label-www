@@ -147,6 +147,7 @@ declare
   v_marketing boolean     := coalesce(p_marketing_email_opt_in, false);
   v_ads       boolean     := coalesce(p_advertising_opt_in, false);
   v_consents  jsonb;
+  v_created   int;
 begin
   if v_user is null then
     raise exception 'not authenticated' using errcode = '28000';
@@ -161,8 +162,10 @@ begin
     raise exception 'the Terms of Service must be accepted' using errcode = '22023';
   end if;
 
-  -- Already provisioned (repeat submit, or an OAuth identity linked onto an existing
-  -- account). Do nothing at all, so the audit log holds one row per real decision.
+  -- Fast path for the common repeat case (double submit, or an OAuth identity linked
+  -- onto an account that already has a membership). This is only an optimisation: it is
+  -- NOT what makes the function idempotent, because two concurrent calls can both pass
+  -- it. The insert below is the real arbiter.
   if exists (
     select 1 from public.brand_memberships m
      where m.user_id = v_user and m.brand_slug = p_brand
@@ -210,7 +213,15 @@ begin
     (v_user, p_brand, v_business, v_attr, 'web',
      v_consents, v_marketing, v_ads,
      jsonb_build_object('signup_method', 'oauth'))
-  on conflict (user_id, brand_slug) do nothing;
+  on conflict (user_id, brand_slug) do nothing
+  returning 1 into v_created;
+
+  -- Lost a race with a concurrent call: that call owns this membership and has written
+  -- the audit rows for it. Writing ours too would put two contradictory sets of consent
+  -- decisions in an append-only log, so we write nothing and report "already set up".
+  if v_created is null then
+    return false;
+  end if;
 
   insert into public.consent_events
     (user_id, brand_slug, consent_id, title, version, url, accepted, source)

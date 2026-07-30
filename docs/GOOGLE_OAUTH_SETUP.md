@@ -1,12 +1,25 @@
 # Continue with Google — setup
 
-Everything in this file is a console click, not code. The code is already merged and does
-nothing until the four steps below are done, in this order:
+Almost everything in this file is a console click, not code. Do these in order:
 
 1. [Google Cloud Console](#1-google-cloud-console) — make the OAuth client
 2. [Supabase](#2-supabase) — switch the provider on
 3. [Apply the migration](#3-apply-the-migration) — the database function the app calls
-4. [Test it](#4-test-it) — and check what landed in the tables
+4. **Show the button** — set `VITE_GOOGLE_AUTH_ENABLED=true` and redeploy
+5. [Test it](#4-test-it) — and check what landed in the tables
+
+**The Google button is hidden until step 4.** It is gated on `VITE_GOOGLE_AUTH_ENABLED`,
+which is off unless the value is exactly `true`, so merging this branch cannot put a
+"Continue with Google" button in front of a maker before the provider exists to serve it.
+Turn it on only once steps 1–3 are done:
+
+```bash
+cd ~/Documents/Orchestrate/batch-label
+for ENV in production preview development; do
+  printf 'true' | vercel env add VITE_GOOGLE_AUTH_ENABLED "$ENV"
+done
+vercel --prod   # Vite inlines env at build time, so a redeploy is required
+```
 
 Real values for this project, used throughout:
 
@@ -286,7 +299,11 @@ Expect:
   trip** — attribution lives in localStorage and a first-party cookie, so it is still
   there when the browser comes back. To prove it, start the whole test from
   `https://www.batchlabel.xyz/?utm_source=test&utm_medium=manual` and check
-  `utm_source` shows up here.
+  `utm_source` shows up here. **Use a fresh incognito window**, or clear the
+  `bl_attribution` localStorage key and the `bl_attr` cookie first: attribution is
+  deliberately first-touch and is never overwritten, so on a browser that has already
+  visited the site you will correctly see the original record instead of `test` — that is
+  the feature working, not a failure.
 - `consents` with three entries. `terms` must have `"accepted": true` and an
   `accepted_at` timestamp, plus the `version` (`2026-07-30`) and the `url` of the terms
   page that was on screen. A declined optional consent has `"accepted": false` and
@@ -357,35 +374,72 @@ The Client Secret is wrong or was rotated in Google without being updated in Sup
 Since Google no longer shows existing secrets, add a new secret on the client's detail
 page and paste that into Supabase.
 
-### Account linking — a decision for you
+### Account linking — the intended behaviour
+
+**Decision: linking is what we want.** One person, one Orchestrate identity, however they
+choose to sign in. That is the whole premise of the shared identity pool, and it is what
+lets a maker who signed up by email later press **Continue with Google** without losing
+anything.
 
 Someone already has a Batchlabel account with `maker@example.com` and a password. They
-later press **Continue with Google** with that same Gmail address. Two possible outcomes:
+later press **Continue with Google** with that same address. Google reports the email as
+verified (it always does for a Google account), and their Batchlabel email is confirmed —
+so Google is attached as a **second identity on the same user id**. They keep their
+membership, plan and labels. They are **not** shown `/finish-setup` and **not** asked to
+re-accept the terms, because their acceptance is already on file. That skip is what the
+idempotency in `complete_oauth_signup` exists to guarantee.
 
-- **Linked** (Supabase's normal behaviour when the provider reports the email as verified,
-  which Google does, and the existing account's email is confirmed): Google becomes a
-  second identity on the **same** user id. They keep their membership, their plan and
-  their labels, and — by design — they are **not** shown `/finish-setup` and **not** asked
-  to re-accept the terms, because their acceptance is already on file. This is what the
-  idempotency in `complete_oauth_signup` is protecting.
-- **Not linked** (the existing account's email was never confirmed): Supabase creates a
-  **second, separate user** with the same email address. They get the completion screen,
-  their own membership, and a duplicate account — their existing plan and data appear to
-  have vanished.
+This works by default. Nothing needs switching on for it.
 
-**Please verify which happens in this project before launch**, using a throwaway address:
-sign up with email + password, confirm the email, log out, then sign in with Google on the
-same address, and check whether `auth.users` has one row or two.
+#### What cannot happen, and what to actually test
 
-Two things worth deciding while you are there:
+An earlier draft of this file said an unconfirmed account would get "a second, separate
+user with the same email". **That is wrong and worth correcting**, because it sends you
+looking for the wrong thing: `auth.users` has a unique index on `email` for non-SSO users,
+so two rows with one address is not a state the database will hold. Counting users will
+therefore always look fine, whatever happens.
 
-1. **Unconfirmed email/password accounts.** If any exist, they are the ones at risk of
-   duplicating. A one-off query of `auth.users where email_confirmed_at is null` tells you
-   the size of the problem.
-2. **Password-less Google users.** Someone who only ever used Google has no password, so
-   "Forgotten your password?" is their route to setting one if they later want to log in
-   without Google. That works today (the reset email lets them set a password), but the
-   log-in page does not explain it. Worth a line of copy if it comes up.
+The case genuinely worth testing is a **pre-existing email/password account whose email
+was never confirmed**. A verified Google sign-in on that address is the riskier path: it
+can attach to the existing unconfirmed user and, depending on the GoTrue version, drop
+that user's other unconfirmed identities.
+
+Because your project has `mailer_autoconfirm` off, every real email/password user has had
+to confirm before their account worked — so the risky population is people who started a
+signup and never clicked the email. Size it with:
+
+```sql
+select id, email, created_at
+from auth.users
+where email_confirmed_at is null;
+```
+
+If that returns nothing, there is nobody in the risky state and linking is simply the
+happy path.
+
+**Test before launch** with a throwaway address — count *identities*, not users:
+
+```sql
+-- After: sign up by email, confirm, log out, then Continue with Google on same address.
+select u.email,
+       count(i.*) as identity_count,
+       array_agg(i.provider order by i.provider) as providers
+from auth.users u
+join auth.identities i on i.user_id = u.id
+where u.email = 'your-test-address@example.com'
+group by u.email;
+```
+
+Expect **one** user with **two** identities (`email`, `google`). That is linking working.
+Then confirm they land on `/dashboard` and not `/finish-setup`, and that
+`brand_memberships` still holds their original row with its original consents.
+
+#### Password-less Google users
+
+Someone who only ever used Google has no password. "Forgotten your password?" is their
+route to setting one if they later want to log in without Google — that works today (the
+reset email lets them set a password), but the log-in page does not say so. Worth a line
+of copy if it comes up in support.
 
 ---
 

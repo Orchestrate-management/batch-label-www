@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider, RequireAuth, RequireMembership } from './auth';
 
@@ -7,13 +7,18 @@ const mocks = vi.hoisted(() => ({
   fetchMembershipState: vi.fn(),
   signInWithOAuth: vi.fn(),
   session: { user: { id: 'user-1', email: 'maker@example.com' } } as unknown,
+  /** Captured so a test can fire an auth state change the way supabase-js does. */
+  authCallback: null as null | ((event: string, session: unknown) => void),
 }));
 
 vi.mock('./supabase', () => ({
   supabase: {
     auth: {
       getSession: () => Promise.resolve({ data: { session: mocks.session } }),
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => undefined } } }),
+      onAuthStateChange: (cb: (event: string, session: unknown) => void) => {
+        mocks.authCallback = cb;
+        return { data: { subscription: { unsubscribe: () => undefined } } };
+      },
       signInWithOAuth: (args: unknown) => mocks.signInWithOAuth(args),
     },
   },
@@ -104,5 +109,44 @@ describe('RequireMembership (the OAuth completion gate)', () => {
     renderApp('/dashboard');
     expect(await screen.findByText('Log in page')).toBeInTheDocument();
     expect(mocks.fetchMembershipState).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Regression: supabase-js re-reads the session from storage on every tab refocus and
+   * token refresh and notifies with a BRAND NEW object. Keying the gate on that object,
+   * and blanking the state while refetching, unmounted the completion screen and wiped a
+   * half-filled consent form — triggered by the user doing exactly what we ask, opening
+   * the terms in a new tab to read them before accepting.
+   */
+  it('keeps the completion screen mounted when supabase re-notifies with a new session object', async () => {
+    mocks.fetchMembershipState.mockResolvedValue('needs_setup');
+    renderApp('/finish-setup');
+    expect(await screen.findByText('Finish setup screen')).toBeInTheDocument();
+
+    // Same user, different object identity — what a visibilitychange produces.
+    await act(async () => {
+      mocks.authCallback?.('SIGNED_IN', {
+        user: { id: 'user-1', email: 'maker@example.com' }
+      });
+    });
+
+    expect(screen.getByText('Finish setup screen')).toBeInTheDocument();
+    expect(screen.queryByText('Checking your account...')).not.toBeInTheDocument();
+    // The user did not change, so there is nothing to re-check.
+    expect(mocks.fetchMembershipState).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-checks when a genuinely different user signs in', async () => {
+    mocks.fetchMembershipState.mockResolvedValue('complete');
+    renderApp('/dashboard');
+    expect(await screen.findByText('Dashboard')).toBeInTheDocument();
+
+    await act(async () => {
+      mocks.authCallback?.('SIGNED_IN', {
+        user: { id: 'user-2', email: 'someone-else@example.com' }
+      });
+    });
+
+    expect(mocks.fetchMembershipState).toHaveBeenCalledTimes(2);
   });
 });

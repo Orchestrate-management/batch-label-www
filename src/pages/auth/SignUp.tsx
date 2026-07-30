@@ -5,7 +5,7 @@ import { useAuth } from '../../lib/auth';
 import { AuthShell } from '../../components/auth/AuthShell';
 import { Field, Alert, Checkbox } from '../../components/ui/Field';
 import { Button } from '../../components/ui/Button';
-import { GoogleButton, AuthDivider } from '../../components/auth/GoogleButton';
+import { GoogleButton, AuthDivider, isGoogleAuthEnabled } from '../../components/auth/GoogleButton';
 
 /** Opens a legal doc in a new tab without toggling the checkbox it lives inside. */
 function LegalLink({ to, children }: {to: string;children: React.ReactNode;}) {
@@ -110,21 +110,25 @@ export function SignUp() {
         </div> :
       null}
 
-      <div className="space-y-3">
-        <GoogleButton
-          disabled={googleBusy}
-          location="sign_up"
-          onClick={handleGoogle} />
+      {isGoogleAuthEnabled() ?
+      <>
+          <div className="space-y-3">
+            <GoogleButton
+            disabled={googleBusy}
+            location="sign_up"
+            onClick={handleGoogle} />
 
-        <p className="text-xs leading-relaxed text-ink-muted">
-          We will ask for your shop name and the terms on the next screen.
-        </p>
-        {googleError ? <Alert tone="error">{googleError}</Alert> : null}
-      </div>
+            <p className="text-xs leading-relaxed text-ink-muted">
+              We will ask for your shop name and the terms on the next screen.
+            </p>
+            {googleError ? <Alert tone="error">{googleError}</Alert> : null}
+          </div>
 
-      <div className="my-5">
-        <AuthDivider />
-      </div>
+          <div className="my-5">
+            <AuthDivider />
+          </div>
+        </> :
+      null}
 
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <Field
