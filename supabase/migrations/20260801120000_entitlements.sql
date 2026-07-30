@@ -25,9 +25,10 @@
 --
 -- So the write path is one SECURITY DEFINER function, apply_stripe_entitlement(), which
 -- in a single transaction:
---   1. resolves which membership the event is about (metadata > subscription > customer >
---      the email that paid, and that last one only to BOOTSTRAP a membership that has no
---      Stripe ids yet — see the note on it below, it is a real attack otherwise),
+--   1. resolves which membership the event is about, strictly by ids we control: the
+--      supabase_user_id our own server wrote into the Stripe metadata from a verified JWT,
+--      then the subscription id, then the customer id. Never by email — see section 4 for
+--      why that was a critical vulnerability rather than a convenience,
 --   2. claims the Stripe event id in an append-only ledger — the PRIMARY KEY is what makes
 --      processing exactly-once, not an application-level "have I seen this?" check that
 --      two concurrent invocations would both fail,
@@ -94,6 +95,35 @@ create index if not exists brand_memberships_period_end_idx
 revoke insert, update, delete on public.brand_memberships from anon, authenticated;
 
 -- ---------------------------------------------------------------------------
+-- 1b. profiles.email must not be user-writable.
+--
+-- 20260729120000 line 216 granted `update` on public.profiles to `authenticated` with NO
+-- column list, and the RLS policy constrains the ROW (auth.uid() = id), not the COLUMN.
+-- A signed-in user can therefore rewrite their own email to anybody else's address using
+-- nothing but the public anon key:
+--
+--     PATCH /rest/v1/profiles?id=eq.<their own id>   {"email":"victim@example.com"}
+--
+-- Verified against PostgreSQL: the write succeeds, and there is no unique constraint and
+-- no trigger forcing the value back to auth.users.email.
+--
+-- On its own that is a display-integrity bug. It became critical in an earlier draft of
+-- THIS file, which resolved a Stripe webhook to a membership by matching profiles.email:
+-- set your email to a victim's, wait for them to buy a subscription while signed out, and
+-- the webhook would hand you their plan AND their stripe_customer_id — after which your
+-- "Manage billing" opens a Stripe portal onto their card, billing address, full invoice
+-- history and cancel button, while they get nothing for their money. That resolution path
+-- has been removed (section 4), but the column is locked down here too: email is displayed,
+-- and the next thing to trust it should not have to re-discover this.
+--
+-- The trigger that legitimately maintains this column (handle_user_email_change, from
+-- 20260729120000) is SECURITY DEFINER and is unaffected. Nothing in the application writes
+-- to public.profiles at all today, so nothing breaks.
+-- ---------------------------------------------------------------------------
+revoke update on public.profiles from authenticated;
+grant update (full_name, attributes) on public.profiles to authenticated;
+
+-- ---------------------------------------------------------------------------
 -- 2. The processed-event ledger. This is the idempotency key.
 --
 -- Recorded per event id, not per membership, because Stripe's guarantee is per event:
@@ -141,6 +171,15 @@ grant all on public.stripe_webhook_events to service_role;
 drop view if exists public.entitlements;
 drop function if exists public.get_entitlement(text);
 drop function if exists public.entitlement_is_active(text, text, timestamptz);
+
+-- An earlier version of this file, which may already have been applied from the branch,
+-- took a `p_email` argument and used it to resolve a membership. That path is gone (see
+-- section 4). Dropping the old signature explicitly matters: `create or replace` cannot
+-- change a signature, so without this the vulnerable 15-argument function would survive
+-- alongside the new 14-argument one and PostgREST would happily keep calling it.
+drop function if exists public.apply_stripe_entitlement(
+  text, text, timestamptz, text, uuid, text, text, text, text, text, text, timestamptz, boolean, timestamptz, jsonb
+);
 
 -- ---------------------------------------------------------------------------
 -- "Is this person entitled right now?" — one definition, used everywhere.
@@ -229,7 +268,6 @@ create or replace function public.apply_stripe_entitlement(
   p_user_id              uuid        default null,
   p_customer_id          text        default null,
   p_subscription_id      text        default null,
-  p_email                text        default null,
   p_plan                 text        default null,
   p_plan_status          text        default null,
   p_price_id             text        default null,
@@ -311,35 +349,22 @@ begin
      for update;
   end if;
 
-  -- Last resort, and heavily fenced: an anonymous checkout (someone who paid from the
-  -- pricing page before signing in) can only be tied back by the address that paid.
+  -- THERE IS DELIBERATELY NO EMAIL RESOLUTION PATH.
   --
-  -- IT MAY ONLY EVER BOOTSTRAP, NEVER REBIND. Without the two `is null` conditions this is
-  -- a real attack, not a theoretical one: anyone could buy a subscription, type a paying
-  -- customer's email into Stripe Checkout, and have that customer's row repointed at the
-  -- ATTACKER's Stripe ids. The victim's "Manage billing" would then open the attacker's
-  -- portal (each seeing the other's cards and invoices), and the attacker cancelling their
-  -- own subscription would read as the victim's cancellation and cut off access the victim
-  -- is still being billed for.
+  -- An earlier version matched `lower(profiles.email) = lower(p_email)` so that a purchase
+  -- made while signed out could be tied back to an account. It was a critical
+  -- vulnerability, because profiles.email is user-writable (see section 1b): an attacker
+  -- set their own profile email to a victim's, the victim paid, and the attacker's
+  -- membership absorbed the victim's plan and stripe_customer_id — handing them a billing
+  -- portal onto the victim's card, address, invoices and cancel button. Fencing it to
+  -- "bootstrap only" did not fix it, because a free attacker account is a valid bootstrap
+  -- target.
   --
-  -- Restricted to checkout.session.completed as well, since that is the only event this
-  -- path exists to serve. What remains is the acceptable case the design intends: someone
-  -- pays for a stranger's free account, at their own expense.
-  if v_m.id is null
-     and p_email is not null
-     and p_event_type = 'checkout.session.completed' then
-    select m.* into v_m
-      from public.brand_memberships m
-      join public.profiles pr on pr.id = m.user_id
-     where m.brand_slug = p_brand
-       and lower(pr.email) = lower(p_email)
-       and m.stripe_customer_id is null
-       and m.stripe_subscription_id is null
-     order by m.created_at
-     limit 1
-     for update of m;
-  end if;
-
+  -- The real fix was to remove the reason it existed: checkout now requires the buyer to be
+  -- signed in, so every session carries a supabase_user_id that came from a verified JWT
+  -- and was written into the Stripe metadata by our own server. An email address typed into
+  -- Stripe Checkout is a claim by whoever is holding the card, and it is never treated as
+  -- identity here.
   if v_m.id is null then
     -- Not recorded in the ledger: nothing was decided, so a later "Resend" from the
     -- Stripe dashboard (once the account exists) must still be able to apply it.
@@ -353,6 +378,38 @@ begin
 
   if not found then
     return 'duplicate';
+  end if;
+
+  -- --- Subscription identity ---------------------------------------------------------
+  -- One Stripe customer routinely holds more than one subscription: an `incomplete` one
+  -- left behind by a checkout that was never paid, plus the live one from the retry. Every
+  -- event carries its own subscription id, and an earlier version of this function let ANY
+  -- of them overwrite stripe_subscription_id — including an invoice event. That silently
+  -- repointed the membership at the abandoned subscription, after which the abandoned
+  -- subscription's `deleted` event no longer looked superseded and revoked a paying
+  -- customer's access.
+  --
+  -- A different subscription id may take over only when it plausibly supersedes the stored
+  -- one:
+  --   * it must arrive on a customer.subscription.* event — an invoice or a checkout
+  --     session is not authoritative about which subscription a membership holds; and
+  --   * either the stored subscription is no longer entitling (a genuine resubscribe), or
+  --     the incoming one IS entitling (a live subscription outranks a dead one).
+  --
+  -- Everything else is `superseded`: an event about a subscription this membership does not
+  -- hold, which must not touch its plan, its period or its ids.
+  if p_subscription_id is not null
+     and v_m.stripe_subscription_id is not null
+     and p_subscription_id <> v_m.stripe_subscription_id
+     and not (
+       v_is_sub_event
+       and (
+         coalesce(v_m.plan_status, '') <> all (array['active', 'trialing', 'past_due'])
+         or coalesce(p_plan_status, '') = any (array['active', 'trialing', 'past_due'])
+       )
+     ) then
+    update public.stripe_webhook_events set outcome = 'superseded' where event_id = p_event_id;
+    return 'superseded';
   end if;
 
   -- --- Ordering ---------------------------------------------------------------------
@@ -375,16 +432,9 @@ begin
       return 'stale';
     end if;
 
-    -- A cancellation for a subscription this membership no longer holds. Happens when
-    -- someone cancels and resubscribes: the new subscription is live, and the old one's
-    -- deleted event must not take the new one down with it.
-    if p_event_type = 'customer.subscription.deleted'
-       and p_subscription_id is not null
-       and v_m.stripe_subscription_id is not null
-       and p_subscription_id <> v_m.stripe_subscription_id then
-      update public.stripe_webhook_events set outcome = 'superseded' where event_id = p_event_id;
-      return 'superseded';
-    end if;
+    -- (The cancel-then-resubscribe case that used to be handled here is now covered by the
+    -- general subscription-identity guard above, which fires for every event that would
+    -- rebind rather than only for a deletion.)
   else
     -- An additive event that predates the subscription clock keeps its factual half (the
     -- customer id, the payment failure) and loses its opinion about the plan.
@@ -427,7 +477,7 @@ begin
 end;
 $$;
 
-comment on function public.apply_stripe_entitlement(text, text, timestamptz, text, uuid, text, text, text, text, text, text, timestamptz, boolean, timestamptz, jsonb) is
+comment on function public.apply_stripe_entitlement(text, text, timestamptz, text, uuid, text, text, text, text, text, timestamptz, boolean, timestamptz, jsonb) is
   'The only write path for Stripe entitlement state. Exactly-once via the stripe_webhook_events primary key, monotonic on event.created (clock scoped to customer.subscription.* events) so out-of-order deliveries cannot rewind state or discard the billing period, and partial (null argument = leave the column alone). service_role only, enforced by grant AND by a runtime role check.';
 
 -- Callable by the webhook and by nothing else.
@@ -436,8 +486,8 @@ comment on function public.apply_stripe_entitlement(text, text, timestamptz, tex
 -- functions in this schema to anon, authenticated and service_role as separate ACL entries,
 -- and REVOKE ... FROM PUBLIC removes only the PUBLIC entry — leaving a SECURITY DEFINER
 -- "set my plan to maker" function callable with the public anon key. The roles are named.
-revoke all on function public.apply_stripe_entitlement(text, text, timestamptz, text, uuid, text, text, text, text, text, text, timestamptz, boolean, timestamptz, jsonb) from public, anon, authenticated;
-grant execute on function public.apply_stripe_entitlement(text, text, timestamptz, text, uuid, text, text, text, text, text, text, timestamptz, boolean, timestamptz, jsonb) to service_role;
+revoke all on function public.apply_stripe_entitlement(text, text, timestamptz, text, uuid, text, text, text, text, text, timestamptz, boolean, timestamptz, jsonb) from public, anon, authenticated;
+grant execute on function public.apply_stripe_entitlement(text, text, timestamptz, text, uuid, text, text, text, text, text, timestamptz, boolean, timestamptz, jsonb) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- 5. The read surface for app.batchlabel.xyz.

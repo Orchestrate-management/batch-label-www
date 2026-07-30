@@ -29,6 +29,8 @@ export default defineConfig({
         'src/lib/consent.ts',
         'src/lib/agreements.ts',
         'src/lib/membership.ts',
+        'src/lib/entitlements.ts',
+        'src/lib/checkout-intent.ts',
         'src/components/ui/Button.tsx',
         // The billing server half. These decide who keeps a paid plan, so they are held to
         // the same gate as the client units. src/server/supabase-admin.ts is deliberately

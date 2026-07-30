@@ -90,6 +90,22 @@ function modelStore(initial: Partial<StoredRow> = {}) {
       let planStatus = intent.planStatus;
       let cancelAtPeriodEnd = intent.cancelAtPeriodEnd;
       const isSubscriptionEvent = intent.eventType.startsWith('customer.subscription.');
+      const entitling = (status: string | null) =>
+      status === 'active' || status === 'trialing' || status === 'past_due';
+
+      // 0. Subscription identity. One customer can hold several subscriptions (an abandoned
+      //    `incomplete` one plus the live retry), so an event about a subscription this
+      //    membership does not hold must not touch it — and must not rebind the id, which
+      //    would disarm this very check for the event after it.
+      if (
+      intent.subscriptionId &&
+      row.stripe_subscription_id &&
+      intent.subscriptionId !== row.stripe_subscription_id &&
+      !(isSubscriptionEvent && (!entitling(row.plan_status) || entitling(planStatus))))
+      {
+        processed.set(intent.eventId, 'superseded');
+        return 'superseded';
+      }
 
       if (isSubscriptionEvent) {
         // 2. Monotonic on event.created, scoped to the subscription family.
@@ -105,16 +121,6 @@ function modelStore(initial: Partial<StoredRow> = {}) {
         {
           processed.set(intent.eventId, 'stale');
           return 'stale';
-        }
-        // 3. A cancellation for a subscription this membership no longer holds.
-        if (
-        intent.eventType === 'customer.subscription.deleted' &&
-        intent.subscriptionId &&
-        row.stripe_subscription_id &&
-        intent.subscriptionId !== row.stripe_subscription_id)
-        {
-          processed.set(intent.eventId, 'superseded');
-          return 'superseded';
         }
       } else if (row.stripe_status_at && intent.eventAt <= row.stripe_status_at) {
         // 4. An additive event that predates the subscription clock keeps its factual half
@@ -527,6 +533,104 @@ describe('idempotency and ordering, end to end', () => {
     expect(outcome.outcome).toBe('superseded');
     expect(model.row.plan).toBe('maker');
     expect(model.row.stripe_subscription_id).toBe('sub_new');
+  });
+
+  /**
+   * REGRESSION, and the nastiest of the lot. A Stripe customer routinely holds more than
+   * one subscription: an `incomplete` one left behind by a checkout that was abandoned,
+   * plus the live one from the retry. Letting any event rebind stripe_subscription_id meant
+   * an invoice for the abandoned subscription repointed the membership at it — after which
+   * the abandoned subscription's own cancellation no longer looked superseded and revoked a
+   * paying customer's access.
+   */
+  it('an invoice for an abandoned second subscription cannot rebind the membership', async () => {
+    const model = modelStore();
+    await deliver(
+      subscriptionEvent({ id: 'evt_live', created: 1000, status: 'active', subscriptionId: 'sub_live' }),
+      model.store
+    );
+
+    const outcome = await deliver(
+      invoicePaymentFailed({ id: 'evt_inv_abandoned', created: 2000, subscriptionId: 'sub_abandoned' }),
+      model.store
+    );
+
+    expect(outcome.outcome).toBe('superseded');
+    expect(model.row.stripe_subscription_id).toBe('sub_live');
+    expect(model.row.plan_status).toBe('active');
+  });
+
+  it('...so the abandoned subscription\'s cancellation still cannot revoke the live plan', async () => {
+    const model = modelStore();
+    await deliver(
+      subscriptionEvent({ id: 'evt_live', created: 1000, status: 'active', subscriptionId: 'sub_live' }),
+      model.store
+    );
+    await deliver(
+      invoicePaymentFailed({ id: 'evt_inv_abandoned', created: 2000, subscriptionId: 'sub_abandoned' }),
+      model.store
+    );
+    const outcome = await deliver(
+      subscriptionEvent({
+        id: 'evt_abandoned_deleted',
+        created: 3000,
+        type: 'customer.subscription.deleted',
+        subscriptionId: 'sub_abandoned'
+      }),
+      model.store
+    );
+
+    expect(outcome.outcome).toBe('superseded');
+    expect(model.row.plan).toBe('maker');
+    expect(model.row.plan_status).toBe('active');
+  });
+
+  it('an abandoned incomplete subscription cannot take over from the live one', async () => {
+    const model = modelStore();
+    await deliver(
+      subscriptionEvent({ id: 'evt_live', created: 1000, status: 'active', subscriptionId: 'sub_live' }),
+      model.store
+    );
+
+    const outcome = await deliver(
+      subscriptionEvent({
+        id: 'evt_incomplete',
+        created: 2000,
+        status: 'incomplete',
+        subscriptionId: 'sub_abandoned'
+      }),
+      model.store
+    );
+
+    expect(outcome.outcome).toBe('superseded');
+    expect(model.row.plan).toBe('maker');
+    expect(model.row.stripe_subscription_id).toBe('sub_live');
+  });
+
+  /** ...but a genuine resubscribe, where the stored subscription is dead, must take over. */
+  it('a new subscription takes over once the stored one is no longer entitling', async () => {
+    const model = modelStore();
+    await deliver(
+      subscriptionEvent({ id: 'evt_a', created: 1000, status: 'active', subscriptionId: 'sub_a' }),
+      model.store
+    );
+    await deliver(
+      subscriptionEvent({
+        id: 'evt_a_deleted',
+        created: 2000,
+        type: 'customer.subscription.deleted',
+        subscriptionId: 'sub_a'
+      }),
+      model.store
+    );
+    const outcome = await deliver(
+      subscriptionEvent({ id: 'evt_b', created: 3000, status: 'active', subscriptionId: 'sub_b' }),
+      model.store
+    );
+
+    expect(outcome.outcome).toBe('applied');
+    expect(model.row.stripe_subscription_id).toBe('sub_b');
+    expect(model.row.plan).toBe('maker');
   });
 
   /** An invoice failure annotates; it must never be able to hand out a plan. */

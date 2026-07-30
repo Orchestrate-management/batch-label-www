@@ -117,10 +117,15 @@ describe('customer.subscription.created / updated', () => {
     expect(intent?.billing).toMatchObject({ interval: 'year' });
   });
 
-  it('prefers the brand recorded in the subscription metadata over the deployment default', () => {
+  /**
+   * The Stripe account is shared across Orchestrate brands and a webhook endpoint receives
+   * every event for the whole account. An event for another brand's product is not this
+   * deployment's business — and must not be turned into a Batchlabel entitlement.
+   */
+  it('ignores a subscription belonging to another Orchestrate brand', () => {
     const event = subscriptionEvent();
     (event.data.object as {metadata: Record<string, string>;}).metadata.brand = 'another-brand';
-    expect(intentFromEvent(event, config)?.brand).toBe('another-brand');
+    expect(intentFromEvent(event, config)).toBeNull();
   });
 
   /**
@@ -189,6 +194,53 @@ describe('invoice.payment_failed', () => {
 
   it('ignores an invoice with no subscription at all', () => {
     expect(intentFromEvent(invoicePaymentFailed({ subscriptionId: null }), config)).toBeNull();
+  });
+});
+
+/**
+ * The shared-Stripe-account hazard, in its own block because it is the one that costs real
+ * money in the wrong direction: the account already carries Orchestrate's Starter (£480/mo)
+ * and Scale (£1,800/mo) products, and this endpoint receives their events too.
+ */
+describe('other products on the shared Stripe account', () => {
+  it('ignores a checkout session with no brand metadata (we did not create it)', () => {
+    const event = checkoutSessionCompleted();
+    (event.data.object as {metadata: Record<string, string>;}).metadata = {};
+    expect(intentFromEvent(event, config)).toBeNull();
+  });
+
+  it('ignores a checkout session for another brand', () => {
+    const event = checkoutSessionCompleted({ brand: 'orchestrate-scale' });
+    expect(intentFromEvent(event, config)).toBeNull();
+  });
+
+  it('ignores a subscription with no brand metadata and an unrecognised price', () => {
+    const event = subscriptionEvent({ priceId: 'price_orchestrate_scale_1800' });
+    (event.data.object as {metadata: Record<string, string>;}).metadata = {};
+    expect(intentFromEvent(event, config)).toBeNull();
+  });
+
+  /** A subscription created by hand in the dashboard against a real Batchlabel price. */
+  it('accepts a subscription with no brand metadata when the price IS ours', () => {
+    const event = subscriptionEvent({ priceId: PRICE_MONTHLY });
+    (event.data.object as {metadata: Record<string, string>;}).metadata = {};
+    expect(intentFromEvent(event, config)?.plan).toBe('maker');
+  });
+
+  it('ignores an invoice whose subscription metadata names another brand', () => {
+    const event = invoicePaymentFailed({ brand: 'orchestrate-starter' });
+    expect(intentFromEvent(event, config)).toBeNull();
+  });
+
+  /**
+   * Stripe only snapshots subscription metadata onto invoices finalised since June 2023, so
+   * an absent snapshot must not be read as "not ours" — an invoice can only ever annotate an
+   * existing membership, and the database's subscription-identity guard is what keeps it
+   * from touching the wrong one.
+   */
+  it('still accepts an invoice with no metadata snapshot at all', () => {
+    const event = invoicePaymentFailed();
+    expect(intentFromEvent(event, config)?.subscriptionId).toBe(SUBSCRIPTION_ID);
   });
 });
 

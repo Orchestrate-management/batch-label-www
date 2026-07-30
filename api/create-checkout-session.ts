@@ -5,7 +5,7 @@
  * cross-origin, from app.batchlabel.xyz.
  *
  * Body: { interval: 'monthly' | 'annual', attribution?: {...}, success_path?, cancel_path? }
- * Header: Authorization: Bearer <supabase access token>, when the visitor is signed in.
+ * Header: Authorization: Bearer <supabase access token>. REQUIRED — 401 without it.
  *
  * WHAT IS AND IS NOT TAKEN FROM THE REQUEST
  *
@@ -13,9 +13,12 @@
  * which price and which ad brought them; it cannot say who they are. That distinction is
  * what stops "POST a different user_id and put a subscription on their account".
  *
- * Anonymous checkout is still allowed — the pricing page sells to people who have not signed
- * up yet, and refusing them would cost sales. Those sessions carry no supabase_user_id, and
- * the webhook links them by the email that paid.
+ * SIGN-IN IS REQUIRED, and that is a security decision as much as a product one. Selling to
+ * a signed-out visitor meant the webhook had to guess afterwards who had paid, and the only
+ * thing it had to guess with was the email typed into Stripe Checkout — which was
+ * exploitable, because profiles.email was user-writable. It also produced unrecoverable
+ * sales: a buyer with no account at all could not be linked to anything, ever. Requiring a
+ * session removes both. Signed-out visitors are sent to sign up and returned here.
  *
  * VAT: prices are stored in Stripe VAT-inclusive for consumers and `automatic_tax` is on, so
  * Stripe works out the rate from the address it collects and the customer pays the number on
@@ -28,7 +31,7 @@ import { readServerConfig, returnUrl } from '../src/server/config';
 import { checkoutMetadata, resolveInterval } from '../src/server/checkout';
 import { MAKER_PLAN } from '../src/server/entitlements';
 import { fail, json } from '../src/server/http';
-import { createAdminClient, findMembership, userFromRequest } from '../src/server/supabase-admin';
+import { createAdminClient, findEntitlement, findMembership, userFromRequest } from '../src/server/supabase-admin';
 
 interface CheckoutRequestBody {
   interval?: unknown;
@@ -65,28 +68,65 @@ export default {
       );
     }
 
-    // Identity, if any. An invalid or expired token is treated as "not signed in" rather
-    // than an error: the sale should still be possible, it just will not be pre-linked.
-    let userId: string | null = null;
-    let email: string | null = null;
-    let customerId: string | null = null;
+    // SIGN-IN IS REQUIRED. There used to be an anonymous path here, which is what forced
+    // the webhook to fall back to matching the email typed into Stripe Checkout — and that
+    // was a critical vulnerability, because profiles.email was user-writable, so an
+    // attacker could point it at a victim and absorb the plan and the Stripe customer they
+    // paid for. Requiring a session removes the reason that path existed: every session now
+    // carries a supabase_user_id taken from a verified JWT.
+    //
+    // It also means the buyer has an account to attach the subscription to. An anonymous
+    // purchase by someone with no account was unrecoverable: money taken, nothing granted.
+    if (!config.supabaseUrl || !config.serviceRoleKey) {
+      return fail({ status: 500, message: 'Checkout is not configured yet.', detail: 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing' }, cors);
+    }
 
-    if (config.supabaseUrl && config.serviceRoleKey) {
-      try {
-        const admin = createAdminClient(config.supabaseUrl, config.serviceRoleKey);
-        const user = await userFromRequest(admin, request);
-        if (user) {
-          userId = user.id;
-          email = user.email;
-          // Reuse the Stripe customer we already have. Without this, a maker who cancels
-          // and resubscribes becomes a second customer record, their invoice history
-          // splits in two, and the billing portal shows them half their own past.
-          const membership = await findMembership(admin, user.id, config.brand);
-          customerId = membership?.stripe_customer_id ?? null;
-        }
-      } catch (error) {
-        console.error('[create-checkout-session] identity lookup failed', error);
-      }
+    const admin = createAdminClient(config.supabaseUrl, config.serviceRoleKey);
+    const user = await userFromRequest(admin, request);
+    if (!user) {
+      return fail(
+        { status: 401, message: 'Please sign in to subscribe. Your basket is safe — you will come straight back here.' },
+        cors
+      );
+    }
+
+    const userId = user.id;
+    const email = user.email;
+
+    // Deliberately NOT inside the identity try/catch it used to share. A transient failure
+    // here is not "no existing customer"; treating it as such creates a SECOND Stripe
+    // customer for someone who already has one, splitting their invoice history in two and
+    // leaving the billing portal showing them half their own past. Fail loudly and let them
+    // retry instead.
+    let customerId: string | null = null;
+    let alreadyEntitled = false;
+    try {
+      const [membership, entitlement] = await Promise.all([
+      findMembership(admin, userId, config.brand),
+      findEntitlement(admin, userId, config.brand)]
+      );
+      customerId = membership?.stripe_customer_id ?? null;
+      alreadyEntitled = entitlement?.active === true;
+    } catch (error) {
+      return fail(
+        { status: 503, message: 'We could not reach your account just now. Please try again in a moment.', detail: error },
+        cors
+      );
+    }
+
+    // Refuse to sell a second subscription to someone who already has one. The account
+    // screen also hides the upgrade button once a plan is active, but the UI is not the
+    // guard: a stale tab, a bookmarked link or a double submit all reach this endpoint, and
+    // the result would be two subscriptions and two charges every month on one account.
+    // Plan changes belong in the billing portal, which handles proration.
+    if (alreadyEntitled) {
+      return fail(
+        {
+          status: 409,
+          message: 'You are already on the Maker plan. Use Manage billing to switch between monthly and yearly, change your card, or cancel.'
+        },
+        cors
+      );
     }
 
     // Returning to the origin that started the checkout keeps app.batchlabel.xyz's flow on

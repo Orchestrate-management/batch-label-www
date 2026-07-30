@@ -15,6 +15,10 @@
  *
  * So the only thing the body carries is what the browser is genuinely the authority on:
  * which billing interval was clicked, and the first-touch attribution.
+ *
+ * BOTH CALLS NOW REQUIRE A SESSION. Checkout used to work signed out, which forced the
+ * webhook to identify the buyer by the email typed into Stripe Checkout — a path that
+ * turned out to be exploitable, and that could not link a buyer who had no account at all.
  */
 
 import { trackBeginCheckout, trackPurchaseRedirect } from './analytics';
@@ -63,17 +67,26 @@ function requestHeaders(token: string | null): Record<string, string> {
  * Fires begin_checkout, asks the server for a Checkout Session, fires purchase_redirect,
  * then hands the maker over to Stripe.
  *
- * Works signed out: the pricing page sells to people who have not made an account yet, and
- * the webhook links that payment to them by the email that paid.
+ * REQUIRES A SESSION. Selling to a signed-out visitor meant the webhook had to work out
+ * afterwards who had paid, and the only thing it had for that was the email typed into
+ * Stripe Checkout — which was exploitable. It also produced sales that could never be
+ * honoured, because a buyer with no account had nothing to attach a plan to. Callers should
+ * send a signed-out visitor to sign up first (see src/lib/checkout-intent.ts, which
+ * remembers which plan they were about to buy).
  */
 export async function startCheckout(interval: BillingInterval): Promise<{error: string | null;}> {
   const value = PRICES[interval];
+  const token = await accessToken();
+  if (!token) {
+    return { error: 'Please sign in to subscribe, then press this again.' };
+  }
+
   trackBeginCheckout(interval, value);
 
   try {
     const response = await fetch(CHECKOUT_ENDPOINT, {
       method: 'POST',
-      headers: requestHeaders(await accessToken()),
+      headers: requestHeaders(token),
       body: JSON.stringify({
         interval,
         // Click identifiers ride along so the webhook can forward a server-side conversion

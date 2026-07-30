@@ -198,6 +198,11 @@ select relname, reloptions from pg_class where relname = 'entitlements';
 select grantee, privilege_type from information_schema.role_table_grants
 where table_name = 'entitlements';
 
+-- Must return FALSE. A user who can rewrite their own email can impersonate somebody
+-- else's address anywhere it is trusted, and it used to be an identity key for billing.
+select has_column_privilege('authenticated', 'public.profiles', 'email', 'update')
+  as authenticated_can_change_email;
+
 -- Both must be FALSE. apply_stripe_entitlement is the function that grants paid plans;
 -- if the browser roles can execute it, the anon key is a "give me Maker" endpoint.
 -- (Supabase's default privileges hand EXECUTE to these roles, which is why the migration
@@ -256,8 +261,14 @@ Other outcomes and what they mean:
 
 ### 7b. With a real test card
 
-1. Go to `https://www.batchlabel.xyz/pricing` (test mode: use a Vercel preview with test keys).
-2. Press **Get the Maker plan**.
+**Checkout requires the buyer to be signed in.** A signed-out visitor on the pricing page is
+sent to sign up first and returned to pricing with their chosen interval still selected; the
+endpoint itself answers 401 without a valid session. This is a security boundary, not just a
+funnel choice — see the `no_membership` note below.
+
+1. Sign in (or sign up) at `https://www.batchlabel.xyz` (test mode: use a Vercel preview with
+   test keys).
+2. Go to `/pricing` and press **Get the Maker plan**.
 3. Card `4242 4242 4242 4242`, any future expiry, any CVC, any postcode.
 4. You should land on `/checkout/success`.
 5. Sign in and open **Account and billing** → **Manage billing**. The Stripe portal should
@@ -331,14 +342,31 @@ unsigned request.
 
 ### `outcome: no_membership` on a real purchase
 
-The webhook could not tie the payment to an account. It tries, in order: the
-`supabase_user_id` in the Stripe metadata, the subscription id, the customer id, then the
-email that paid. That last one only works if the person's Supabase account uses the same
-address they paid with.
+The webhook could not tie the payment to an account. It resolves, in order, by the
+`supabase_user_id` our own server wrote into the Stripe metadata from a verified session,
+then the subscription id, then the customer id.
 
-Nothing is lost — the event is deliberately **not** recorded as processed, so once the
-account exists you can open the event in the Stripe dashboard and press **Resend** and it will
-apply properly.
+**It never resolves by email**, and that is deliberate rather than an omission. An email
+typed into Stripe Checkout is a claim by whoever is holding the card; matching on it was a
+critical vulnerability, because `profiles.email` was user-writable, so somebody could point
+their own profile at your address and absorb the plan and the Stripe customer you paid for.
+Requiring sign-in before checkout removed the need for it entirely.
+
+So `no_membership` on a **real** purchase should now be very unusual. It means a session was
+created without a `supabase_user_id`, which the endpoint no longer allows — check whether the
+subscription was made by hand in the Stripe dashboard rather than through the site.
+
+Nothing is lost: the event is deliberately **not** recorded as processed, so once the
+membership exists you can open the event in the Stripe dashboard and press **Resend** and it
+will apply properly.
+
+### `outcome: superseded` on a real purchase
+
+The event was about a subscription this membership does not hold. That is normal and correct
+when somebody abandoned a checkout (leaving an `incomplete` subscription behind) and then
+subscribed properly — events for the abandoned one are ignored so its eventual cancellation
+cannot revoke the live plan. If you see it for the subscription the customer is actually
+paying for, that is a bug worth reporting.
 
 ### "Manage billing" says it cannot find a billing record
 
