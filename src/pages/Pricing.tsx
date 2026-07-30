@@ -3,7 +3,6 @@ import { CheckIcon, MinusIcon } from 'lucide-react';
 import { usePageMeta } from '../lib/seo';
 import { trackViewPricing } from '../lib/analytics';
 import { startCheckout, PRICES, type BillingInterval } from '../lib/billing';
-import { useAuth } from '../lib/auth';
 import { PageHero } from '../components/PageHero';
 import { Section, Heading, Eyebrow } from '../components/ui/Section';
 import { Button } from '../components/ui/Button';
@@ -40,7 +39,6 @@ export function Pricing() {
     'Start free with one watermarked label. The Maker plan is £14 a month or £140 a year for unlimited print ready CLP labels, UFI generation and saved recipes. VAT included.'
   });
 
-  const { user } = useAuth();
   const [interval, setInterval] = useState<BillingInterval>('monthly');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +50,9 @@ export function Pricing() {
   const handleCheckout = async () => {
     setBusy(true);
     setError(null);
-    const result = await startCheckout(interval, { email: user?.email, userId: user?.id });
+    // No identity is passed: the endpoint reads it from the Supabase access token, and a
+    // signed-out visitor can still buy (the webhook links the payment by the email that paid).
+    const result = await startCheckout(interval);
     if (result.error) setError(result.error);
     setBusy(false);
   };
