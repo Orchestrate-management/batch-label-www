@@ -5,6 +5,7 @@ import { FinishSetup } from './FinishSetup';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
+  goToApp: vi.fn(),
   completeOAuthSignup: vi.fn(),
   signOut: vi.fn(),
 }));
@@ -12,6 +13,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock('react-router-dom', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-router-dom')>()),
   useNavigate: () => mocks.navigate,
+}));
+
+// The product lives on app.batchlabel.xyz, so finishing setup is a cross-origin
+// handoff, not a router navigation. Assert the handoff instead.
+vi.mock('../../lib/app-handoff', () => ({
+  goToApp: (next?: string | null) => mocks.goToApp(next),
+  APP_URL: 'https://app.batchlabel.xyz',
 }));
 
 vi.mock('../../lib/membership', () => ({
@@ -40,6 +48,7 @@ const submit = () => screen.getByRole('button', { name: /Finish and start my lab
 describe('FinishSetup (the OAuth completion screen)', () => {
   beforeEach(() => {
     mocks.navigate.mockReset();
+    mocks.goToApp.mockReset();
     mocks.completeOAuthSignup.mockReset();
     mocks.completeOAuthSignup.mockResolvedValue({ error: null, provisioned: true });
     window.dataLayer = [];
@@ -65,7 +74,7 @@ describe('FinishSetup (the OAuth completion screen)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/accept the Terms of Service/i);
     expect(mocks.completeOAuthSignup).not.toHaveBeenCalled();
-    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.goToApp).not.toHaveBeenCalled();
   });
 
   it('clears the terms error as soon as the box is ticked', async () => {
@@ -77,7 +86,7 @@ describe('FinishSetup (the OAuth completion screen)', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 
-  it('provisions with the ticked consents and sends the user to the dashboard', async () => {
+  it('provisions with the ticked consents and hands the user over to the app', async () => {
     renderPage();
     fireEvent.change(screen.getByLabelText(/Business or shop name/i), {
       target: { value: 'Willow & Wick' },
@@ -86,7 +95,7 @@ describe('FinishSetup (the OAuth completion screen)', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /product tips and offers/i }));
     fireEvent.click(submit());
 
-    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/dashboard'));
+    await waitFor(() => expect(mocks.goToApp).toHaveBeenCalled());
     expect(mocks.completeOAuthSignup).toHaveBeenCalledWith({
       businessName: 'Willow & Wick',
       termsAccepted: true,
@@ -111,7 +120,7 @@ describe('FinishSetup (the OAuth completion screen)', () => {
     fireEvent.click(terms());
     fireEvent.click(submit());
 
-    await waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.goToApp).toHaveBeenCalled());
     const events = (window.dataLayer ?? []) as Array<Record<string, unknown>>;
     const completed = events.find((e) => e.event === 'sign_up_completed');
     expect(completed).toMatchObject({ method: 'google', user_id: 'user-1' });
@@ -123,7 +132,7 @@ describe('FinishSetup (the OAuth completion screen)', () => {
     fireEvent.click(terms());
     fireEvent.click(submit());
 
-    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/dashboard'));
+    await waitFor(() => expect(mocks.goToApp).toHaveBeenCalled());
     const events = (window.dataLayer ?? []) as Array<Record<string, unknown>>;
     expect(events.some((e) => e.event === 'sign_up_completed')).toBe(false);
   });
@@ -135,6 +144,6 @@ describe('FinishSetup (the OAuth completion screen)', () => {
     fireEvent.click(submit());
 
     expect(await screen.findByText('Could not finish.')).toBeInTheDocument();
-    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.goToApp).not.toHaveBeenCalled();
   });
 });
