@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { AuthProvider, RequireAuth } from './lib/auth';
+import { AuthProvider, RequireAuth, RequireMembership } from './lib/auth';
 import { captureAttribution } from './lib/attribution';
 import { SiteLayout } from './components/layout/SiteLayout';
 import { CookieBanner } from './components/CookieBanner';
@@ -21,6 +21,7 @@ import { LogIn } from './pages/auth/LogIn';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { CheckEmail } from './pages/auth/CheckEmail';
 import { ResetPassword } from './pages/auth/ResetPassword';
+import { FinishSetup } from './pages/auth/FinishSetup';
 import { CheckoutSuccess } from './pages/checkout/CheckoutSuccess';
 import { CheckoutCancelled } from './pages/checkout/CheckoutCancelled';
 import { Labels } from './pages/dashboard/Labels';
@@ -71,14 +72,32 @@ export function App() {
           <Route path="/check-your-email" element={<CheckEmail />} />
           <Route path="/reset-password" element={<ResetPassword />} />
 
+          {/*
+            Where Google sends people who signed up rather than logged in. Guarded the
+            same way as the dashboard but in the opposite direction: anyone who already
+            has a membership is bounced to /dashboard rather than re-asked for consent.
+          */}
+          <Route
+            path="/finish-setup"
+            element={
+            <RequireAuth>
+                <RequireMembership page="finish_setup">
+                  <FinishSetup />
+                </RequireMembership>
+              </RequireAuth>
+            } />
+
+
           <Route
             path="/dashboard"
             element={
             <RequireAuth>
-                <DashboardLayout />
+                <RequireMembership page="dashboard">
+                  <DashboardLayout />
+                </RequireMembership>
               </RequireAuth>
             }>
-            
+
             <Route index element={<Labels />} />
             <Route path="account" element={<Account />} />
           </Route>

@@ -9,11 +9,16 @@
  *  page_view          { page_path, page_title }              Every route change.
  *  view_pricing       { page_path }                          Pricing page viewed.
  *  cta_click          { cta_label, cta_location, page_path }  Any primary or secondary CTA.
- *  sign_up_started    { method: 'password' | 'magic_link' }   Sign up form submitted.
+ *  sign_up_started    { method: 'password' | 'magic_link'      Sign up form submitted, or
+ *                       | 'google' }                           Continue with Google pressed.
  *  sign_up_completed  { method, user_id, em_sha256,           Account created. em_sha256
  *                       marketing_email_opt_in,                feeds Meta advanced matching
  *                       advertising_opt_in }                   and Google Enhanced Conversions.
  *                                                            advertising_opt_in gates ad use.
+ *                                                            method 'google' fires at the END
+ *                                                            of the completion step, not at the
+ *                                                            redirect, because that is where
+ *                                                            consent is actually given.
  *  begin_checkout     { plan, interval, value, currency }     Paid plan CTA pressed.
  *  purchase_redirect  { plan, interval, value, currency,      Immediately before the
  *                       checkout_session_id }                 redirect to Stripe Checkout.
@@ -60,12 +65,14 @@ export function trackCtaClick(label: string, location: string) {
   });
 }
 
-export function trackSignUpStarted(method: 'password' | 'magic_link') {
+export type SignUpMethod = 'password' | 'magic_link' | 'google';
+
+export function trackSignUpStarted(method: SignUpMethod) {
   push('sign_up_started', { method });
 }
 
 export async function trackSignUpCompleted(
-method: 'password' | 'magic_link',
+method: SignUpMethod,
 email: string,
 userId?: string,
 marketingEmailOptIn?: boolean,
