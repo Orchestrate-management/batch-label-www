@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { usePageMeta } from '../../lib/seo';
 import { LegalLayout, LegalSection, LegalList } from '../../components/legal/LegalLayout';

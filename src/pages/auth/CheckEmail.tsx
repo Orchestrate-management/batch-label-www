@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { MailCheckIcon } from 'lucide-react';
 import { usePageMeta } from '../../lib/seo';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { usePageMeta } from '../../lib/seo';
 import { LegalLayout, LegalSection } from '../../components/legal/LegalLayout';
 import { openCookieSettings } from '../../components/CookieBanner';

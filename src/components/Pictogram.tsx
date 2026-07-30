@@ -1,4 +1,3 @@
-import React from 'react';
 
 type PictogramKind = 'irritant' | 'environment' | 'flammable';
 

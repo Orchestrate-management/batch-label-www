@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { MenuIcon, XIcon } from 'lucide-react';
 import { Logo } from './Logo';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Section, Heading, Eyebrow } from '../ui/Section';
 import { StepIllustration } from '../StepIllustration';
 import { Button } from '../ui/Button';
