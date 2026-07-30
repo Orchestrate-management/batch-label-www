@@ -20,7 +20,7 @@ export const homeFaqs: AccordionItem[] = [
 {
   question: 'Which products does it cover?',
   answer:
-  'Candles, wax melts, reed diffusers, room sprays and simple small batch cosmetics. If you make something unusual, send us the safety data sheet and we will tell you honestly whether we can handle it yet.'
+  'Today, candles, wax melts, reed diffusers and room sprays, all built against UK and EU CLP. Cosmetics and skincare are the next category we are opening up, and you can join the waitlist for it. The core is the same whatever you make, so more categories follow over time. If you make something unusual, send us the safety data sheet and we will tell you honestly whether we can handle it yet.'
 },
 {
   question: 'What if I change my recipe?',
@@ -36,6 +36,26 @@ export const homeFaqs: AccordionItem[] = [
 
 /** Longer set for the full FAQ page, grouped by theme. */
 export const faqGroups: {title: string;items: AccordionItem[];}[] = [
+{
+  title: 'Which products we cover',
+  items: [
+  {
+    question: 'Which product categories can I label today?',
+    answer:
+    'Candles, wax melts, reed diffusers and room sprays are live now, built against UK CLP and EU CLP. That is the category we know best and where most of our makers are. Other categories are on the way, in a deliberate order.'
+  },
+  {
+    question: 'Do you do cosmetics labelling?',
+    answer:
+    'Not yet, but it is the next category we are building, with makers who already use us for their candle labels. It will take ingredient and product information and produce a compliant cosmetics label, with the allergen and INCI wording the rules expect. The scope stays the same as today: labelling only, so it will still not replace a Cosmetic Product Safety Report. Email hello@batchlabel.co.uk to join the cosmetics waitlist and we will tell you when it opens.'
+  },
+  {
+    question: 'Will Batchlabel work for other products, like wider consumer goods or electronics?',
+    answer:
+    'That is the direction. The hard part of any label is turning safety and regulatory data into the exact words the rules require, and that engine is not specific to candles. Wider consumer goods come after cosmetics, and technical products such as electronics, with their conformity marks and warnings, are further out on the roadmap. We would rather add one category properly than promise all of them at once.'
+  }]
+
+},
 {
   title: 'Getting started',
   items: [
@@ -72,7 +92,7 @@ export const faqGroups: {title: string;items: AccordionItem[];}[] = [
   {
     question: 'Do I also need a CPSR for cosmetics?',
     answer:
-    'Yes. A CPSR is a Cosmetic Product Safety Report, and it is a separate requirement from labelling. Batchlabel does not produce one. We handle the label text and layout only.'
+    'Yes. A CPSR is a Cosmetic Product Safety Report, and it is a separate requirement from labelling. Batchlabel does not produce one, and it will not when cosmetics labelling launches either. We handle the label text and layout only, whatever the category.'
   },
   {
     question: 'What about poison centre notification?',
