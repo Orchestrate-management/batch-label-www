@@ -1,5 +1,18 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { sharedCookieStorage } from './session-storage';
+/**
+ * Imported for its side effect, and imported HERE on purpose.
+ *
+ * This module snapshots the URL fragment the moment it is evaluated. Creating
+ * the Supabase client below wipes that fragment (auth-js clears
+ * `window.location.hash` as soon as it reads it), so the snapshot has to happen
+ * first. Importing it from this file makes that a fact about the module graph
+ * rather than a rule someone has to remember when editing index.tsx.
+ *
+ * Without it, /reset-password cannot tell a genuine recovery link from an
+ * ordinary signed-in visitor, and every signed-in maker looks like one.
+ */
+import './recovery-entry';
 
 /**
  * Supabase browser client.

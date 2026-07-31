@@ -69,4 +69,69 @@ describe('CookieBanner', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(mocks.syncAdvertisingConsent).not.toHaveBeenCalled();
   });
+
+  /**
+   * The product app has no banner and no way of showing one: advertising is asked
+   * here and only here. So it links to `?cookie-settings=1`, and that has to open
+   * the panel rather than land someone on a page with a link to it.
+   */
+  describe('opening from a URL', () => {
+    const setUrl = (url: string) => window.history.replaceState({}, '', url);
+
+    beforeEach(() => setUrl('/cookie-policy'));
+
+    it('opens the detail panel when sent here with ?cookie-settings=1', () => {
+      window.localStorage.setItem(
+        'bl_consent',
+        JSON.stringify({ analytics: true, marketing: true, decided_at: '2026-07-30', version: 1 }),
+      );
+      setUrl('/cookie-policy?cookie-settings=1');
+      renderBanner();
+
+      // Open despite a stored choice, and open on the toggles — the maker was
+      // sent here to change one, not to read the summary again.
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByLabelText(/Marketing/i)).toBeChecked();
+    });
+
+    it('shows the stored choice rather than a fresh set of defaults', () => {
+      window.localStorage.setItem(
+        'bl_consent',
+        JSON.stringify({ analytics: true, marketing: false, decided_at: '2026-07-30', version: 1 }),
+      );
+      setUrl('/cookie-policy?cookie-settings=1');
+      renderBanner();
+
+      expect(screen.getByLabelText(/Analytics/i)).toBeChecked();
+      expect(screen.getByLabelText(/^Marketing/i)).not.toBeChecked();
+    });
+
+    it('takes the parameter out of the address bar', () => {
+      setUrl('/cookie-policy?cookie-settings=1');
+      renderBanner();
+
+      // Left in place, a refresh or a back button reopens the banner over
+      // whatever the maker went on to read.
+      expect(window.location.search).toBe('');
+      expect(window.location.pathname).toBe('/cookie-policy');
+    });
+
+    it('keeps any other query parameters', () => {
+      setUrl('/cookie-policy?cookie-settings=1&utm_source=app');
+      renderBanner();
+
+      expect(window.location.search).toBe('?utm_source=app');
+    });
+
+    it('does nothing without the parameter', () => {
+      window.localStorage.setItem(
+        'bl_consent',
+        JSON.stringify({ analytics: true, marketing: true, decided_at: '2026-07-30', version: 1 }),
+      );
+      setUrl('/cookie-policy');
+      renderBanner();
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
 });

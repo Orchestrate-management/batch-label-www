@@ -7,6 +7,14 @@
  * second control writing the same flag is how the two records drifted apart in the first
  * place. So this shows what the account currently says and sends the user to cookie
  * settings to change it — one question, one place, one answer.
+ *
+ * The product app has the same marketing email box, in Settings → Account. That is two
+ * screens, not two records: both call set_consent(), which writes the flag, the snapshot
+ * and the audit row in one transaction, and both read the same membership row, so
+ * whichever a maker uses the other shows the result. Someone who signs up here and never
+ * opens the app still needs this one, and someone who lives in the app should not have to
+ * come back here to say no to an email. What must not drift is the version string — see
+ * the note at the top of lib/agreements.ts.
  */
 
 import { useEffect, useState } from 'react';

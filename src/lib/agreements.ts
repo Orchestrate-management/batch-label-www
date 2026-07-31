@@ -13,6 +13,18 @@
  *
  * The acceptance timestamp is deliberately NOT set here — it is stamped server-side
  * (provisioning trigger / consent endpoint), so it cannot be forged by the browser.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THE VERSION STRINGS ARE MIRRORED IN Batch-Label-Product-Application, in
+ * src/lib/agreements.ts. Bump one, bump the other in the same change.
+ *
+ * The product app's account settings change the marketing email opt-in through
+ * the same set_consent() function this site uses, and it sends its own copy of
+ * the document snapshot. Two versions in circulation for one piece of wording
+ * puts two answers to "which version did they accept" in one audit log, which is
+ * the only question this field exists to answer. A test in that repo pins the
+ * values so the copy cannot drift quietly.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 export interface Agreement {
