@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { LogOutIcon } from 'lucide-react';
-import { Logo } from '../layout/Logo';
+import { HeaderBar } from '../layout/HeaderBar';
 import { useAuth } from '../../lib/auth';
 
 const tabs = [
@@ -19,26 +19,16 @@ export function DashboardLayout() {
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-paper">
-      <header className="border-b border-paper-edge bg-white">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-5 py-3 sm:px-6">
-          <Logo />
-          <div className="flex items-center gap-4">
-            <span className="hidden text-sm text-ink-muted sm:inline">
-              {user?.email ?? 'Not signed in'}
-            </span>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-ink/15 px-3 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink">
-              
-              <LogOutIcon size={15} aria-hidden="true" />
-              Log out
-            </button>
-          </div>
-        </div>
+      {/*
+        Same HeaderBar as the marketing site and the auth pages, so the mark does not
+        move when someone finishes signing up and lands here. The tabs ride along as the
+        second row inside the same <header>, which keeps this to one banner landmark.
+      */}
+      <HeaderBar
+        below={
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-6">
-          <nav aria-label="Dashboard" className="flex gap-5">
-            {tabs.map((tab) =>
+            <nav aria-label="Dashboard" className="flex gap-5">
+              {tabs.map((tab) =>
             <NavLink
               key={tab.to}
               to={tab.to}
@@ -48,13 +38,28 @@ export function DashboardLayout() {
               isActive ? 'border-teal-700 text-ink' : 'border-transparent text-ink-muted hover:text-ink'}`
 
               }>
-              
-                {tab.label}
-              </NavLink>
+
+                  {tab.label}
+                </NavLink>
             )}
-          </nav>
+            </nav>
+          </div>
+        }>
+
+        <div className="flex items-center gap-4">
+          <span className="hidden text-sm text-ink-muted sm:inline">
+            {user?.email ?? 'Not signed in'}
+          </span>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-ink/15 px-3 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink">
+
+            <LogOutIcon size={15} aria-hidden="true" />
+            Log out
+          </button>
         </div>
-      </header>
+      </HeaderBar>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10 sm:px-6">
         {!configured ?
