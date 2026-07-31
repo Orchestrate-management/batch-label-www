@@ -3,6 +3,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { Navigate, useLocation } from 'react-router-dom';
 import { supabase, isSupabaseConfigured, MISSING_CONFIG_MESSAGE } from './supabase';
 import { BRAND_SLUG } from './brand';
+import { APP_URL } from './app-handoff';
 import { signupConsents } from './agreements';
 import { advertisingConsentFromBanner } from './consent';
 import { attributionForMetadata } from './attribution';
@@ -66,6 +67,25 @@ function redirectTo(path: string) {
   return `${window.location.origin}${path}`;
 }
 
+/**
+ * Where a confirmed email link lands: the product, not this site.
+ *
+ * Supabase verifies the token and then redirects here with the session in the URL
+ * fragment, and the app runs `detectSessionInUrl`, so it picks the session up and writes
+ * it to the shared .batchlabel.xyz cookie exactly as www would have. There is no reason
+ * to stop on the way — this site has no dashboard function; everything a maker does
+ * happens in the app.
+ *
+ * Not used for the Google redirect or the password reset, and deliberately so. OAuth has
+ * nowhere to put the brand and consent, so it must come back here for /finish-setup; and
+ * the reset link must land on this site's /reset-password, which is where the recovery
+ * gate lives.
+ */
+function appRedirect() {
+  if (typeof window === 'undefined') return undefined;
+  return APP_URL;
+}
+
 export function AuthProvider({ children }: {children: React.ReactNode;}) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,7 +128,7 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
         email,
         password,
         options: {
-          emailRedirectTo: redirectTo('/dashboard'),
+          emailRedirectTo: appRedirect(),
           data: {
             brand: BRAND_SLUG,
             business_name: businessName,
@@ -165,7 +185,7 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
         // Only the signup path may create a new account. On the log in path an unknown
         // email is rejected rather than turned into an account with no consent on file.
         shouldCreateUser: isSignUp,
-        emailRedirectTo: redirectTo('/dashboard'),
+        emailRedirectTo: appRedirect(),
         data: isSignUp ?
         {
           brand: BRAND_SLUG,

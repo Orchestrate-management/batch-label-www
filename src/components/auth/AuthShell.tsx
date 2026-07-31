@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Logo } from '../layout/Logo';
+import { HeaderBar } from '../layout/HeaderBar';
 
 interface AuthShellProps {
   title: string;
@@ -12,11 +12,14 @@ interface AuthShellProps {
 export function AuthShell({ title, intro, children, footer }: AuthShellProps) {
   return (
     <div className="flex min-h-screen w-full flex-col bg-paper">
-      <header className="border-b border-paper-edge px-5 py-3 sm:px-6">
-        <div className="mx-auto w-full max-w-5xl">
-          <Logo />
-        </div>
-      </header>
+      {/*
+        The minimal variant: same HeaderBar, same padding, same reserved row height, so
+        the mark lands on the exact pixel it occupied on the page the user just left —
+        but nothing to the right of it. A signup page is a form to be completed, not a
+        place to offer four ways to leave, and every page that uses this shell already
+        cross-links its counterpart under the card via `footer`.
+      */}
+      <HeaderBar />
 
       <main className="flex flex-1 items-start justify-center px-5 py-10 sm:px-6 sm:py-14">
         <div className="w-full max-w-md">

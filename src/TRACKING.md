@@ -1,8 +1,10 @@
 # Batchlabel tracking and attribution
 
-Everything measurement related lives in three files: `lib/consent.ts` (tag loading and
-Consent Mode v2), `lib/attribution.ts` (first touch capture) and `lib/analytics.ts`
-(events).
+Everything measurement related lives in these files: `lib/consent.ts` (tag loading and
+Consent Mode v2), `lib/attribution.ts` (first touch capture), `lib/analytics.ts` (events),
+`lib/meta-pixel.ts` (the Meta Pixel and its consent gate) and `lib/meta-events.ts` (the
+deduplication contract shared with the server). Server side conversions live in
+`server/meta-capi.ts`.
 
 ## Load order
 
@@ -10,7 +12,10 @@ Consent Mode v2), `lib/attribution.ts` (first touch capture) and `lib/analytics.
 2. `initTagging()` creates `dataLayer`, pushes Consent Mode v2 **defaults in the denied
    state**, sets `ads_data_redaction` and `url_passthrough`, then replays any stored
    choice.
-3. Only then does it inject `gtag/js` and call `gtag('config', …)`.
+3. It calls `initMetaPixel()` with that stored choice. The Meta Pixel loads **only** if
+   marketing was granted — a first-time visitor gets no request to
+   `connect.facebook.net` at all, not a suppressed one.
+4. Only then does it inject `gtag/js` and call `gtag('config', …)`.
 
 **Do not move the tag into `index.html`.** Google's copy-paste snippet loads gtag at the
 top of `<head>`, which would put it ahead of the consent defaults in step 2 and measure
@@ -32,8 +37,15 @@ every event twice — once onto `dataLayer` (kept so a tag manager could be put 
 later, and it is what the tests assert), and once through `gtagEvent()`, which is the
 call that actually reports. Push to `dataLayer` alone and the event is recorded nowhere.
 
-The Meta Pixel has no home yet as a result. When it is added it needs loading here, gated
-on `ad_storage`, rather than assumed to be configured inside a container.
+**The Meta Pixel now has a home: `lib/meta-pixel.ts`, loaded from `lib/consent.ts`.** It is
+gated by *not being loaded*, not by Consent Mode — Consent Mode is Google's mechanism and
+**Meta does not read it**, so `ad_storage: denied` suppresses nothing on Meta's side. Meta's
+copy-paste snippet must never go into `index.html`: it calls `fbq('init')` and
+`fbq('track', 'PageView')` on parse, which would run ahead of the consent defaults. The
+snippet's `<noscript>` image beacon is deliberately omitted too — it cannot be gated by
+anything, and the only people it reaches are those who cannot operate the banner and so
+can never have consented. Full reasoning in
+[`../docs/META_CAPI_SETUP.md`](../docs/META_CAPI_SETUP.md).
 
 ## Consent
 
@@ -47,11 +59,11 @@ on `ad_storage`, rather than assumed to be configured inside a container.
 
 Mapping used for Consent Mode v2:
 
-| Toggle    | Consent signals updated                                    |
-| --------- | ---------------------------------------------------------- |
-| Analytics | `analytics_storage`                                        |
-| Marketing | `ad_storage`, `ad_user_data`, `ad_personalization`          |
-| Necessary | `security_storage` only, always granted                    |
+| Toggle    | Consent signals updated                                                        |
+| --------- | ------------------------------------------------------------------------------ |
+| Analytics | `analytics_storage`                                                            |
+| Marketing | `ad_storage`, `ad_user_data`, `ad_personalization`, **and whether the Meta Pixel loads at all** |
+| Necessary | `security_storage` only, always granted                                        |
 
 ### The marketing toggle is the only advertising question
 
@@ -96,17 +108,48 @@ Every event also carries `attr_source`, `attr_medium`, `attr_campaign`, `attr_gc
 `attr_fbclid` from the stored first touch record, so GTM can stamp them onto GA4 user
 properties without re-reading storage.
 
-`em_sha256` is a SHA-256 hash of the lowercased email. Use it for Meta advanced matching
+`em_sha256` is a SHA-256 hash of the lowercased email, used for Meta advanced matching
 (`user_data.em`) and Google Enhanced Conversions (`hashedEmail`). No raw email is ever
 pushed to the dataLayer.
+
+**`em_sha256` is null without advertising consent.** It used to be computed and pushed on
+every signup regardless, which made a hashed email — the exact identifier an ad platform
+consumes — available for matching for somebody who had declined. A hash is not
+anonymisation: it is a stable identifier for one person, useful to Meta precisely because
+Meta can hash the same address and get the same string. The gate reads
+`advertisingConsentFromBanner()` directly rather than a caller-supplied argument.
 
 There is deliberately **no browser side `purchase` event**. Payment success is only known
 server side.
 
+## Meta Pixel events
+
+Mapped inside `lib/analytics.ts`, beside the GA4 event they accompany, so there are no
+`fbq` calls scattered through components — `lib/meta-pixel.ts` is the only file that
+touches `fbq`.
+
+| GA4 event           | Meta standard event    | `event_id`                    |
+| ------------------- | ---------------------- | ----------------------------- |
+| `page_view`         | `PageView`             | random                        |
+| `view_pricing`      | `ViewContent`          | random                        |
+| `begin_checkout`    | `InitiateCheckout`     | random                        |
+| `sign_up_completed` | `CompleteRegistration` | `signup.<em_sha256>`          |
+| —                   | `Purchase` (server)    | Stripe Checkout Session id    |
+
+`cta_click`, `sign_up_started`, `purchase_redirect` and `consent_update` have no Meta
+counterpart: none is a standard event, and a custom event nothing optimises against is
+cost without benefit.
+
+Deduplication keys are **derived from the identity of the action, never generated at call
+time**, so the browser and the server can compute the same string independently — which
+matters because the whole reason server forwarding exists is that the browser is often
+blocked and cannot hand anything over. The rule lives in `lib/meta-events.ts` and is
+imported by both halves.
+
 ## Server side conversion forwarding
 
-**Not implemented yet.** The data it needs is already being captured and stored, which is the
-part that cannot be added retrospectively:
+**Meta is implemented.** Google Ads Enhanced Conversions is not. The captured data both
+need was already in place, which is the part that cannot be added retrospectively:
 
 - `api/create-checkout-session.ts` writes the allow-listed first-touch keys into **both** the
   Checkout Session metadata and `subscription_data.metadata` (see `src/server/checkout.ts`).
@@ -118,20 +161,27 @@ part that cannot be added retrospectively:
   `applied`. Forwarding on `duplicate` or `stale` would double-count a Stripe retry, so the
   outcome must be checked, not just the event type.
 
-When it is built:
+As built:
 
-- **Meta Conversions API**: `Purchase` with `event_id` set to the Stripe session id so it
-  dedupes against any browser event, `fbc` rebuilt from the stored `fbclid`, and hashed email
-  for advanced matching.
-- **Google Ads**: `uploadClickConversions` using the stored `gclid`, or `gbraid` and `wbraid`
-  where a `gclid` is absent, plus hashed email for Enhanced Conversions.
+- **Meta Conversions API** (`server/meta-capi.ts`): `Purchase` with `event_id` set to the
+  Stripe Checkout Session id, `fbc` preferring the real `_fbc` cookie and falling back to a
+  reconstruction from the stored `fbclid` and **`first_seen_at`** — the time the click was
+  observed, not the time of the conversion, because the Pixel writes `_fbc` when the click
+  lands and Meta matches on the whole string. `_fbp` is carried too. Hashed email comes from
+  the **verified auth identity**, not the address typed into Stripe Checkout. Forwarded only
+  when the entitlement store returns `applied`, so a Stripe redelivery cannot double-count.
+- **Google Ads**: still to build. `uploadClickConversions` using the stored `gclid`, or
+  `gbraid` and `wbraid` where a `gclid` is absent, plus hashed email for Enhanced
+  Conversions. It must go through the same consent gate rather than a second copy of it.
 
-Both would read the click identifiers from the metadata above, so conversions can still be
+Both read the click identifiers from the metadata above, so conversions can still be
 reported when browser tags were blocked.
 
-**Neither may run for a user whose `advertising_opt_in` is false.** Consent Mode gates the
-browser, and nothing gates a server-to-server call except the code making it. The gate is
-described at the call site in `api/stripe-webhook.ts` and in
+**Neither may run for a user whose `advertising_opt_in` is false.** Consent Mode gates
+nothing here — it is Google's mechanism and Meta does not read it — so a server-to-server
+call is gated only by the code making it. `forwardPurchase` reads the flag with the
+service-role key and fails closed on a false flag, a missing membership, a thrown lookup or
+a missing user id. See [`../docs/META_CAPI_SETUP.md`](../docs/META_CAPI_SETUP.md) and
 [`../docs/CONSENT.md`](../docs/CONSENT.md).
 
 ## If a tag manager is ever added
@@ -141,8 +191,9 @@ what exists:
 
 1. Google tag (GA4) with the measurement id, triggered on Consent Mode `analytics_storage`.
 2. GA4 event tags for each custom event above, with the parameters mapped.
-3. Meta Pixel base code with **advanced matching enabled**, reading `em_sha256` from the
-   dataLayer, gated on `ad_storage`.
-4. Google Ads conversion linker plus conversion tags, gated on `ad_storage`.
-5. Consent Mode v2 checks on every non essential tag, using the built in consent settings
+3. Google Ads conversion linker plus conversion tags, gated on `ad_storage`.
+4. Consent Mode v2 checks on every non essential tag, using the built in consent settings
    rather than a custom blocking trigger.
+5. **Do not move the Meta Pixel into the container.** It would be a second install
+   alongside `lib/meta-pixel.ts` and double every event, and a container-level consent check
+   is weaker than not loading the script — Meta does not read Consent Mode.

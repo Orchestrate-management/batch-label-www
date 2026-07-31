@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LogOutIcon } from 'lucide-react';
-import { Logo } from '../layout/Logo';
+import { ExternalLinkIcon, LogOutIcon } from 'lucide-react';
+import { HeaderBar } from '../layout/HeaderBar';
 import { useAuth } from '../../lib/auth';
+import { APP_URL } from '../../lib/app-handoff';
 
 const tabs = [
 { to: '/dashboard', label: 'Labels', end: true },
@@ -19,26 +20,16 @@ export function DashboardLayout() {
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-paper">
-      <header className="border-b border-paper-edge bg-white">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-5 py-3 sm:px-6">
-          <Logo />
-          <div className="flex items-center gap-4">
-            <span className="hidden text-sm text-ink-muted sm:inline">
-              {user?.email ?? 'Not signed in'}
-            </span>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-ink/15 px-3 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink">
-              
-              <LogOutIcon size={15} aria-hidden="true" />
-              Log out
-            </button>
-          </div>
-        </div>
+      {/*
+        Same HeaderBar as the marketing site and the auth pages, so the mark does not
+        move when someone finishes signing up and lands here. The tabs ride along as the
+        second row inside the same <header>, which keeps this to one banner landmark.
+      */}
+      <HeaderBar
+        below={
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-6">
-          <nav aria-label="Dashboard" className="flex gap-5">
-            {tabs.map((tab) =>
+            <nav aria-label="Dashboard" className="flex gap-5">
+              {tabs.map((tab) =>
             <NavLink
               key={tab.to}
               to={tab.to}
@@ -48,13 +39,41 @@ export function DashboardLayout() {
               isActive ? 'border-teal-700 text-ink' : 'border-transparent text-ink-muted hover:text-ink'}`
 
               }>
-              
-                {tab.label}
-              </NavLink>
+
+                  {tab.label}
+                </NavLink>
             )}
-          </nav>
+            </nav>
+          </div>
+        }>
+
+        <div className="flex items-center gap-4">
+          <span className="hidden text-sm text-ink-muted sm:inline">
+            {user?.email ?? 'Not signed in'}
+          </span>
+          {/*
+            The way back. Everything a maker actually does happens in the product, and
+            this account area had no link to it — someone who came here to change a card
+            had to know the app's address to get back to work. A plain anchor, not
+            goToApp: this is a link a person may want to open in a new tab, and the
+            session crosses in a cookie either way.
+          */}
+          <a
+            href={APP_URL}
+            className="inline-flex items-center gap-1.5 text-sm text-teal-700 underline decoration-teal-700/30 underline-offset-4 hover:decoration-teal-700">
+            Open Batchlabel
+            <ExternalLinkIcon size={14} aria-hidden="true" />
+          </a>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-ink/15 px-3 py-2 text-sm text-ink-soft hover:bg-paper-deep hover:text-ink">
+
+            <LogOutIcon size={15} aria-hidden="true" />
+            Log out
+          </button>
         </div>
-      </header>
+      </HeaderBar>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10 sm:px-6">
         {!configured ?

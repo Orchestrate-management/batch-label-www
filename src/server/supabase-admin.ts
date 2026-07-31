@@ -88,6 +88,58 @@ brand: string)
   return (data as MembershipBilling | null) ?? null;
 }
 
+/**
+ * THE SERVER-SIDE ADVERTISING CONSENT GATE.
+ *
+ * Answers the only question `src/server/meta-capi.ts` is allowed to act on: may we forward
+ * anything about this person to an advertising platform? Two facts come back together on
+ * purpose, because they have to be about the same individual:
+ *
+ *  1. `advertising_opt_in` from `brand_memberships`, read with the service role and keyed on
+ *     the Supabase user id that our own checkout wrote into the Checkout Session metadata.
+ *     RLS is bypassed here, so the user_id and brand filters are doing real work.
+ *
+ *  2. The VERIFIED auth email, from `auth.admin.getUserById` — not `profiles.email`, which is
+ *     user-writable and could therefore be pointed at somebody else, and not the address
+ *     typed into Stripe Checkout, which is whatever the cardholder felt like entering. The
+ *     permission we just checked belongs to the auth user; the email we hash and send has to
+ *     belong to that same auth user or the consent proves nothing about the data.
+ *
+ * THIS FUNCTION THROWS RATHER THAN RETURNING A DEFAULT. That is the whole design. A caller
+ * that received `{ optedIn: false }` for a database outage could not tell it apart from a
+ * genuine refusal, and the difference matters for logging and for anyone later asking why a
+ * conversion is missing. The caller catches and fails closed — see createConversionForwarder,
+ * where both a throw and a false end in the event being dropped.
+ */
+export async function findAdvertisingConsent(
+admin: SupabaseClient,
+userId: string,
+brand: string)
+: Promise<{optedIn: boolean;email: string | null;}> {
+  const { data, error } = await admin.
+  from('brand_memberships').
+  select('advertising_opt_in').
+  eq('user_id', userId).
+  eq('brand_slug', brand).
+  maybeSingle();
+
+  if (error) throw new Error(`advertising_opt_in lookup failed: ${error.message}`);
+  // No membership row is not a yes. There is no record of a permission, so there is no
+  // permission — the same rule docs/CONSENT.md sets for the product app ("assume denied
+  // when unknown").
+  if (!data) return { optedIn: false, email: null };
+
+  const optedIn = data.advertising_opt_in === true;
+  // Only fetch the identity we are actually allowed to use. Reading the email for somebody
+  // who has declined would be pointless and is exactly the sort of "we had it anyway" that
+  // turns into an accidental send later.
+  if (!optedIn) return { optedIn: false, email: null };
+
+  const { data: userData, error: userError } = await admin.auth.admin.getUserById(userId);
+  if (userError) throw new Error(`auth lookup failed: ${userError.message}`);
+  return { optedIn: true, email: userData?.user?.email ?? null };
+}
+
 export interface Entitlement {
   brand: string;
   plan: string | null;

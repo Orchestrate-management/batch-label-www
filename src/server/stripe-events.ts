@@ -17,6 +17,7 @@
  */
 
 import type Stripe from 'stripe';
+import type { PurchaseSignal } from './meta-capi';
 import {
   FREE_PLAN,
   MAKER_PLAN,
@@ -253,6 +254,57 @@ function fromCheckoutSession(event: Stripe.Event, config: IntentConfig): Entitle
   }
 
   return intent;
+}
+
+/**
+ * The facts a completed checkout gives the Meta Conversions API, or null when there is
+ * nothing to report.
+ *
+ * Separate from `intentFromEvent` on purpose. An entitlement intent answers "what should the
+ * database now believe", and every field on it is nullable so a partial event cannot destroy
+ * a fact. A conversion signal answers a different question — "did money change hands, and
+ * what do we know about the click that produced it" — and it is allowed to be strict, because
+ * an event we are unsure about should simply not be reported.
+ *
+ * WHY payment_status MUST BE EXACTLY 'paid'
+ *
+ * `no_payment_required` is what Stripe returns for a 100%-off promotion code, and
+ * `allow_promotion_codes` is on for this checkout. Those sessions complete with
+ * `amount_total: 0`. Reporting them as Purchases would feed £0 conversions into Meta's
+ * optimisation, dragging the modelled order value down and teaching the algorithm to find
+ * more people who pay nothing. An unpaid session is not a purchase.
+ *
+ * It returns no personal data. The email is looked up separately, from the verified auth
+ * identity of the user the consent check was run against — see AdvertisingConsent in
+ * ./meta-capi.ts for why the address typed into Stripe Checkout is not used.
+ */
+export function purchaseSignal(event: Stripe.Event, config: IntentConfig): PurchaseSignal | null {
+  if (event.type !== 'checkout.session.completed') return null;
+
+  const session = event.data.object as Stripe.Checkout.Session;
+  if (session.mode !== 'subscription') return null;
+  if (!belongsToThisBrand(session.metadata, null, config)) return null;
+  if (session.payment_status !== 'paid') return null;
+  if (!session.id) return null;
+
+  const metadata = session.metadata ?? {};
+  const read = (key: string): string | null => {
+    const value = metadata[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  };
+
+  return {
+    checkoutSessionId: session.id,
+    supabaseUserId: readUserId(session.metadata),
+    // Stripe's event.created is already unix seconds, which is the unit Meta wants.
+    eventTimeUnix: event.created,
+    amountTotalMinor: typeof session.amount_total === 'number' ? session.amount_total : null,
+    currency: session.currency ?? null,
+    fbclid: read('fbclid'),
+    firstSeenAt: read('first_seen_at'),
+    fbp: read('fbp'),
+    fbc: read('fbc')
+  };
 }
 
 /** customer.subscription.created | updated | deleted — the authority on plan and status. */

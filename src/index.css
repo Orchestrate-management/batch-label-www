@@ -14,6 +14,15 @@
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
+  /* The second, independent source of the header jump. Every centred container on the
+     site — the header row, the page content, the auth card — is centred in the viewport,
+     so on a machine with classic (space-taking) scrollbars, moving from a page that
+     scrolls to one that does not shifts all of it sideways by half the scrollbar width.
+     Measured 15px in this engine, so 7.5px of drift. /log-in at 1280x900 is the live
+     case: it is the one route short enough not to scroll. Reserving the gutter always
+     makes the two cases the same width. It is a no-op where scrollbars are overlays,
+     which is macOS's default and why this never showed up locally. */
+  scrollbar-gutter: stable;
 }
 body {
   background-color: #f3eee6;

@@ -43,19 +43,28 @@ import { clearRecoveryEntry, recoveryEntry } from '../../lib/recovery-entry';
  *                               people whose link is perfectly good.
  */
 export function ResetPassword() {
+  const { updatePassword, revokeOtherSessions, session, loading, configured } = useAuth();
+  const entry = recoveryEntry();
+
+  // The title is what RouteAnnouncer reads out on arrival, so it has to name which of
+  // these screens the maker actually landed on. Carried over from the journey fix on
+  // main, which this file otherwise supersedes: that version decided the same thing from
+  // session presence, which the shared .batchlabel.xyz cookie makes true for almost
+  // everyone. The recovery entry is the honest signal.
+  const linkFailed =
+  configured && !loading && (
+  entry.kind === 'link_failed' || entry.kind === 'recovery' && !session);
+
   usePageMeta({
-    title: 'Set a new password',
+    title: linkFailed ? 'That link has expired' : 'Set a new password',
     description: 'Choose a new password for your Batchlabel account.',
     noIndex: true
   });
 
-  const { updatePassword, revokeOtherSessions, session, loading, configured } = useAuth();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const entry = recoveryEntry();
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
