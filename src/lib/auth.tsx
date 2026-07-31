@@ -49,6 +49,13 @@ interface AuthContextValue {
   }) => Promise<AuthResult>;
   sendPasswordReset: (email: string) => Promise<AuthResult>;
   updatePassword: (password: string) => Promise<AuthResult>;
+  /**
+   * Ends every other session for this user and keeps the current one. Used after
+   * a password reset: a reset is what someone does when they believe another
+   * person is in their account, and one that leaves the intruder signed in has
+   * achieved nothing.
+   */
+  revokeOtherSessions: () => Promise<AuthResult>;
   signOut: () => Promise<void>;
 }
 
@@ -195,6 +202,15 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     return { error: error ? error.message : null };
   }, []);
 
+  const revokeOtherSessions = useCallback<AuthContextValue['revokeOtherSessions']>(async () => {
+    if (!supabase) return { error: MISSING_CONFIG_MESSAGE };
+    // 'others', never 'global': signing the maker out of the browser they are
+    // standing in front of, moments after they set a password there, would look
+    // like the reset had failed.
+    const { error } = await supabase.auth.signOut({ scope: 'others' });
+    return { error: error ? error.message : null };
+  }, []);
+
   const signOut = useCallback(async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -212,6 +228,7 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
       sendMagicLink,
       sendPasswordReset,
       updatePassword,
+      revokeOtherSessions,
       signOut
     }),
     [
@@ -223,6 +240,7 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     sendMagicLink,
     sendPasswordReset,
     updatePassword,
+    revokeOtherSessions,
     signOut]
 
   );
