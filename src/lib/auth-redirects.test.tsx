@@ -20,10 +20,14 @@ import { APP_URL } from './app-handoff';
  * other test would notice.
  */
 const mocks = vi.hoisted(() => ({
-  signUp: vi.fn(() => Promise.resolve({ data: { user: { id: 'u1' } }, error: null })),
-  signInWithOtp: vi.fn(() => Promise.resolve({ error: null })),
-  signInWithOAuth: vi.fn(() => Promise.resolve({ error: null })),
-  resetPasswordForEmail: vi.fn(() => Promise.resolve({ error: null }))
+  signUp: vi.fn((_args: unknown) =>
+    Promise.resolve({ data: { user: { id: 'u1' } }, error: null })
+  ),
+  signInWithOtp: vi.fn((_args: unknown) => Promise.resolve({ error: null })),
+  signInWithOAuth: vi.fn((_args: unknown) => Promise.resolve({ error: null })),
+  resetPasswordForEmail: vi.fn((_email: unknown, _opts: unknown) =>
+    Promise.resolve({ error: null })
+  )
 }));
 
 vi.mock('./supabase', () => ({
@@ -65,7 +69,7 @@ describe('where each auth flow lands', () => {
         marketingEmailOptIn: false
       });
     });
-    const options = mocks.signUp.mock.calls[0][0] as {options: {emailRedirectTo: string;};};
+    const options = mocks.signUp.mock.calls[0][0] as unknown as {options: {emailRedirectTo: string;};};
     expect(options.options.emailRedirectTo).toBe(APP_URL);
     expect(options.options.emailRedirectTo).not.toContain('/dashboard');
   });
@@ -75,7 +79,7 @@ describe('where each auth flow lands', () => {
     await act(async () => {
       await result.current.sendMagicLink({ email: 'maker@example.com' });
     });
-    const options = mocks.signInWithOtp.mock.calls[0][0] as {options: {emailRedirectTo: string;};};
+    const options = mocks.signInWithOtp.mock.calls[0][0] as unknown as {options: {emailRedirectTo: string;};};
     expect(options.options.emailRedirectTo).toBe(APP_URL);
   });
 
@@ -84,7 +88,7 @@ describe('where each auth flow lands', () => {
     await act(async () => {
       await result.current.signInWithGoogle({ intent: 'sign_up' });
     });
-    const options = mocks.signInWithOAuth.mock.calls[0][0] as {options: {redirectTo: string;};};
+    const options = mocks.signInWithOAuth.mock.calls[0][0] as unknown as {options: {redirectTo: string;};};
     expect(options.options.redirectTo).not.toBe(APP_URL);
     expect(options.options.redirectTo).toContain('/dashboard');
   });
@@ -94,7 +98,7 @@ describe('where each auth flow lands', () => {
     await act(async () => {
       await result.current.sendPasswordReset('maker@example.com');
     });
-    const options = mocks.resetPasswordForEmail.mock.calls[0][1] as {redirectTo: string;};
+    const options = mocks.resetPasswordForEmail.mock.calls[0][1] as unknown as {redirectTo: string;};
     expect(options.redirectTo).toContain('/reset-password');
     expect(options.redirectTo).not.toBe(APP_URL);
   });
