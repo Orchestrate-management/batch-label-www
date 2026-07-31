@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LogOutIcon } from 'lucide-react';
+import { ExternalLinkIcon, LogOutIcon } from 'lucide-react';
 import { HeaderBar } from '../layout/HeaderBar';
 import { useAuth } from '../../lib/auth';
+import { APP_URL } from '../../lib/app-handoff';
 
 const tabs = [
 { to: '/dashboard', label: 'Labels', end: true },
@@ -50,6 +51,19 @@ export function DashboardLayout() {
           <span className="hidden text-sm text-ink-muted sm:inline">
             {user?.email ?? 'Not signed in'}
           </span>
+          {/*
+            The way back. Everything a maker actually does happens in the product, and
+            this account area had no link to it — someone who came here to change a card
+            had to know the app's address to get back to work. A plain anchor, not
+            goToApp: this is a link a person may want to open in a new tab, and the
+            session crosses in a cookie either way.
+          */}
+          <a
+            href={APP_URL}
+            className="inline-flex items-center gap-1.5 text-sm text-teal-700 underline decoration-teal-700/30 underline-offset-4 hover:decoration-teal-700">
+            Open Batchlabel
+            <ExternalLinkIcon size={14} aria-hidden="true" />
+          </a>
           <button
             type="button"
             onClick={handleSignOut}

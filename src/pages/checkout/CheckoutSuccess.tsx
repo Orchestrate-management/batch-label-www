@@ -2,6 +2,7 @@ import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2Icon } from 'lucide-react';
 import { usePageMeta } from '../../lib/seo';
 import { Button } from '../../components/ui/Button';
+import { APP_URL } from '../../lib/app-handoff';
 
 export function CheckoutSuccess() {
   usePageMeta({
@@ -28,11 +29,17 @@ export function CheckoutSuccess() {
         </p>
 
         <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-          <Button to="/dashboard" size="lg" track={{ label: 'Go to dashboard', location: 'checkout_success' }}>
-            Go to my dashboard
+          {/*
+            Back to the product, not to the account area. Someone who has just paid
+            wants to export the thing they were blocked on. This used to send them to
+            /dashboard, which greeted a paying customer with "No labels yet. Your
+            first label is free."
+           */}
+          <Button href={APP_URL} size="lg" track={{ label: 'Open Batchlabel', location: 'checkout_success' }}>
+            Back to my labels
           </Button>
-          <Button to="/how-it-works" variant="secondary" size="lg">
-            Read the three steps
+          <Button to="/dashboard/account" variant="secondary" size="lg">
+            Account and billing
           </Button>
         </div>
 
