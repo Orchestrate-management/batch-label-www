@@ -23,6 +23,8 @@
 
 import { trackBeginCheckout, trackPurchaseRedirect } from './analytics';
 import { getAttribution } from './attribution';
+import { advertisingConsentFromBanner } from './consent';
+import { isValidFbc, isValidFbp } from './meta-events';
 import { supabase } from './supabase';
 
 export type BillingInterval = 'monthly' | 'annual';
@@ -63,6 +65,37 @@ function requestHeaders(token: string | null): Record<string, string> {
   return headers;
 }
 
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.split('; ').find((row) => row.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
+}
+
+/**
+ * Meta's `_fbp` and `_fbc` cookies, for the server-side Purchase event.
+ *
+ * These are written by the Pixel, and the Pixel only loads for somebody who granted
+ * marketing consent — so in the normal case the cookies simply do not exist without
+ * consent and there is nothing to send. The explicit `advertisingConsentFromBanner()`
+ * check is not redundant: a maker who accepted, browsed, and then withdrew has cookies
+ * from the consented period. `setMetaConsent(false)` deletes them, but a cookie that a
+ * browser extension resurrected, or one written on a different subdomain, must not be able
+ * to leak past a withdrawal. Two independent reasons to send nothing beats one.
+ *
+ * Both values are format-checked here as well as on the server. The server check is the
+ * one that counts — this half runs in a browser and can be bypassed — but checking here
+ * means a malformed cookie is dropped rather than making a round trip to be rejected.
+ */
+function metaCookiesForCheckout(): {fbp?: string;fbc?: string;} {
+  if (!advertisingConsentFromBanner()) return {};
+  const out: {fbp?: string;fbc?: string;} = {};
+  const fbp = readCookie('_fbp');
+  const fbc = readCookie('_fbc');
+  if (isValidFbp(fbp)) out.fbp = fbp;
+  if (isValidFbc(fbc)) out.fbc = fbc;
+  return out;
+}
+
 /**
  * Fires begin_checkout, asks the server for a Checkout Session, fires purchase_redirect,
  * then hands the maker over to Stripe.
@@ -91,7 +124,10 @@ export async function startCheckout(interval: BillingInterval): Promise<{error: 
         interval,
         // Click identifiers ride along so the webhook can forward a server-side conversion
         // later without guessing which ad produced the sale.
-        attribution: getAttribution()
+        attribution: getAttribution(),
+        // Meta's own cookies, when consent allowed them to exist. They give the server-side
+        // Purchase a real browser identity to match against instead of a reconstruction.
+        meta: metaCookiesForCheckout()
       })
     });
 

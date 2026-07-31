@@ -1,6 +1,12 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { ATTRIBUTION_KEYS, checkoutMetadata, resolveInterval, sanitiseAttribution } from './checkout';
+import {
+  ATTRIBUTION_KEYS,
+  checkoutMetadata,
+  resolveInterval,
+  sanitiseAttribution,
+  sanitiseMetaCookies } from
+'./checkout';
 import { MAKER_PLAN } from './entitlements';
 
 describe('resolveInterval', () => {
@@ -118,5 +124,105 @@ describe('checkoutMetadata', () => {
     });
     expect(metadata.utm_source).toBe('google');
     expect(metadata.supabase_user_id).toBe('11111111-1111-4111-8111-111111111111');
+  });
+});
+
+/**
+ * Meta's own cookies, on their way to the server-side Purchase event.
+ *
+ * These arrive in a request body, so they are claims. Without validation a caller could put
+ * arbitrary text into our Stripe metadata and, from there, into a Meta event attributed to
+ * our dataset — or simply blow Stripe's 500-character metadata limit and turn a paid
+ * checkout into a 400.
+ */
+describe('sanitiseMetaCookies', () => {
+  it('keeps well-formed _fbp and _fbc values', () => {
+    expect(
+      sanitiseMetaCookies({
+        fbp: 'fb.1.1767225600000.1234567890',
+        fbc: 'fb.1.1767225600000.IwAR0abc'
+      })
+    ).toEqual({
+      fbp: 'fb.1.1767225600000.1234567890',
+      fbc: 'fb.1.1767225600000.IwAR0abc'
+    });
+  });
+
+  it('drops anything that is not the documented cookie shape', () => {
+    expect(sanitiseMetaCookies({ fbp: 'nonsense', fbc: 'also nonsense' })).toEqual({});
+    expect(sanitiseMetaCookies({ fbp: '<script>alert(1)</script>' })).toEqual({});
+    expect(sanitiseMetaCookies({ fbp: 'fb.1.notatimestamp.123' })).toEqual({});
+  });
+
+  it('drops an over-long value rather than letting Stripe reject the whole checkout', () => {
+    expect(sanitiseMetaCookies({ fbc: `fb.1.1767225600000.${'a'.repeat(600)}` })).toEqual({});
+  });
+
+  it('ignores non-object input', () => {
+    expect(sanitiseMetaCookies(null)).toEqual({});
+    expect(sanitiseMetaCookies('fb.1.1.1')).toEqual({});
+    expect(sanitiseMetaCookies([1, 2, 3])).toEqual({});
+    expect(sanitiseMetaCookies(undefined)).toEqual({});
+  });
+
+  it('keeps whichever half is valid', () => {
+    expect(sanitiseMetaCookies({ fbp: 'fb.1.1767225600000.99', fbc: 'junk' })).toEqual({
+      fbp: 'fb.1.1767225600000.99'
+    });
+  });
+});
+
+describe('checkoutMetadata: the Meta cookies', () => {
+  const base = {
+    userId: '11111111-1111-4111-8111-111111111111',
+    brand: 'batchlabel',
+    interval: 'monthly' as const,
+    plan: MAKER_PLAN,
+    attribution: {}
+  };
+
+  it('writes fbp and fbc so the webhook can match the server event to the browser', () => {
+    const metadata = checkoutMetadata({
+      ...base,
+      meta: { fbp: 'fb.1.1767225600000.99', fbc: 'fb.1.1767225600000.IwAR0abc' }
+    });
+    expect(metadata.fbp).toBe('fb.1.1767225600000.99');
+    expect(metadata.fbc).toBe('fb.1.1767225600000.IwAR0abc');
+  });
+
+  it('omits them entirely when there were none — the no-consent case', () => {
+    // The Pixel never loaded, so the cookies never existed. Nothing to carry.
+    const metadata = checkoutMetadata({ ...base, meta: {} });
+    expect(metadata).not.toHaveProperty('fbp');
+    expect(metadata).not.toHaveProperty('fbc');
+  });
+
+  it('omits them when the caller passes no meta block at all', () => {
+    expect(checkoutMetadata(base)).not.toHaveProperty('fbp');
+  });
+
+  it('cannot be overridden by an attribution key of the same name', () => {
+    const metadata = checkoutMetadata({
+      ...base,
+      attribution: { fbp: 'attacker', fbc: 'attacker' },
+      meta: { fbp: 'fb.1.1767225600000.99' }
+    });
+    // `fbp` and `fbc` are not on ATTRIBUTION_KEYS, and the trusted block spreads last.
+    expect(metadata.fbp).toBe('fb.1.1767225600000.99');
+    expect(metadata.fbc).toBeUndefined();
+  });
+
+  it('stays inside Stripe s 50-key metadata limit with everything populated', () => {
+    const attribution = Object.fromEntries(ATTRIBUTION_KEYS.map((k) => [k, 'x']));
+    const metadata = checkoutMetadata({
+      ...base,
+      attribution,
+      meta: { fbp: 'fb.1.1767225600000.99', fbc: 'fb.1.1767225600000.IwAR0abc' }
+    });
+    expect(Object.keys(metadata).length).toBeLessThanOrEqual(50);
+    Object.entries(metadata).forEach(([key, value]) => {
+      expect(key.length).toBeLessThanOrEqual(40);
+      expect(String(value).length).toBeLessThanOrEqual(500);
+    });
   });
 });

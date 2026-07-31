@@ -28,7 +28,7 @@
 import Stripe from 'stripe';
 import { allowedOrigins, corsHeaders, isAllowedOrigin, preflightResponse } from '../src/server/cors';
 import { readServerConfig, returnUrl } from '../src/server/config';
-import { checkoutMetadata, resolveInterval } from '../src/server/checkout';
+import { checkoutMetadata, resolveInterval, sanitiseMetaCookies } from '../src/server/checkout';
 import { MAKER_PLAN } from '../src/server/entitlements';
 import { fail, json } from '../src/server/http';
 import { createAdminClient, findEntitlement, findMembership, userFromRequest } from '../src/server/supabase-admin';
@@ -36,6 +36,8 @@ import { createAdminClient, findEntitlement, findMembership, userFromRequest } f
 interface CheckoutRequestBody {
   interval?: unknown;
   attribution?: unknown;
+  /** Meta's `_fbp` / `_fbc` cookies, sent only when advertising consent is granted. */
+  meta?: unknown;
   success_path?: unknown;
   cancel_path?: unknown;
 }
@@ -141,7 +143,9 @@ export default {
       brand: config.brand,
       interval,
       plan: MAKER_PLAN,
-      attribution: body?.attribution
+      attribution: body?.attribution,
+      // Format-validated, never trusted as sent. See sanitiseMetaCookies.
+      meta: sanitiseMetaCookies(body?.meta)
     });
 
     const stripe = new Stripe(config.stripeSecretKey);
