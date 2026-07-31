@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Stripe from 'stripe';
 import { handleStripeWebhook, type ApplyOutcome, type EntitlementStore } from './webhook';
+import type { ConversionForwarder, PurchaseSignal } from './meta-capi';
 import { buildPriceMap } from './entitlements';
 import type { EntitlementIntent, IntentConfig } from './stripe-events';
 import {
@@ -9,6 +10,7 @@ import {
   PRICE_ANNUAL,
   PRICE_MONTHLY,
   SUBSCRIPTION_ID,
+  USER_ID,
   checkoutSessionCompleted,
   invoicePaymentFailed,
   subscriptionEvent } from
@@ -648,5 +650,175 @@ describe('idempotency and ordering, end to end', () => {
     const model = modelStore();
     await deliver(invoicePaymentFailed({ id: 'evt_fail_only', created: 2000 }), model.store);
     expect(model.row.plan).toBe('free');
+  });
+});
+
+/**
+ * CONVERSION FORWARDING — where the Purchase event is raised, and where it is not.
+ *
+ * The failure this guards against is double-counting, and it is worse than under-counting
+ * because it is invisible: Meta optimises towards whatever we tell it worked, so inflated
+ * conversions quietly buy worse traffic. Stripe webhooks are at-least-once — retries on any
+ * non-2xx, redeliveries on Stripe's own schedule, and a "Resend" button in the dashboard —
+ * so "the same purchase arrives more than once" is routine, not exceptional.
+ *
+ * Two independent defences, both tested here:
+ *   1. Forward only on `applied`. The entitlement RPC claims the event id atomically, so a
+ *      redelivery returns `duplicate` and never reaches Meta at all.
+ *   2. A deterministic `event_id` (the Stripe Checkout Session id). Even if a send did
+ *      happen twice, Meta collapses the pair.
+ */
+describe('Meta conversion forwarding', () => {
+  function forwarder() {
+    const sent: PurchaseSignal[] = [];
+    const conversions: ConversionForwarder = {
+      forwardPurchase: async (signal) => {
+        sent.push(signal);
+        return 'sent';
+      }
+    };
+    return { conversions, sent };
+  }
+
+  async function deliverWith(event: Stripe.Event, store: EntitlementStore, conversions: ConversionForwarder) {
+    return handleStripeWebhook(signedRequest(JSON.stringify(event)), {
+      ...deps(store),
+      conversions
+    });
+  }
+
+  it('forwards a Purchase on a paid checkout.session.completed that was applied', async () => {
+    const { store } = recordingStore('applied');
+    const { conversions, sent } = forwarder();
+
+    await deliverWith(checkoutSessionCompleted(), store, conversions);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0].checkoutSessionId).toBe('cs_test_1');
+    expect(sent[0].supabaseUserId).toBe(USER_ID);
+  });
+
+  it('uses the Stripe Checkout Session id, so a retry cannot mint a second conversion', async () => {
+    const { store } = recordingStore('applied');
+    const { conversions, sent } = forwarder();
+    const event = checkoutSessionCompleted();
+
+    await deliverWith(event, store, conversions);
+    await deliverWith(event, store, conversions);
+
+    // The store here always says `applied`, so both deliveries forward — which is exactly
+    // the scenario where the event id has to carry the load. Identical ids mean Meta counts
+    // one purchase, not two.
+    expect(sent).toHaveLength(2);
+    expect(sent[0].checkoutSessionId).toBe(sent[1].checkoutSessionId);
+  });
+
+  it('does NOT forward when the store says duplicate: that is a Stripe redelivery', async () => {
+    const { store } = recordingStore('duplicate');
+    const { conversions, sent } = forwarder();
+    await deliverWith(checkoutSessionCompleted(), store, conversions);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('does NOT forward on stale, superseded, no_membership or unknown_brand', async () => {
+    for (const outcome of ['stale', 'superseded', 'no_membership', 'unknown_brand'] as ApplyOutcome[]) {
+      const { store } = recordingStore(outcome);
+      const { conversions, sent } = forwarder();
+      await deliverWith(checkoutSessionCompleted(), store, conversions);
+      expect(sent, `outcome ${outcome} must not forward`).toHaveLength(0);
+    }
+  });
+
+  it('does NOT forward for a subscription or invoice event', async () => {
+    // A renewal is not a new Purchase, and an invoice failure is certainly not one.
+    for (const event of [subscriptionEvent({ status: 'active' }), invoicePaymentFailed()]) {
+      const { store } = recordingStore('applied');
+      const { conversions, sent } = forwarder();
+      await deliverWith(event, store, conversions);
+      expect(sent).toHaveLength(0);
+    }
+  });
+
+  it('does NOT forward an unpaid session, nor a 100%-off promotion code', async () => {
+    for (const paymentStatus of ['unpaid', 'no_payment_required']) {
+      const { store } = recordingStore('applied');
+      const { conversions, sent } = forwarder();
+      await deliverWith(checkoutSessionCompleted({ paymentStatus }), store, conversions);
+      expect(sent, `payment_status ${paymentStatus} must not forward`).toHaveLength(0);
+    }
+  });
+
+  it('does NOT forward another Orchestrate brand s checkout on the shared Stripe account', async () => {
+    const { store } = recordingStore('applied');
+    const { conversions, sent } = forwarder();
+    await deliverWith(checkoutSessionCompleted({ brand: 'someone-else' }), store, conversions);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('carries the click identifiers the webhook needs to rebuild fbc', async () => {
+    const { store } = recordingStore('applied');
+    const { conversions, sent } = forwarder();
+
+    await deliverWith(
+      checkoutSessionCompleted({
+        metadata: {
+          fbclid: 'IwAR0abcDEF',
+          first_seen_at: '2025-12-01T00:00:00.000Z',
+          fbp: 'fb.1.1767225600000.1234567890',
+          fbc: 'fb.1.1700000000000.IwAR0real'
+        }
+      }),
+      store,
+      conversions
+    );
+
+    expect(sent[0]).toMatchObject({
+      fbclid: 'IwAR0abcDEF',
+      firstSeenAt: '2025-12-01T00:00:00.000Z',
+      fbp: 'fb.1.1767225600000.1234567890',
+      fbc: 'fb.1.1700000000000.IwAR0real'
+    });
+  });
+
+  it('passes the Stripe event time in seconds, not the time we got round to reporting', async () => {
+    const { store } = recordingStore('applied');
+    const { conversions, sent } = forwarder();
+    await deliverWith(checkoutSessionCompleted({ created: 1767225600 }), store, conversions);
+    expect(sent[0].eventTimeUnix).toBe(1767225600);
+  });
+
+  it('nulls the click identifiers when the session carried none', async () => {
+    const { store } = recordingStore('applied');
+    const { conversions, sent } = forwarder();
+    await deliverWith(checkoutSessionCompleted(), store, conversions);
+    expect(sent[0]).toMatchObject({ fbclid: null, firstSeenAt: null, fbp: null, fbc: null });
+  });
+
+  /**
+   * Measurement is downstream of billing and must never be able to break it. A forwarder
+   * that threw would otherwise produce a 500, and Stripe would retry an event that has
+   * already granted the plan.
+   */
+  it('still returns 200 when forwarding throws', async () => {
+    const { store } = recordingStore('applied');
+    const conversions: ConversionForwarder = {
+      forwardPurchase: async () => {
+        throw new Error('meta exploded');
+      }
+    };
+
+    const response = await deliverWith(checkoutSessionCompleted(), store, conversions);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ received: true, outcome: 'applied' });
+  });
+
+  it('works unchanged with no forwarder at all, which is the preview and pre-setup case', async () => {
+    const { store, calls } = recordingStore('applied');
+    const response = await handleStripeWebhook(
+      signedRequest(JSON.stringify(checkoutSessionCompleted())),
+      deps(store)
+    );
+    expect(response.status).toBe(200);
+    expect(calls).toHaveLength(1);
   });
 });

@@ -21,7 +21,8 @@
 import Stripe from 'stripe';
 import { readServerConfig } from '../src/server/config';
 import { json } from '../src/server/http';
-import { createAdminClient, createEntitlementStore } from '../src/server/supabase-admin';
+import { createAdminClient, createEntitlementStore, findAdvertisingConsent } from '../src/server/supabase-admin';
+import { createConversionForwarder, readMetaConfig } from '../src/server/meta-capi';
 import { handleStripeWebhook } from '../src/server/webhook';
 
 export default {
@@ -36,11 +37,21 @@ export default {
     const stripe = new Stripe(config.stripeSecretKey);
     const admin = createAdminClient(config.supabaseUrl, config.serviceRoleKey);
 
+    // Meta Conversions API. `readMetaConfig` returns null unless BOTH the pixel id and the
+    // secret access token are present, and the token is set in Production only — so on
+    // preview and development this is a forwarder that reads the consent flag for nobody
+    // and sends nothing. That is deliberate; see docs/META_CAPI_SETUP.md.
+    const conversions = createConversionForwarder({
+      config: readMetaConfig(process.env, config.siteUrl),
+      lookupConsent: (userId) => findAdvertisingConsent(admin, userId, config.brand)
+    });
+
     return handleStripeWebhook(request, {
       stripe,
       webhookSecret: config.stripeWebhookSecret,
       store: createEntitlementStore(admin),
-      config: { brand: config.brand, prices: config.prices }
+      config: { brand: config.brand, prices: config.prices },
+      conversions
     });
   }
 };

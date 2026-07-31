@@ -44,11 +44,14 @@ export function checkoutSessionCompleted(options: {
   paymentStatus?: string;
   mode?: string;
   email?: string | null;
+  /** Extra metadata keys — the marketing half our own checkout writes (fbclid, fbp, ...). */
+  metadata?: Record<string, string>;
 } = {}): Stripe.Event {
   const metadata: Record<string, string> = {
     brand: options.brand ?? 'batchlabel',
     plan: 'maker',
-    billing_interval: 'monthly'
+    billing_interval: 'monthly',
+    ...options.metadata
   };
   if (options.userId !== null) metadata.supabase_user_id = options.userId ?? USER_ID;
 

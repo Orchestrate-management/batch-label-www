@@ -102,15 +102,23 @@ A stored opt-in that no code reads is theatre. Today:
 
 - **Analytics** — really gates GA4. `initTagging()` pushes denied defaults before the tag
   loads, so nothing measures anyone who has not agreed. Enforced.
-- **Advertising, in the browser** — really gates `ad_storage`, `ad_user_data` and
-  `ad_personalization` through Consent Mode v2. Enforced by Google's tag.
-- **Advertising, on the server** — gates **nothing yet**. The Meta Conversions API and
-  Google Enhanced Conversions calls do not exist yet. The gate they must respect is
-  documented at the top of `src/server/webhook.ts`, which is where a paid conversion
-  would be forwarded from.
-  There is a `CONSENT GATE` note at that exact point: whoever implements them must read
-  `advertising_opt_in` and skip forwarding when it is false, failing closed if the lookup
-  fails.
+- **Advertising, in the browser** — gates two different things by two different mechanisms,
+  because they are not the same platform. For Google it gates `ad_storage`, `ad_user_data`
+  and `ad_personalization` through Consent Mode v2, enforced by Google's own tag. For Meta
+  it gates whether the Pixel script is **loaded at all** (`src/lib/meta-pixel.ts`) — Meta
+  does not read Consent Mode, so a denied `ad_storage` suppresses nothing on their side, and
+  loading the script then asking it to behave would be a weaker promise than the banner
+  makes. Withdrawal revokes the Pixel and deletes the `_fbp` / `_fbc` cookies.
+  It also gates `em_sha256`, the hashed email on `sign_up_completed`. That used to be pushed
+  regardless, which made an ad-matching identifier available for somebody who declined.
+- **Advertising, on the server** — really gates the **Meta Conversions API** `Purchase`
+  event. `src/server/meta-capi.ts` reads `advertising_opt_in` with the service-role key,
+  keyed on the Supabase user id in the Stripe Checkout Session metadata, and sends nothing
+  when the flag is false, when there is no membership row, when the lookup throws, or when
+  the session carried no user id. Fail closed: a failure to prove consent is not consent.
+  The gate is inside the forwarder rather than at its call site, so a second caller cannot
+  be added without it. Google Enhanced Conversions is still not implemented; when it is, it
+  goes through the same gate. See `docs/META_CAPI_SETUP.md`.
 - **Marketing email** — gates nothing in code yet, because no email is sent from this
   repo. It is the filter for any future send, and the index
   `brand_memberships_mkt_email_idx` exists for exactly that query.

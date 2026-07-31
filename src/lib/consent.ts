@@ -5,16 +5,24 @@
  *  1. dataLayer is created.
  *  2. Consent Mode v2 defaults are pushed with everything non essential DENIED.
  *  3. Any previously stored choice is replayed as a consent update.
- *  4. Only then is the GA4 tag injected into <head>.
+ *  4. The Meta Pixel is loaded, but ONLY if that stored choice granted marketing.
+ *  5. Only then is the GA4 tag injected into <head>.
  *
  * There is no tag manager: GA4 is loaded directly, below. See src/TRACKING.md.
  *
+ * The Meta Pixel is loaded from here too, in step 4, and on the same terms. Consent Mode is
+ * Google's mechanism — Meta does not read it — so `ad_storage: denied` suppresses nothing
+ * on Meta's side. The Pixel is gated by NOT LOADING IT: see initMetaPixel() in
+ * ./meta-pixel.ts, which is also what carries a later change of mind in both directions.
+ *
  * This file owns ADVERTISING for the whole product. The banner's `marketing` toggle
- * drives ad_storage, ad_user_data and ad_personalization, and it is also what the
- * account-level advertising_opt_in is derived from — see advertisingConsentFromBanner()
- * and docs/CONSENT.md. Nothing else asks the user about advertising, so the two records
- * cannot contradict each other.
+ * drives ad_storage, ad_user_data and ad_personalization, it decides whether the Meta Pixel
+ * exists at all, and it is what the account-level advertising_opt_in is derived from — see
+ * advertisingConsentFromBanner() and docs/CONSENT.md. Nothing else asks the user about
+ * advertising, so the records cannot contradict each other.
  */
+
+import { initMetaPixel, setMetaConsent } from './meta-pixel';
 
 /**
  * GA4 measurement id. Public by design (it ships in the page), so it lives in code
@@ -150,6 +158,10 @@ export function saveConsent(choice: Pick<ConsentChoice, 'analytics' | 'marketing
     // Fall back to the cookie only.
   }writeCookie(serialised);
   updateConsentMode(record);
+  // Meta does not read Consent Mode, so the Pixel has to be told separately. This is the
+  // call that starts tracking somebody who has just accepted, and stops — and cleans up
+  // after — somebody who has just withdrawn. See ./meta-pixel.ts.
+  setMetaConsent(record.marketing);
   return record;
 }
 
@@ -180,7 +192,14 @@ export function initTagging() {
   const stored = getStoredConsent();
   if (stored) updateConsentMode(stored);
 
-  // 3. Load GA4. Order matters: the consent defaults above are already on the queue, so
+  // 3. The Meta Pixel, which loads ONLY if marketing was already accepted. No stored
+  //    choice means false, so a first-time visitor gets no connect.facebook.net request at
+  //    all — not a suppressed one. Placed here, after the denied defaults and the replay,
+  //    for the same ordering reason GA4 is placed below, and before the localhost guard
+  //    because meta-pixel.ts applies its own (with a debug override for Test Events).
+  initMetaPixel(stored?.marketing ?? false);
+
+  // 4. Load GA4. Order matters: the consent defaults above are already on the queue, so
   //    gtag applies them the moment it boots and will not read or write storage until
   //    the maker grants analytics. Loading the tag in index.html instead — as Google's
   //    copy-paste snippet does — would put it ahead of those defaults and measure people

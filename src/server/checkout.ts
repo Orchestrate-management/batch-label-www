@@ -19,6 +19,8 @@
  * transaction if a paid conversion is ever to be reported accurately.
  */
 
+import { isValidFbc, isValidFbp } from '../lib/meta-events';
+
 /** Stripe's limits: 50 keys, 40 chars per key, 500 chars per value. */
 const MAX_METADATA_VALUE = 480;
 const MAX_ATTRIBUTION_KEYS = 20;
@@ -69,6 +71,48 @@ export function sanitiseAttribution(input: unknown): Record<string, string> {
   return out;
 }
 
+/**
+ * Meta's own browser cookies, captured at checkout time and carried to the webhook.
+ *
+ * WHY THESE ARE WORTH CARRYING, when `fbclid` is already in the attribution record.
+ *
+ * `_fbp` is the Pixel's first-party browser id and is the single strongest signal for
+ * matching a server event back to a browser session; Meta weights it heavily in match
+ * quality. `_fbc` is the Pixel's own click cookie — when it exists, sending it verbatim
+ * means the browser's identifier and the server's are byte-identical, which beats even a
+ * correctly reconstructed one.
+ *
+ * They are NOT first-touch data, which is why they are separate from the attribution
+ * record rather than bolted onto it: attribution is written once and never overwritten,
+ * while these are live cookies read at the moment of checkout.
+ *
+ * They are self-gating on consent, which is the neat part. Both cookies only exist because
+ * `fbevents.js` wrote them, and `src/lib/meta-pixel.ts` only loads `fbevents.js` for
+ * somebody who granted marketing consent — and deletes both cookies if that consent is
+ * later withdrawn. No consent, no cookies, nothing to carry. `src/lib/billing.ts` checks
+ * the banner as well, so the gate does not rest on cookie lifetime alone.
+ */
+export interface MetaCookies {
+  fbp?: string;
+  fbc?: string;
+}
+
+/**
+ * Validates browser-supplied Meta cookie values before they go anywhere near Stripe.
+ *
+ * A request body is a claim. Without this, a caller could put 480 characters of anything
+ * into our Stripe metadata and, from there, into a Meta event attributed to our dataset.
+ * Both formats are fixed and documented, so they are checked rather than trusted.
+ */
+export function sanitiseMetaCookies(input: unknown): MetaCookies {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  const source = input as Record<string, unknown>;
+  const out: MetaCookies = {};
+  if (isValidFbp(source.fbp)) out.fbp = source.fbp.trim();
+  if (isValidFbc(source.fbc)) out.fbc = source.fbc.trim();
+  return out;
+}
+
 export interface CheckoutMetadataInput {
   /** From the verified JWT. Null for an anonymous checkout from the pricing page. */
   userId: string | null;
@@ -77,6 +121,8 @@ export interface CheckoutMetadataInput {
   interval: BillingInterval;
   plan: string;
   attribution: unknown;
+  /** Meta's `_fbp` / `_fbc`, if the browser had them. Validated by the caller. */
+  meta?: MetaCookies;
 }
 
 /**
@@ -93,6 +139,11 @@ export function checkoutMetadata(input: CheckoutMetadataInput): Record<string, s
     billing_interval: input.interval
   };
   if (input.userId) trusted.supabase_user_id = input.userId;
+  // Grouped with the trusted block because they have already been format-validated by
+  // sanitiseMetaCookies, and because they must not be overridable by an attribution key of
+  // the same name.
+  if (input.meta?.fbp) trusted.fbp = input.meta.fbp;
+  if (input.meta?.fbc) trusted.fbc = input.meta.fbc;
 
   // The trusted block is spread LAST so it always wins. Today ATTRIBUTION_KEYS happens to
   // contain no key called `brand`, `plan` or `supabase_user_id`, so the order does not

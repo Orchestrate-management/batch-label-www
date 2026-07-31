@@ -10,6 +10,7 @@ import {
   trackSignUpStarted,
 } from './analytics';
 import { ATTRIBUTION_STORAGE_KEY } from './attribution';
+import { saveConsent } from './consent';
 
 type DataLayerEntry = Record<string, unknown>;
 
@@ -173,6 +174,7 @@ describe('analytics', () => {
 
   describe('trackSignUpCompleted', () => {
     it('hashes a normalised (trimmed, lowercased) email', async () => {
+      saveConsent({ analytics: true, marketing: true });
       await trackSignUpCompleted('password', '  USER@Example.COM  ', 'user-1');
       const expected = await sha256('user@example.com');
       expect(lastEvent()).toMatchObject({
@@ -196,6 +198,66 @@ describe('analytics', () => {
         marketing_email_opt_in: true,
         advertising_opt_in: false,
       });
+    });
+  });
+
+  /**
+   * THE em_sha256 LEAK, and its fix.
+   *
+   * A hashed email was previously computed and pushed on every signup, whatever the maker
+   * had said about marketing cookies. A hash is not anonymisation — it is a stable,
+   * deterministic identifier for one person, and it is only useful to Meta or Google
+   * because they can hash the same address and get the same string. Putting it on the
+   * dataLayer for somebody who declined makes it available for exactly the ad matching
+   * they refused.
+   *
+   * The gate reads the banner directly rather than the `advertisingOptIn` argument, so
+   * these tests set consent through saveConsent() rather than by passing a flag: a gate
+   * that depended on each caller passing the right value would be one refactor from open.
+   */
+  describe('em_sha256 is gated on advertising consent', () => {
+    it('is NULL when marketing cookies were declined', async () => {
+      saveConsent({ analytics: true, marketing: false });
+      await trackSignUpCompleted('password', 'maker@example.com', 'user-1', true, false);
+      expect(lastEvent().em_sha256).toBeNull();
+    });
+
+    it('is NULL when the banner has not been answered at all', async () => {
+      // No stored choice. Consent Mode already defaults ad_storage to denied, so the only
+      // consistent answer is no.
+      await trackSignUpCompleted('password', 'maker@example.com', 'user-1');
+      expect(lastEvent().em_sha256).toBeNull();
+    });
+
+    it('never reaches GA4 when declined, because compact() drops nulls', async () => {
+      saveConsent({ analytics: true, marketing: false });
+      await trackSignUpCompleted('password', 'maker@example.com', 'user-1');
+      const event = gtagCommands().find((c) => c[1] === 'sign_up_completed');
+      expect('em_sha256' in (event![2] as Record<string, unknown>)).toBe(false);
+    });
+
+    it('is present once marketing cookies are accepted', async () => {
+      saveConsent({ analytics: false, marketing: true });
+      await trackSignUpCompleted('password', 'maker@example.com', 'user-1');
+      expect(lastEvent().em_sha256).toBe(await sha256('maker@example.com'));
+    });
+
+    it('follows marketing, not analytics: they are different purposes', async () => {
+      saveConsent({ analytics: true, marketing: false });
+      await trackSignUpCompleted('password', 'maker@example.com', 'user-1');
+      expect(lastEvent().em_sha256).toBeNull();
+    });
+
+    it('still records the advertising_opt_in boolean, which is a decision not personal data', async () => {
+      saveConsent({ analytics: false, marketing: false });
+      await trackSignUpCompleted('password', 'maker@example.com', 'user-1', false, false);
+      expect(lastEvent()).toMatchObject({ advertising_opt_in: false, em_sha256: null });
+    });
+
+    it('never puts a raw email address on the dataLayer, consent or not', async () => {
+      saveConsent({ analytics: true, marketing: true });
+      await trackSignUpCompleted('password', 'maker@example.com', 'user-1');
+      expect(JSON.stringify(window.dataLayer)).not.toContain('maker@example.com');
     });
   });
 
