@@ -4,6 +4,7 @@ import { MenuIcon, XIcon } from 'lucide-react';
 import { HeaderBar } from './HeaderBar';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../lib/auth';
+import { APP_URL } from '../../lib/app-handoff';
 
 const links = [
 { to: '/how-it-works', label: 'How it works' },
@@ -41,12 +42,19 @@ export function SiteHeader() {
                   {link.label}
                 </NavLink>
           )}
-              <NavLink
-            to={session ? '/dashboard' : '/log-in'}
+              {session ?
+          <a
+            href={APP_URL}
             className="rounded-lg px-2 py-2.5 text-[0.98rem] text-ink-soft hover:bg-paper-deep hover:text-ink">
+                  Open Batchlabel
+                </a> :
 
-                {session ? 'Dashboard' : 'Log in'}
-              </NavLink>
+          <NavLink
+            to="/log-in"
+            className="rounded-lg px-2 py-2.5 text-[0.98rem] text-ink-soft hover:bg-paper-deep hover:text-ink">
+                  Log in
+                </NavLink>
+          }
               <Button
             to="/sign-up"
             className="mt-2"
@@ -78,9 +86,12 @@ export function SiteHeader() {
 
       <div className="hidden items-center gap-3 md:flex">
         {session ?
-        <Link to="/dashboard" className="text-[0.95rem] text-ink-soft hover:text-ink">
-            Dashboard
-          </Link> :
+        // Signed in means there is nothing for them here. A plain anchor, not a router
+        // link: the app is a different origin, and the session travels in the shared
+        // .batchlabel.xyz cookie either way.
+        <a href={APP_URL} className="text-[0.95rem] text-ink-soft hover:text-ink">
+            Open Batchlabel
+          </a> :
 
         <Link to="/log-in" className="text-[0.95rem] text-ink-soft hover:text-ink">
             Log in
