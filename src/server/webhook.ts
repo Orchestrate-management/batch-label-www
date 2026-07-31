@@ -25,7 +25,8 @@
  */
 
 import type Stripe from 'stripe';
-import { intentFromEvent, type EntitlementIntent, type IntentConfig } from './stripe-events';
+import { intentFromEvent, purchaseSignal, type EntitlementIntent, type IntentConfig } from './stripe-events';
+import type { ConversionForwarder } from './meta-capi';
 import { json } from './http';
 
 export const STRIPE_SIGNATURE_HEADER = 'stripe-signature';
@@ -62,10 +63,18 @@ export interface WebhookDeps {
   webhookSecret: string | undefined;
   store: EntitlementStore;
   config: IntentConfig;
+  /**
+   * Meta Conversions API. Optional: billing must work whether or not Meta is configured,
+   * and every existing test constructs these deps without it. When absent, nothing is
+   * forwarded — which is also what happens on preview, where the access token is
+   * deliberately unset. See ./meta-capi.ts.
+   */
+  conversions?: ConversionForwarder;
 }
 
 /**
- * CONSENT GATE — read this before adding conversion forwarding here.
+ * CONSENT GATE — this is the note that specified the forwarding below, kept as the record
+ * of what was required.
  *
  * A paid conversion is the obvious place to call Meta's Conversions API or Google's
  * Enhanced Conversions, and both forward personal data (a hashed email at minimum) to an
@@ -76,10 +85,19 @@ export interface WebhookDeps {
  * key by the supabase user id already carried in the Checkout Session metadata, and skip
  * the forwarding when it is false OR when the lookup fails — fail closed, not open.
  *
- * Nothing forwards today, so the flag currently gates nothing on the server. Browser-side
- * ad use is separately gated by Consent Mode v2 (`src/lib/consent.ts`), driven by the same
- * decision: the cookie banner's marketing toggle is what sets `advertising_opt_in`. There
- * is deliberately no second question at signup. See docs/CONSENT.md.
+ * AS IMPLEMENTED: Meta is done. `deps.conversions.forwardPurchase` performs that lookup as
+ * the first thing it does, before it touches Meta, and drops the event on a false flag, a
+ * missing membership, a thrown lookup or a missing user id. The gate lives inside the
+ * forwarder rather than here so that a second call site cannot be added without it — see
+ * `src/server/meta-capi.ts`, and `findAdvertisingConsent` in `src/server/supabase-admin.ts`
+ * for the lookup itself. Google Enhanced Conversions is still not implemented; when it is,
+ * it goes through the same gate rather than a second copy of it.
+ *
+ * Browser-side ad use is gated separately and by a different mechanism, because Consent
+ * Mode is Google's and Meta does not read it: GA4 by Consent Mode v2, the Meta Pixel by not
+ * being loaded at all (`src/lib/meta-pixel.ts`). Both are driven by the same decision — the
+ * cookie banner's marketing toggle, which is also what sets `advertising_opt_in`. There is
+ * deliberately no second question at signup. See docs/CONSENT.md.
  */
 export async function handleStripeWebhook(request: Request, deps: WebhookDeps): Promise<Response> {
   if (request.method !== 'POST') {
@@ -132,6 +150,37 @@ export async function handleStripeWebhook(request: Request, deps: WebhookDeps): 
       message: error instanceof Error ? error.message : String(error)
     });
     return json({ error: 'Could not record the subscription.' }, 500);
+  }
+
+  // Conversion forwarding, at the one point where the event is known to be genuine AND to
+  // have changed something.
+  //
+  // `outcome === 'applied'` is not belt-and-braces, it is the whole protection against
+  // double-counting. Stripe retries on any non-2xx and re-delivers on its own schedule, so
+  // this handler sees the same event more than once as a matter of routine. The entitlement
+  // RPC claims the event id atomically, so the second delivery returns `duplicate` and the
+  // Purchase is not sent again. Forwarding on event type alone would report one sale as
+  // several — and inflated conversions are worse than missing ones, because Meta optimises
+  // towards whatever we tell it is working.
+  //
+  // Awaited, not fired and forgotten: a serverless function is frozen the moment it
+  // responds, so an un-awaited promise here is a request that may never leave the machine.
+  // The outcome is never allowed to change the response — see below.
+  if (outcome === 'applied' && deps.conversions) {
+    const signal = purchaseSignal(event, deps.config);
+    if (signal) {
+      try {
+        await deps.conversions.forwardPurchase(signal);
+      } catch (error) {
+        // Unreachable in practice — forwardPurchase catches its own failures — but this
+        // handler grants paid plans, and measurement must never be able to break billing.
+        // A 500 here would make Stripe retry an event that has already been applied.
+        console.error('[stripe-webhook] conversion forwarding threw', {
+          event: event.id,
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
   }
 
   if (UNACTIONABLE.includes(outcome)) {
