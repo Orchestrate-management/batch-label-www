@@ -6,6 +6,21 @@ import { Button } from './ui/Button';
 
 const OPEN_EVENT = 'bl:open-cookie-settings';
 
+/**
+ * Opens the banner from a URL, so somewhere that is not this site can send
+ * someone straight to it.
+ *
+ * The product app needs this. Advertising consent is the banner's marketing
+ * toggle and is changed there and nowhere else, so app.batchlabel.xyz has to be
+ * able to point at it — and the banner is a component, not a page, so there was
+ * no address to point at. `?cookie-settings=1` on any page is now that address.
+ *
+ * It is a query parameter rather than a hash because a hash is also what an
+ * in-page anchor uses, and this must not fire because someone linked to a
+ * heading.
+ */
+export const COOKIE_SETTINGS_PARAM = 'cookie-settings';
+
 /** Called from the footer link so a maker can change their mind at any time. */
 export function openCookieSettings() {
   if (typeof window === 'undefined') return;
@@ -44,6 +59,26 @@ export function CookieBanner() {
       setVisible(true);
     };
     window.addEventListener(OPEN_EVENT, onOpen);
+
+    // Arriving from the product app with ?cookie-settings=1 opens the panel as
+    // though the footer link had been pressed, focus and all — someone sent here
+    // to change one setting should land on it, not on a page with a link to it.
+    //
+    // The parameter is then removed from the address bar. Leaving it there means
+    // a refresh, a back button or a shared link re-opens the banner over
+    // whatever the person went on to read.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get(COOKIE_SETTINGS_PARAM) !== null) {
+      params.delete(COOKIE_SETTINGS_PARAM);
+      const query = params.toString();
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
+      );
+      onOpen();
+    }
+
     return () => window.removeEventListener(OPEN_EVENT, onOpen);
   }, []);
 

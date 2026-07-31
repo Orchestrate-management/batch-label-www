@@ -3,6 +3,7 @@ import { usePageMeta } from '../../lib/seo';
 import { useAuth } from '../../lib/auth';
 import { openBillingPortal, startCheckout } from '../../lib/billing';
 import { fetchEntitlement, summarisePlan, type Entitlement } from '../../lib/entitlements';
+import { APP_URL } from '../../lib/app-handoff';
 import { Button } from '../../components/ui/Button';
 import { Alert } from '../../components/ui/Field';
 import { MarketingPreferences } from '../../components/dashboard/MarketingPreferences';
@@ -88,6 +89,30 @@ export function Account() {
           Need to change your email or business name? Email hello@batchlabel.co.uk and we will do it
           for you while the self service settings are being built.
         </p>
+      </section>
+
+      {/*
+        Password changes live in the app, not here. There is no form on this page
+        on purpose: two places to change a password is two places to get the
+        re-authentication rule wrong, and the app's version asks for the current
+        password before it changes anything. This links rather than duplicates.
+       */}
+      <section aria-labelledby="password" className="rounded-2xl border border-paper-edge bg-white p-5 sm:p-6">
+        <h2 id="password" className="font-display text-[1.1rem] font-semibold text-ink">
+          Password
+        </h2>
+        <p className="mt-2 max-w-prose text-sm leading-relaxed text-ink-soft">
+          Change your password in the app, under Settings. It asks for your current password first,
+          and it signs out every other device once the new one is saved.
+        </p>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <Button href={`${APP_URL}/settings/account`} variant="secondary">
+            Open account settings
+          </Button>
+          <Button href="/forgot-password" variant="quiet">
+            Forgotten it? Reset by email
+          </Button>
+        </div>
       </section>
 
       <MarketingPreferences />

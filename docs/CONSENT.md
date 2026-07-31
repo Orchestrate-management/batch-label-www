@@ -11,7 +11,7 @@ two contradictory records are worse than none — a contradiction proves we did 
 | Purpose | Asked | Stored | Changed |
 | --- | --- | --- | --- |
 | Terms of Service | Signup form, and `/finish-setup` after Google | `brand_memberships.consents.terms` + `consent_events` | Not withdrawable. It is a contract, not consent. |
-| Marketing email | Signup form, one optional box | `brand_memberships.marketing_email_opt_in` | Account and billing, or the unsubscribe link in any email |
+| Marketing email | Signup form, one optional box | `brand_memberships.marketing_email_opt_in` | Account and billing here, Settings → Account in the app, or the unsubscribe link in any email |
 | Advertising and retargeting | Cookie banner, the **Marketing** toggle. Nowhere else. | Browser: `bl_consent`. Account: `brand_memberships.advertising_opt_in` | Cookie settings, from the footer of any page |
 | Analytics | Cookie banner, the **Analytics** toggle | `bl_consent` only. Nothing account level. | Cookie settings |
 
@@ -64,6 +64,21 @@ A second gap, by design: the banner choice lives in one browser. On a new device
 banner asks again, and answering it re-syncs the account. The account record therefore
 holds the most recent decision the user made *on a device where they were signed in*.
 
+A third, worth naming because it looks like a bug: the banner choice does not cross to
+`app.batchlabel.xyz`, even in the same browser. It is kept in `localStorage`, which is
+partitioned per origin, and mirrored to a `bl_consent` cookie written with no `domain`
+attribute — host-only on `www.batchlabel.xyz`, unlike the session cookie, which is
+deliberately scoped to `.batchlabel.xyz`. So the app cannot read the banner and must not
+pretend to. It does not need to: it loads no analytics or advertising tag, so there is
+nothing device-level for it to gate, and the account flag it *can* read is the same
+decision recorded server-side. If the app ever loads a tag of its own, this becomes a real
+problem and the answer is to widen the cookie to `.batchlabel.xyz` and read it on both
+sides — not to ask the question twice.
+
+(`getStoredConsent()` only ever reads `localStorage`. The cookie is written and never read
+back, so it is a fallback in name only. Harmless today, and a trap for whoever assumes
+otherwise.)
+
 ## What is recorded, and where
 
 Three representations, written together in one transaction by `set_consent()` or
@@ -88,7 +103,7 @@ Two things make a record provable rather than merely stored:
 
 | Consent | Route |
 | --- | --- |
-| Marketing email | Account and billing → the box. Or the unsubscribe link. |
+| Marketing email | Account and billing → the box. Or the app's Settings → Account. Or the unsubscribe link. |
 | Advertising | Cookie settings, linked from the footer of every page, the cookie policy and the privacy policy. |
 | Analytics | The same place. |
 | Terms | Not withdrawable. Closing the account ends the contract. |
@@ -118,23 +133,45 @@ A stored opt-in that no code reads is theatre. Today:
 ## The contract for the product app
 
 `app.batchlabel.xyz` (repo `Batch-Label-Product-Application`) shares the session cookie on
-`.batchlabel.xyz` and the same Supabase project. Its consent responsibilities are entirely
-negative:
+`.batchlabel.xyz` and the same Supabase project.
 
-1. **Never write consent.** Not to `brand_memberships`, not to `consent_events`, not
-   through any endpoint of its own. Every write goes through `set_consent()` or
-   `complete_oauth_signup()`, which take identity from `auth.uid()` and stamp the time
-   server-side. RLS gives the browser no write path to either table, and that is not an
-   oversight to work around.
-2. **Never ask again.** The app must not show its own cookie banner, marketing checkbox or
-   advertising toggle. Asking a second time creates the exact contradiction this document
-   exists to prevent. Link to the marketing site's cookie settings and account area.
-3. **Read under RLS, with the user's own session.** `advertising_opt_in`,
+1. **Never invent a write path.** No table write, ever — not to `brand_memberships`, not
+   to `consent_events` — and no endpoint of its own. RLS gives the browser no write path
+   to either table and that is not an oversight to work around.
+
+   `set_consent()` is not a way around that rule, it is the rule. It is granted to
+   `authenticated`, it takes identity from `auth.uid()`, it builds the acceptance boolean
+   and the timestamp server-side, and it writes the flag, the snapshot and the audit row
+   in one transaction. It is what this site calls from its own account area. The app calls
+   the same function for the same consent, so there is still exactly one way a consent is
+   recorded, whichever screen the maker used.
+2. **Change what it may, ask nothing new.** The app must not show its own cookie banner or
+   an advertising toggle. Advertising is the banner's marketing choice and the app cannot
+   even see it — `bl_consent` lives in `localStorage` and in a host-only cookie on
+   `www.batchlabel.xyz`, so neither crosses to the app. The app shows the stored
+   `advertising_opt_in` as state, read-only, and links to
+   `/cookie-policy?cookie-settings=1`, which opens the banner directly.
+
+   The marketing email box is the exception, and it is a change control rather than a new
+   question: the same consent, the same wording, the same function, in the place a maker
+   who lives in the product will actually look. Both screens read the same row, so neither
+   can show a stale answer for long.
+3. **Keep the version strings identical.** The app has its own copy of `agreements.ts`.
+   Bump a version here and it must be bumped there in the same change, or one piece of
+   wording ends up with two version numbers in `consent_events`, which defeats the only
+   purpose the field has. There is a test in that repo pinning the values.
+4. **Read under RLS, with the user's own session.** `advertising_opt_in`,
    `marketing_email_opt_in` and `consents` are readable on the caller's own membership
    row. No service-role key in the app.
-4. **Honour what it reads.** If the app ever forwards data to an advertising platform,
+5. **Honour what it reads.** If the app ever forwards data to an advertising platform,
    check `advertising_opt_in` first and fail closed.
-5. **Assume denied when unknown.** A failed read is not consent.
+6. **Assume denied when unknown.** A failed read is not consent.
+
+One thing this does not record, and should. `set_consent()` stamps every post-signup
+change with `source = 'account_settings'`, so an audit row cannot say which of the two
+sites the maker was on. That is a missing detail rather than a wrong one — the user, the
+consent, the version and the time are all correct — but a `source` argument on the
+function would fix it, and it needs a migration.
 
 If the app needs a genuinely new permission — one this document does not already cover —
 add it here first, with which system owns it, before writing the UI.
