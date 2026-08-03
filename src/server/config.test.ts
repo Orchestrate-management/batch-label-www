@@ -36,10 +36,20 @@ describe('readServerConfig', () => {
 
   /** Two independent gates on the penny price. The flag is the second one. */
   it('leaves rail-test checkout off unless the flag is exactly the string true', () => {
-    expect(readServerConfig({}).allowRailTestCheckout).toBe(false);
-    expect(readServerConfig({ ALLOW_RAIL_TEST_CHECKOUT: 'false' }).allowRailTestCheckout).toBe(false);
-    expect(readServerConfig({ ALLOW_RAIL_TEST_CHECKOUT: '1' }).allowRailTestCheckout).toBe(false);
-    expect(readServerConfig({ ALLOW_RAIL_TEST_CHECKOUT: 'true' }).allowRailTestCheckout).toBe(true);
+    // Unset authorises nobody, which is the state production sits in until someone is
+    // deliberately added. An empty list is the safe default; a truthy-looking string is not.
+    expect(readServerConfig({}).railTestEmails).toEqual([]);
+    expect(readServerConfig({ RAIL_TEST_ALLOWED_EMAILS: '' }).railTestEmails).toEqual([]);
+    expect(readServerConfig({ RAIL_TEST_ALLOWED_EMAILS: '   ' }).railTestEmails).toEqual([]);
+
+    // Normalised on the way in, so no comparison downstream has to remember to.
+    expect(readServerConfig({ RAIL_TEST_ALLOWED_EMAILS: 'Rhys@Orchestrate.Management' }).railTestEmails).
+    toEqual(['rhys@orchestrate.management']);
+
+    // Several addresses, with the spacing a human actually types.
+    expect(
+      readServerConfig({ RAIL_TEST_ALLOWED_EMAILS: 'a@x.com, B@Y.com ,,  c@z.com ' }).railTestEmails
+    ).toEqual(['a@x.com', 'b@y.com', 'c@z.com']);
   });
 
   it('reads the rail-test price id and the portal configuration', () => {

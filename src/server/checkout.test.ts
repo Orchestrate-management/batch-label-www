@@ -5,7 +5,8 @@ import {
   checkoutMetadata,
   resolveInterval,
   sanitiseAttribution,
-  resolveRailTest,
+  railTestAllowedFor,
+  railTestRequested,
   resolveTier,
   sanitiseMetaCookies } from
 './checkout';
@@ -62,17 +63,51 @@ describe('resolveTier', () => {
   });
 });
 
-describe('resolveRailTest', () => {
-  it('needs BOTH the request field and the server flag', () => {
-    expect(resolveRailTest(true, true)).toBe(true);
-    expect(resolveRailTest(true, false)).toBe(false);
-    expect(resolveRailTest(false, true)).toBe(false);
+describe('railTestRequested', () => {
+  it('honours nothing but a real boolean true', () => {
+    expect(railTestRequested(true)).toBe(true);
+    for (const value of ['true', 1, {}, 'rail_test', undefined, null, false]) {
+      expect(railTestRequested(value)).toBe(false);
+    }
+  });
+});
+
+describe('railTestAllowedFor', () => {
+  const ALLOWED = ['rhys@orchestrate.management'];
+
+  it('lets a listed address through', () => {
+    expect(railTestAllowedFor('rhys@orchestrate.management', ALLOWED)).toBe(true);
   });
 
-  it('honours nothing but a real boolean true', () => {
-    for (const value of ['true', 1, {}, 'rail_test', undefined]) {
-      expect(resolveRailTest(value, true)).toBe(false);
+  it('refuses everybody else', () => {
+    expect(railTestAllowedFor('someone@example.com', ALLOWED)).toBe(false);
+    expect(railTestAllowedFor('maker@candles.co.uk', ALLOWED)).toBe(false);
+  });
+
+  it('is case-insensitive and tolerates stray whitespace', () => {
+    // Email case is not significant, and a space in an env var is not a security decision
+    // anybody meant to make.
+    expect(railTestAllowedFor('  Rhys@Orchestrate.Management  ', ALLOWED)).toBe(true);
+    expect(railTestAllowedFor('RHYS@ORCHESTRATE.MANAGEMENT', ALLOWED)).toBe(true);
+  });
+
+  it('refuses when there is no email at all', () => {
+    // A token that carries no email must not be treated as a match against anything.
+    for (const value of [null, undefined, '', '   ']) {
+      expect(railTestAllowedFor(value, ALLOWED)).toBe(false);
     }
+  });
+
+  it('refuses everyone when the allow-list is empty', () => {
+    // The default state of production. An unset env var must authorise nobody rather than
+    // everybody — the failure that matters is a 30p price open to every customer.
+    expect(railTestAllowedFor('rhys@orchestrate.management', [])).toBe(false);
+  });
+
+  it('does not match on a substring or a lookalike domain', () => {
+    expect(railTestAllowedFor('rhys@orchestrate.management.evil.com', ALLOWED)).toBe(false);
+    expect(railTestAllowedFor('notrhys@orchestrate.management', ALLOWED)).toBe(false);
+    expect(railTestAllowedFor('rhys@orchestrate.managemen', ALLOWED)).toBe(false);
   });
 });
 

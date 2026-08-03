@@ -45,13 +45,13 @@
  * country, with no presentment conversion.
  */
 
-import { allowedOrigins, checkoutMetadata, corsHeaders, createAdminClient, displayNameForPlan, fail, findEntitlement, findMembership, json, planEntryForPrice, preflightResponse, priceIdForTier, readServerConfig, resolveInterval, resolveRailTest, resolveTier, returnUrl, sanitiseMetaCookies, userFromRequest } from './_server.js';
+import { allowedOrigins, checkoutMetadata, corsHeaders, createAdminClient, displayNameForPlan, fail, findEntitlement, findMembership, json, planEntryForPrice, preflightResponse, priceIdForTier, readServerConfig, resolveInterval, railTestAllowedFor, railTestRequested, resolveTier, returnUrl, sanitiseMetaCookies, userFromRequest } from './_server.js';
 import Stripe from 'stripe';
 
 interface CheckoutRequestBody {
   tier?: unknown;
   interval?: unknown;
-  /** The £0.01 rail test. Ignored unless ALLOW_RAIL_TEST_CHECKOUT is on. */
+  /** The 30p rail test. Honoured only for emails on RAIL_TEST_ALLOWED_EMAILS. */
   railTest?: unknown;
   attribution?: unknown;
   /** Meta's `_fbp` / `_fbc` cookies, sent only when advertising consent is granted. */
@@ -79,7 +79,9 @@ export default {
     // (1) TIER — allow-listed, never coerced. Absent or unrecognised is a 400, not a sale of
     //     whichever tier happened to be the default.
     const tier = resolveTier(body?.tier);
-    const railTest = resolveRailTest(body?.railTest, config.allowRailTestCheckout);
+    // INTENT ONLY. Whether it is ALLOWED depends on who is asking, and nobody has been
+    // identified yet — that check lives after userFromRequest, below.
+    const railTest = railTestRequested(body?.railTest);
     if (!tier && !railTest) {
       return fail({ status: 400, message: 'Choose a plan first.', detail: `tier=${String(body?.tier)}` }, cors);
     }
@@ -133,6 +135,24 @@ export default {
       // signed in — so a 401 here means an expired token, not "please make an account".
       return fail(
         { status: 401, message: 'Your session has expired. Sign in again and we will bring you straight back to billing.' },
+        cors
+      );
+    }
+
+    // (5) THE RAIL TEST IS PER-PERSON. Checked here, against the email on the VERIFIED
+    //     token, and never against anything in the request body — otherwise the 30p price
+    //     would belong to whoever thought to send `railTest: true`.
+    //
+    //     Placed after authentication rather than before because "may this person" has no
+    //     answer until there is a person. Nothing has been created at this point: no Stripe
+    //     session, no customer, no subscription.
+    if (railTest && !railTestAllowedFor(user.email, config.railTestEmails)) {
+      return fail(
+        {
+          status: 403,
+          message: 'That plan is not available on your account.',
+          detail: `rail test refused for ${user.email ?? 'unknown email'}`
+        },
         cors
       );
     }

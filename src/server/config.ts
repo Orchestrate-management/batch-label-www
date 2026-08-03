@@ -39,8 +39,18 @@ export interface ServerConfig {
   portalConfigurationId?: string;
   /** The £0.01 rail-test price. Never reachable through the `tier` field. */
   railTestPriceId?: string;
-  /** Off unless explicitly enabled. Gates the `railTest: true` request field. */
-  allowRailTestCheckout: boolean;
+  /**
+   * Who may buy the rail-test price, by email. Empty means nobody.
+   *
+   * This replaced a global `ALLOW_RAIL_TEST_CHECKOUT` boolean. That flag was all-or-nothing:
+   * on, and the 30p price was purchasable by any signed-in customer; off, and it could not be
+   * exercised at all. So the live rail could only be tested by briefly opening a real
+   * discount to everyone — and the window was as long as somebody remembered to close it.
+   *
+   * An allow-list is strictly better: the rail stays testable indefinitely, by named people,
+   * with no window during which anyone else could find it.
+   */
+  railTestEmails: readonly string[];
   /** Comma-separated extra CORS origins (e.g. a preview deployment of the app repo). */
   extraOrigins?: string;
 }
@@ -78,9 +88,14 @@ export function readServerConfig(env: Env): ServerConfig {
     env,
     portalConfigurationId: env.STRIPE_PORTAL_CONFIGURATION_ID?.trim() || undefined,
     railTestPriceId: env[RAIL_TEST_PRICE_ENV_VAR]?.trim() || undefined,
-    // Anything other than the exact string 'true' is off. An env var accidentally set to '0'
-    // or 'false' must not enable a live penny price on a public endpoint.
-    allowRailTestCheckout: env.ALLOW_RAIL_TEST_CHECKOUT === 'true',
+    // Normalised here, once, so every comparison downstream is against a lower-cased trimmed
+    // address and no caller has to remember to do it. An unset var yields an empty list,
+    // which authorises nobody — the safe default, and the state production sits in until
+    // somebody is deliberately added.
+    railTestEmails: (env.RAIL_TEST_ALLOWED_EMAILS ?? '').
+    split(',').
+    map((entry) => entry.trim().toLowerCase()).
+    filter(Boolean),
     extraOrigins: env.STRIPE_ALLOWED_ORIGINS
   };
 }

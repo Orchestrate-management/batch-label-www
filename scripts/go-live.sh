@@ -129,10 +129,11 @@ vercel env rm STRIPE_PORTAL_CONFIGURATION_ID production --yes >/dev/null 2>&1 &&
   ok "removed STRIPE_PORTAL_CONFIGURATION_ID (was a test-mode id)" || \
   echo "  (STRIPE_PORTAL_CONFIGURATION_ID was not set — fine)"
 
-# Belt and braces: this must never be set in production. Set, it makes the 30p rail-test
-# price purchasable by an ordinary customer.
+# The old global flag, removed if it lingers. It made the rail-test price purchasable by any
+# signed-in customer; RAIL_TEST_ALLOWED_EMAILS replaced it with a named allow-list, which is
+# set deliberately rather than by a deploy script.
 vercel env rm ALLOW_RAIL_TEST_CHECKOUT production --yes >/dev/null 2>&1 && \
-  ok "ensured ALLOW_RAIL_TEST_CHECKOUT is unset" || true
+  ok "removed the obsolete ALLOW_RAIL_TEST_CHECKOUT flag" || true
 
 say "5. Deploying"
 vercel deploy --prod --yes >/dev/null 2>&1 || true

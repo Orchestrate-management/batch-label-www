@@ -311,7 +311,7 @@ async function archiveLegacy(mode: ModeContext, productIds: string[]): Promise<v
  * 502s, while the branch that exists to report a MISSING portal id never fires because the
  * var IS set. The result reads as a Stripe outage rather than an unset env var.
  *
- * `ALLOW_RAIL_TEST_CHECKOUT` is never emitted at all. With `--live` the targets here are
+ * `RAIL_TEST_ALLOWED_EMAILS` is never emitted at all. With `--live` the targets here are
  * ['production'], so pasting it would set one of the two gates the rail-test checkout
  * requires — permanently, in live mode — and the £0.01 item is then purchasable by an
  * ordinary customer, which the decided pricing forbids outright. It is a flag for the minutes
@@ -368,9 +368,9 @@ function envBlock(): string {
     lines.push('#     send it to Stripe and every "Manage billing" click would 502, while the check');
     lines.push('#     that reports a missing portal id stays silent because the var is set.');
   }
-  lines.push('#   ALLOW_RAIL_TEST_CHECKOUT — set by hand for the minutes a live rail test takes,');
-  lines.push('#     then removed. Left set it makes the rail-test item permanently purchasable,');
-  lines.push('#     which it must never be to an ordinary customer.');
+  lines.push('#   RAIL_TEST_ALLOWED_EMAILS — a comma-separated allow-list of the people who may');
+  lines.push('#     buy the rail-test price. Unset authorises nobody. It is not emitted here');
+  lines.push('#     because who may run a live rail test is a decision, not a deployment step.');
   return lines.join('\n');
 }
 

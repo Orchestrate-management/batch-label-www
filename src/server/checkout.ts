@@ -73,12 +73,36 @@ export function resolveTier(value: unknown): PaidTier | null {
 }
 
 /**
- * The £0.01 rail test, requested through its own boolean and honoured only when the server
- * flag is on. Two independent gates, neither sufficient alone: the flag is unset in
- * production except for the minutes it takes to run a live rail test.
+ * Did the caller ask for the rail-test price? Intent only — this authorises nothing.
+ *
+ * Kept separate from the authorisation check on purpose. Asking is free and happens before
+ * the token is verified; being allowed depends on WHO is asking, which is not known until
+ * userFromRequest has returned. Collapsing the two would mean deciding before there is an
+ * identity to decide about.
  */
-export function resolveRailTest(value: unknown, allowed: boolean): boolean {
-  return allowed && value === true;
+export function railTestRequested(value: unknown): boolean {
+  return value === true;
+}
+
+/**
+ * May this person buy the rail-test price?
+ *
+ * `email` must come from the VERIFIED token (userFromRequest), never from the request body.
+ * The whole point is that the caller cannot nominate themselves — a body field saying
+ * "I am rhys" would make the 30p price purchasable by anyone who reads the network tab.
+ *
+ * Comparison is case-insensitive and trimmed because email case is not significant and a
+ * stray space in an env var is not a security decision anybody meant to make. An empty
+ * allow-list authorises nobody, which is where production sits by default.
+ */
+export function railTestAllowedFor(
+email: string | null | undefined,
+allowList: readonly string[])
+: boolean {
+  if (!email) return false;
+  const normalised = email.trim().toLowerCase();
+  if (!normalised) return false;
+  return allowList.includes(normalised);
 }
 
 /**
