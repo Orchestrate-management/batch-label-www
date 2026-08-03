@@ -11,6 +11,14 @@ Batchlabel is the first sub-brand; others reuse the same project and the same lo
 | `public.profiles`          | One row per user. Global, brand-agnostic identity.                      |
 | `public.brands`            | The sub-brand dimension. `slug` is the filter key (e.g. `batchlabel`).  |
 | `public.brand_memberships` | Which brand(s) a user belongs to. **Filter by `brand_slug`.**           |
+| `public.accounts`          | The business. What product data belongs to. Read-only to the browser.  |
+| `public.account_members`   | Who may act in an account. One row today: the owner. Read-only.        |
+| `public.specifications`    | The composition — one row per recipe. Keyed on `account_id`.           |
+| `public.products`          | The SKU — recipe x pack size x packaging. Keyed on `account_id`.       |
+
+The last four arrive in `migrations/20260803120000_account_data_schema.sql`; see
+[Accounts and product data](#accounts-and-product-data-migrations20260803120000_account_data_schemasql)
+below. **Nothing is keyed on `user_id`.**
 
 **Extending later:** if a field is common to most offerings, add a typed column to
 `brand_memberships`; if it is specific to one offering, put it in the `data` jsonb. That
@@ -141,10 +149,92 @@ Two things, kept apart on purpose:
 The view and the RPC also expose `account_id` — the account key, under its final name, one
 account per user for now — and `business_name`.
 
-**`sku_limit` is stored and displayed but not yet enforced.** Enforcement is a trigger over
-the SKU table, which does not exist yet; `can_modify` and `sku_count` ship with it, in the
-same migration, so the rule and the numbers reporting it arrive together. Until then a
-reader must treat both as *absent* — unknown, never zero and never false. A missing column
-must not become a lockout, and no customer-facing copy may claim an enforced limit.
+**`sku_limit` is now enforced.** It was not when this file first said so, and that paragraph
+outlived its subject by one migration — it promised that "`can_modify` and `sku_count` ship
+with the trigger, in the same migration", and
+`migrations/20260803120000_account_data_schema.sql` is that migration. The trigger
+(`enforce_sku_limit`) counts live products for the **account** before an insert, and both
+view columns are live. Customer-facing copy about the allowance is therefore not merely
+permitted, it has shipped — the product app renders it from `can_modify`.
+
+Two things a reader must still get right, and they are unchanged:
+
+- **Null is unknown, never zero and never false.** `sku_count` and `can_modify` are null
+  whenever no account resolves for the caller. Fail open on null: a missing or unreadable
+  column must never become a lockout.
+- **`can_modify` answers "how much", not "may you".** It is the allowance and nothing else.
+  A suspended member is refused by the RLS policy, not by the meter.
+
 The contract for the separate product app is [`../docs/ENTITLEMENTS.md`](../docs/ENTITLEMENTS.md);
 the founder's dashboard steps are [`../docs/STRIPE_SETUP.md`](../docs/STRIPE_SETUP.md).
+
+## Accounts and product data (`migrations/20260803120000_account_data_schema.sql`)
+
+The migration that makes a new signup a **virgin account** — no fixtures, ever — and makes a
+product that is really created when a maker creates it. Its own header is the interface
+document and is deliberately long; this is the map.
+
+**Everything keys on `account_id`. Nothing keys on `user_id`.** Team support is deferred, not
+cancelled, so the indirection exists from the first row rather than as a backfill over live
+customer data later.
+
+| Object | What it is |
+| --- | --- |
+| `public.accounts` | The business. `brand_slug`, `owner_user_id`, `name`. Created only by the provisioning path — the browser has no INSERT. |
+| `public.account_members` | The person's standing *inside* an account (`owner`/`admin`/`editor`/`viewer`, `active`/`suspended`/`removed`). |
+| `public.specifications` | The composition. Owns the four derivation inputs and **the UFI** — one UFI per recipe, not per pack size. |
+| `public.products` | The SKU: recipe x pack size x packaging. What the SKU meter counts. |
+| `public.is_member_of(uuid)` | The RLS predicate, callable for UI checks. |
+| `public.current_account_id()` | The column default for `account_id` on both data tables. |
+
+### Two gates, and both are checked
+
+`account_members.status` is **the person**; `brand_memberships.status` is **the business**.
+`is_member_of` requires both to be `active`, so suspending a business stops everyone in it —
+in the database, not merely in the UI. It consults **status only**: plan, plan_status and
+period end are deliberately not read, so a free, lapsed, past_due or downgraded customer
+keeps full read and write access to what they already have. A maker must be able to reprint
+a label for stock already on a shelf.
+
+Two consequences that are easy to meet unprepared:
+
+- A suspended caller's `select` returns **zero rows and no error**. An empty result is not
+  distinguishable, in this database, from a virgin account — and it should not be, because a
+  policy that raised would announce that rows exist. The app distinguishes them from
+  `entitlements.membership_status`, which it reads before it renders anything.
+- Do **not** enable `force row level security` on `accounts` or `account_members`. FORCE
+  applies RLS to the table owner too, which re-arms the policy recursion `is_member_of` is
+  SECURITY DEFINER to defuse.
+
+### The `account_id` contract (stated identically on both branches)
+
+1. The app **may and should** send `account_id` explicitly — the one it read from
+   `entitlements` for its brand. The INSERT policy is `with check (is_member_of(account_id))`,
+   so an explicit id weakens nothing; isolation rests on the policy, never on the default.
+2. When it does not know, it **omits the column** and takes the default.
+3. `current_account_id()` returns NULL when the caller has none or more than one, and will
+   not be taught to pick. A default that chooses between two of a person's accounts mis-files
+   their product silently.
+4. **The same id scopes every read, and a null id means "do not read" — never "read without
+   a filter".** RLS makes an account's rows invisible to a non-member; it does not choose
+   between two accounts the same person belongs to. Dropping the filter widens the query to
+   the union of both.
+
+### Error codes
+
+Branch on `error.hint` first and on `error.code` only after. **23502 is unreachable** — RLS
+and the BEFORE INSERT triggers both answer before the NOT NULL constraint is reached, so a
+client branch testing for it has never fired.
+
+| Signal | Meaning |
+| --- | --- |
+| `P0001` hint `account_missing` | No active membership. Transient: finishing signup resolves it. |
+| `P0001` hint `account_ambiguous` | Two or more. The app must send an `account_id`. **Permanent until it does — never offer a retry.** |
+| `P0001` hint `sku_limit_reached` | The allowance. |
+| `42501`, no hint | A policy refusal, with three causes: an account that is not yours, a null `account_id`, or a suspended/departed membership. Deliberately uninformative, and the app must not dress it up as a diagnosis. |
+
+The migration asserts its own behaviour at apply time (section 11): the SKU rule fails open
+on an unknown allowance and is strict at the limit, every membership has an account and every
+account has a membership, `created_by` is pinned on both tables, and the null-account guard is
+attached in the trigger order it depends on. A failure there aborts the migration, which is
+the intent.
