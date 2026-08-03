@@ -282,7 +282,11 @@ stable
 security definer
 set search_path = public
 as $$
-  select case when count(*) = 1 then min(am.account_id) end
+  -- array_agg rather than min: Postgres has no min(uuid), and this failed to apply at all
+  -- until a rehearsal against a real server caught it. The guard is count(*) = 1, so the
+  -- aggregate only ever holds one element — it is picking the single row, not choosing
+  -- between several.
+  select case when count(*) = 1 then (array_agg(am.account_id))[1] end
     from public.account_members am
    where am.user_id = auth.uid()
      and am.status  = 'active';
