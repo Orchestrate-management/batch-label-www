@@ -50,7 +50,7 @@ export default {
       stripe,
       webhookSecret: config.stripeWebhookSecret,
       store: createEntitlementStore(admin),
-      config: { brand: config.brand, prices: config.prices },
+      config: { brand: config.brand, priceIndex: config.priceIndex },
       conversions
     });
   }

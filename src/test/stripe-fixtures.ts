@@ -17,6 +17,18 @@ export const CUSTOMER_ID = 'cus_test_1';
 export const SUBSCRIPTION_ID = 'sub_test_1';
 export const PRICE_MONTHLY = 'price_maker_monthly';
 export const PRICE_ANNUAL = 'price_maker_annual';
+export const PRICE_STUDIO_MONTHLY = 'price_studio_monthly';
+export const PRICE_CONSULTANT_ANNUAL = 'price_consultant_annual';
+export const PRICE_RAIL_TEST = 'price_rail_test_monthly';
+
+/** The env a fully configured deployment sets, for buildPriceIndex in the tests. */
+export const PRICE_ENV: Record<string, string> = {
+  STRIPE_PRICE_MAKER_MONTHLY: PRICE_MONTHLY,
+  STRIPE_PRICE_MAKER_ANNUAL: PRICE_ANNUAL,
+  STRIPE_PRICE_STUDIO_MONTHLY: PRICE_STUDIO_MONTHLY,
+  STRIPE_PRICE_CONSULTANT_ANNUAL: PRICE_CONSULTANT_ANNUAL,
+  STRIPE_PRICE_RAIL_TEST_MONTHLY: PRICE_RAIL_TEST
+};
 
 /** 2030-01-01T00:00:00Z, comfortably in the future so "is it active" is not clock-dependent. */
 export const PERIOD_END = 1893456000;
@@ -44,15 +56,17 @@ export function checkoutSessionCompleted(options: {
   paymentStatus?: string;
   mode?: string;
   email?: string | null;
+  /** The tier the session was created for. `null` writes no plan key at all. */
+  plan?: string | null;
   /** Extra metadata keys — the marketing half our own checkout writes (fbclid, fbp, ...). */
   metadata?: Record<string, string>;
 } = {}): Stripe.Event {
   const metadata: Record<string, string> = {
     brand: options.brand ?? 'batchlabel',
-    plan: 'maker',
     billing_interval: 'monthly',
     ...options.metadata
   };
+  if (options.plan !== null) metadata.plan = options.plan ?? 'maker';
   if (options.userId !== null) metadata.supabase_user_id = options.userId ?? USER_ID;
 
   return envelope(options.id ?? 'evt_checkout_1', 'checkout.session.completed', options.created ?? 1000, {
@@ -62,7 +76,12 @@ export function checkoutSessionCompleted(options: {
     customer: CUSTOMER_ID,
     subscription: SUBSCRIPTION_ID,
     payment_status: options.paymentStatus ?? 'paid',
-    amount_total: 1400,
+    // Prices are stored EXCLUSIVE of VAT, so the total carries the VAT Stripe added for the
+    // customer's country and the subtotal is the number the tier actually costs. A UK Maker
+    // monthly is 1400 + 280.
+    amount_total: 1680,
+    amount_subtotal: 1400,
+    total_details: { amount_tax: 280 },
     currency: 'gbp',
     customer_details: { email: options.email === null ? null : options.email ?? 'maker@example.com' },
     metadata
@@ -80,9 +99,29 @@ export function subscriptionEvent(options: {
   cancelAtPeriodEnd?: boolean;
   periodEnd?: number;
   trialEnd?: number | null;
+  /** Always 1 for a subscription we created. Set it to see the refusal path. */
+  quantity?: number;
+  /** A second item, which our own checkout never produces. */
+  extraPriceId?: string;
+  plan?: string | null;
 } = {}): Stripe.Event {
-  const metadata: Record<string, string> = { brand: 'batchlabel', plan: 'maker' };
+  const metadata: Record<string, string> = { brand: 'batchlabel' };
+  if (options.plan !== null) metadata.plan = options.plan ?? 'maker';
   if (options.userId !== null) metadata.supabase_user_id = options.userId ?? USER_ID;
+
+  const item = (priceId: string, id: string) => ({
+    id,
+    object: 'subscription_item',
+    // Where Stripe actually puts it now. See src/server/entitlements.ts.
+    current_period_end: options.periodEnd ?? PERIOD_END,
+    current_period_start: 1000,
+    quantity: options.quantity ?? 1,
+    price: {
+      id: priceId,
+      object: 'price',
+      recurring: { interval: priceId === PRICE_ANNUAL || priceId === PRICE_CONSULTANT_ANNUAL ? 'year' : 'month' }
+    }
+  });
 
   return envelope(
     options.id ?? 'evt_sub_1',
@@ -101,18 +140,8 @@ export function subscriptionEvent(options: {
       items: {
         object: 'list',
         data: [
-        {
-          id: 'si_test_1',
-          object: 'subscription_item',
-          // Where Stripe actually puts it now. See src/server/entitlements.ts.
-          current_period_end: options.periodEnd ?? PERIOD_END,
-          current_period_start: 1000,
-          price: {
-            id: options.priceId ?? PRICE_MONTHLY,
-            object: 'price',
-            recurring: { interval: options.priceId === PRICE_ANNUAL ? 'year' : 'month' }
-          }
-        }]
+        item(options.priceId ?? PRICE_MONTHLY, 'si_test_1'),
+        ...(options.extraPriceId ? [item(options.extraPriceId, 'si_test_2')] : [])]
 
       }
     }

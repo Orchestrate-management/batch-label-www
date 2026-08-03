@@ -3,12 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Stripe from 'stripe';
 import { handleStripeWebhook, type ApplyOutcome, type EntitlementStore } from './webhook';
 import type { ConversionForwarder, PurchaseSignal } from './meta-capi';
-import { buildPriceMap } from './entitlements';
+import { buildPriceIndex } from './plan-contract';
 import type { EntitlementIntent, IntentConfig } from './stripe-events';
 import {
   PERIOD_END_ISO,
-  PRICE_ANNUAL,
-  PRICE_MONTHLY,
+  PRICE_ENV,
   SUBSCRIPTION_ID,
   USER_ID,
   checkoutSessionCompleted,
@@ -26,10 +25,7 @@ const WEBHOOK_SECRET = 'whsec_test_secret_do_not_use_anywhere';
 
 const config: IntentConfig = {
   brand: 'batchlabel',
-  prices: buildPriceMap({
-    STRIPE_PRICE_MAKER_MONTHLY: PRICE_MONTHLY,
-    STRIPE_PRICE_MAKER_ANNUAL: PRICE_ANNUAL
-  })
+  priceIndex: buildPriceIndex(PRICE_ENV)
 };
 
 function signedRequest(payload: string, secret = WEBHOOK_SECRET): Request {

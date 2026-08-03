@@ -32,7 +32,9 @@ function signal(overrides: Partial<PurchaseSignal> = {}): PurchaseSignal {
     checkoutSessionId: 'cs_test_a1b2c3',
     supabaseUserId: USER_ID,
     eventTimeUnix: EVENT_TIME,
-    amountTotalMinor: 1400,
+    amountSubtotalMinor: 1400,
+    taxMinor: 280,
+    plan: 'maker',
     currency: 'gbp',
     fbclid: null,
     firstSeenAt: null,
@@ -262,14 +264,23 @@ describe('meta-capi: the Purchase payload', () => {
     config
   });
 
-  it('is a Purchase in GBP with the Stripe amount converted out of minor units', () => {
+  it('is a Purchase in GBP with the EX-VAT amount converted out of minor units', () => {
     const event = built().data[0];
     expect(event.event_name).toBe('Purchase');
+    // The subtotal, not the total. With tax-exclusive prices the total varies by the
+    // customer's country, and reporting that would make one tier worth different amounts by
+    // geography.
     expect(event.custom_data).toMatchObject({ currency: 'GBP', value: 14 });
   });
 
   it('converts the annual price correctly too', () => {
-    expect(built({ amountTotalMinor: 14000 }).data[0].custom_data.value).toBe(140);
+    expect(built({ amountSubtotalMinor: 14000 }).data[0].custom_data.value).toBe(140);
+  });
+
+  it('reports the tier that was bought, so a rail test is filterable out of ROAS', () => {
+    expect(built().data[0].custom_data.content_ids).toEqual(['maker']);
+    expect(built({ plan: 'consultant' }).data[0].custom_data.content_ids).toEqual(['consultant']);
+    expect(built({ plan: 'rail_test' }).data[0].custom_data.content_ids).toEqual(['rail_test']);
   });
 
   it('uppercases whatever currency Stripe reported rather than assuming', () => {

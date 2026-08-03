@@ -15,6 +15,22 @@
  * `Vary: Origin` is not optional. Without it a CDN can cache the response it built for
  * app.batchlabel.xyz and serve it, with the wrong ACAO header, to www — which fails in a
  * way that looks like a random intermittent CORS bug.
+ *
+ * TWO THINGS THAT WERE DECORATIVE AND ARE NOW LOAD-BEARING, now that checkout is launched
+ * from the app rather than from www:
+ *
+ *   * `https://app.batchlabel.xyz` on the list is the only thing making checkout work at
+ *     all. A "tidy up the allow-list" change that drops it takes billing down with a
+ *     browser-only error that never appears in server logs. There is a test asserting it by
+ *     name for exactly that reason.
+ *   * `STRIPE_ALLOWED_ORIGINS` is the app's preview-deploy lifeline: every Vercel preview of
+ *     the app repo is a distinct origin and is CORS-blocked until it is added here. Do NOT
+ *     relax isAllowedOrigin to a `*.vercel.app` suffix match — that is every Vercel user's
+ *     project, on endpoints that mint billing-portal links.
+ *
+ * The www origins STAY on the list, and that is a no-op rather than a judgement call: these
+ * functions are deployed on the www origin, so www's own calls are same-origin and need no
+ * ACAO header either way.
  */
 
 /** Origins that may call the billing endpoints with credentials. */
@@ -64,11 +80,21 @@ export function corsHeaders(origin: string | null, allowList: string[]): Record<
   return headers;
 }
 
-/** 204 response for an OPTIONS preflight. */
-export function preflightResponse(origin: string | null, allowList: string[]): Response {
+/**
+ * 204 response for an OPTIONS preflight.
+ *
+ * `methods` defaults to the billing endpoints' POST because they are the reason this module
+ * exists. GET /api/plans passes 'GET, OPTIONS': advertising a method an endpoint does not
+ * implement teaches a browser to send a request that will 405, which reads as a CORS bug.
+ */
+export function preflightResponse(
+origin: string | null,
+allowList: string[],
+methods = 'POST, OPTIONS')
+: Response {
   const headers: Record<string, string> = {
     ...corsHeaders(origin, allowList),
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': methods,
     'Access-Control-Allow-Headers': 'authorization, content-type',
     'Access-Control-Max-Age': '86400'
   };
