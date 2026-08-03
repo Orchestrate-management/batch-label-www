@@ -42,7 +42,9 @@
 --     data              jsonb   not null default '{}'
 --     version           integer not null default 1
 --     archived_at       timestamptz
---     created_by        uuid            default auth.uid()
+--     created_by        uuid            auth.uid(), PINNED BY THE DATABASE. A value sent
+--                                       by a signed-in client is discarded on insert and
+--                                       cannot be changed on update (section 7b).
 --     created_at, updated_at
 --     SELECT / INSERT / UPDATE for members. No DELETE grant — see section 7.
 --
@@ -60,7 +62,9 @@
 --     obligations       jsonb   not null default '{}'
 --     data              jsonb   not null default '{}'
 --     archived_at       timestamptz
---     created_by        uuid            default auth.uid()
+--     created_by        uuid            auth.uid(), PINNED BY THE DATABASE. A value sent
+--                                       by a signed-in client is discarded on insert and
+--                                       cannot be changed on update (section 7b).
 --     created_at, updated_at
 --     SELECT / INSERT / UPDATE / DELETE for members.
 --
@@ -68,9 +72,75 @@
 --   public.current_account_id()  -> uuid    the caller's account when they have exactly
 --                                           one; NULL when none or ambiguous. It is the
 --                                           column default, so an insert may omit
---                                           account_id entirely. Prefer passing
---                                           entitlements.account_id explicitly.
+--                                           account_id entirely.
 --   public.is_member_of(uuid)    -> boolean the RLS predicate, callable for UI checks.
+--
+-- =============================================================================
+-- THE account_id CONTRACT. Decided jointly with the app workstream; the same rule is
+-- written on both branches, because a contract only one side states is a preference.
+-- =============================================================================
+--
+--   1. THE APP MAY — AND SHOULD — SEND account_id EXPLICITLY. The id to send is the one
+--      it already reads back from entitlements / get_entitlement(BRAND_SLUG). Send it on
+--      every insert into specifications and products.
+--
+--   2. SENDING IT WEAKENS NOTHING. Both INSERT policies are
+--      `with check (public.is_member_of(account_id))`, so an id that is not one of the
+--      caller's own is refused by the database whatever the client believes about it.
+--      Isolation has never rested on the default; it rests on the policy. The default
+--      exists to spare the app an id it does not have — not to stop it supplying one it
+--      does.
+--
+--   3. WHEN THE APP DOES NOT KNOW, IT OMITS THE COLUMN and takes the default. Omitting is
+--      the honest expression of "we do not know". A null entitlements.account_id means
+--      unknown; it never means "this user has no account", and it must never be turned
+--      into a guess.
+--
+--   4. current_account_id() STAYS NULL WHEN AMBIGUOUS. It is not being taught to pick.
+--      A default that chooses between two of a person's accounts files a maker's product
+--      in the wrong workspace and does it silently; a refusal at the insert is strictly
+--      better than that. See section 4.
+--
+--   5. THE ERROR CODES, because the obvious one is wrong. A null account_id does NOT
+--      produce 23502. RLS is evaluated before table constraints, so it produces 42501 and
+--      the NOT NULL is never reached — measured, not assumed (section 7c). Match on the
+--      HINT, never on 23502 and never on the sentence:
+--
+--        hint 'account_missing'    -> no membership yet. Transient. "Still being set up"
+--                                     is true here and only here.
+--        hint 'account_ambiguous'  -> two or more. The app must send an account_id (1).
+--                                     Never tell this customer to wait; nothing is coming.
+--        hint 'sku_limit_reached'  -> the allowance (section 6).
+--        bare 42501, no hint       -> a policy refusal. It is deliberately uninformative
+--                                     and the app must not dress it up as a diagnosis.
+--
+-- WHY THIS WAY ROUND, rather than a brand-aware default. entitlements.account_id is
+-- already resolved per brand (section 10: the lateral matches the membership's own
+-- brand_slug) and the app already filters that read to its BRAND_SLUG — so in the one
+-- case that defeats the default, a person holding accounts on two Orchestrate brands, the
+-- app has exactly one correct answer in hand before it writes anything, and the
+-- deployment reading it is the deployment the answer belongs to. Teaching
+-- current_account_id() the brand instead would mean knowing the brand at insert time: a
+-- column default takes no argument, and this file will not hardcode a brand into a shared
+-- identity pool, so it would take a session claim this project does not issue. The
+-- app-side answer costs one field on an object already fetched.
+--
+-- WHAT THIS DOES NOT SOLVE, named so it is not mistaken for solved: entitlements resolves
+-- the account by OWNERSHIP (accounts.owner_user_id), so an invited member who owns no
+-- account reads account_id as null and falls back to the default. That is right while
+-- they hold one membership and ambiguous the day invites let them hold two. That case
+-- wants an account chooser in the UI, not a cleverer default, and invites are deferred.
+--
+-- WHAT RLS SCOPES, EXACTLY — because the policies are easy to read as more than they are.
+-- Every policy in section 7 is is_member_of(account_id). That makes an account's rows
+-- invisible to a NON-MEMBER. It does not choose between two accounts the same person
+-- belongs to: for a caller with two memberships an unfiltered `select from products`
+-- returns the union of both, and nothing the app reads back says which account a row came
+-- from. So A CLIENT THAT CAN HOLD MORE THAN ONE ACCOUNT MUST FILTER ITS READS BY
+-- account_id — the same id rule 1 has it send on writes. That is not belt-and-braces over
+-- RLS; it is the part RLS was never doing.
+--
+-- =============================================================================
 --
 -- Read surface (public.entitlements / public.get_entitlement) gains, this migration:
 --   account_id   NOW RESOLVES TO accounts.id. It used to be aliased from user_id
@@ -134,6 +204,18 @@
 -- identity pool for every Orchestrate offering (supabase/README.md). One person may hold
 -- a Batchlabel account and, later, an account on a sibling brand; those are two accounts
 -- and they must not see each other's products.
+--
+-- WHICH HALF OF THAT SENTENCE IS ENFORCED HERE, stated plainly because the policies below
+-- read like they cover all of it and they do not. The database keeps the two accounts
+-- apart from EVERYBODY ELSE: is_member_of makes each one's rows invisible to a non-member,
+-- and the composite foreign key on products makes a cross-account reference an error
+-- rather than a policy question. What the database does not do is keep them apart from
+-- EACH OTHER in the hands of the one person who is a member of both — RLS has no notion of
+-- "the account I am looking at right now", and this project issues no session claim that
+-- could give it one. That separation is the client's, per the account_id contract in the
+-- header: read with an account_id filter, write with an account_id. Enforcing it in the
+-- database would take a per-request account claim, which is a real design and not this
+-- migration.
 --
 -- unique (owner_user_id, brand_slug) is what makes provisioning idempotent and makes
 -- "the account for this membership" a single row. It is the constraint to drop on the
@@ -271,6 +353,24 @@ grant  execute on function public.is_member_of(uuid) to authenticated, service_r
 -- whichever account sorted first. An ambiguous default that picks one is how a maker's
 -- product lands in the wrong workspace.
 --
+-- THE NULL IS CORRECT AND IT IS NOT THE WHOLE ANSWER. Returning NULL is the right thing
+-- for a function that cannot know which account was meant; it is not, on its own, a way
+-- for a person with two accounts to create anything. Left there, that person's every
+-- insert fails forever — and not with the NOT NULL violation everyone expects, but with a
+-- bare RLS refusal that says nothing (section 7c measured it). The other half of the
+-- answer is in two places: the account_id contract in the header, where the app sends the
+-- account_id it read from entitlements for ITS brand and omits the column only when it
+-- genuinely has none; and section 7c, which makes the remaining null case say which of
+-- its two causes it is. Then this default carries the single-account case, which is every
+-- case today, and the ambiguous case is both avoidable and legible when it happens.
+--
+-- This function is therefore deliberately NOT taught to disambiguate. Two things were
+-- considered and rejected. Ordering by created_at and taking the first is the silent
+-- mis-filing above. Taking a brand argument cannot work as a column default (defaults take
+-- no arguments) and would otherwise need a per-request account or brand claim, which
+-- Supabase will not put in the JWT here without an access-token hook — a design worth
+-- having the day one login spans two brands, and not something to half-build now.
+--
 -- The service role has no auth.uid(), so a server-side insert gets NULL here and MUST
 -- pass account_id explicitly. That is deliberate: nothing running as service_role should
 -- be inferring whose data it is writing.
@@ -293,7 +393,7 @@ as $$
 $$;
 
 comment on function public.current_account_id() is
-  'The calling user''s account when they have exactly one; NULL when they have none or more than one. The column default for products.account_id and specifications.account_id, so a client insert need never handle an account id — and cannot supply the wrong one by omission. Returns NULL under service_role (no auth.uid()), which is intentional.';
+  'The calling user''s account when they have exactly one; NULL when they have none or more than one. The column default for products.account_id and specifications.account_id, so a client insert need never handle an account id — and cannot supply the wrong one by omission. CONTRACT: the app SHOULD send account_id explicitly (the one it read from entitlements for its brand) and omit it only when it has none; the INSERT policy refuses an account the caller is not a member of, so an explicit id weakens nothing. This function will not be taught to disambiguate — a default that picks between two of a person''s accounts mis-files their product silently. Returns NULL under service_role (no auth.uid()), which is intentional.';
 
 revoke all     on function public.current_account_id() from public, anon;
 grant  execute on function public.current_account_id() to authenticated, service_role;
@@ -370,6 +470,8 @@ comment on column public.specifications.data is
   'Shape-varying spec body: phases/application/paoMonths for a phased spec, items/ratings/model for a bill of materials. Common, queried fields get typed columns instead.';
 comment on column public.specifications.archived_at is
   'Soft delete. Set it rather than deleting: an archived specification keeps its products readable and printable.';
+comment on column public.specifications.created_by is
+  'Who created the row. Pinned to auth.uid() by a trigger (section 7b) and immutable thereafter — the INSERT/UPDATE grants are table-wide, so without that a client could file its work under a colleague. Null only for rows written with no JWT (service_role, migrations).';
 
 create table if not exists public.products (
   id               uuid primary key default gen_random_uuid(),
@@ -419,6 +521,8 @@ comment on column public.products.identifiers is
   'model / weee_registration / model_year. NEVER the UFI — that is on the specification (§1.2).';
 comment on column public.products.archived_at is
   'Soft delete, and the meter''s definition of "live". An archived product does not count against sku_limit and stays fully readable and printable (§6.1: never make an existing label unprintable).';
+comment on column public.products.created_by is
+  'Who created the row. Pinned to auth.uid() by a trigger (section 7b) and immutable thereafter. Null only for rows written with no JWT (service_role, migrations).';
 
 alter table public.specifications drop constraint if exists specifications_kind_check;
 alter table public.specifications
@@ -573,8 +677,15 @@ declare
   v_limit integer;
   v_count integer;
 begin
-  -- The NOT NULL constraint rejects this a moment later with a better message than any
-  -- we could raise, and there is no account to meter against.
+  -- No account to meter against, and the allowance is not the interesting thing that went
+  -- wrong. Section 7c's trigger answers this case with account_missing or
+  -- account_ambiguous — and it is named to sort before this one, so on INSERT it has
+  -- already raised and this line is unreachable. It stays as the guard for any future
+  -- path that reaches the meter another way.
+  --
+  -- (It used to say the NOT NULL constraint would reject the row "a moment later with a
+  -- better message". That was wrong: RLS runs before constraints, so the row dies on the
+  -- policy with a bare 42501 and the constraint is never reached. See section 7c.)
   if new.account_id is null then
     return new;
   end if;
@@ -682,6 +793,14 @@ create trigger products_enforce_sku_limit_on_update
 -- is exactly why the right one has to be written now: the day a second member exists,
 -- this file needs no edit.
 --
+-- READ THE PREDICATE AS WHAT IT SAYS: "an account you are a member of", not "the account".
+-- These policies keep other people out. They do not pick between two accounts one person
+-- belongs to, and there is no way for them to — a policy sees the row and the caller, and
+-- nothing tells it which workspace the caller thinks they are in. A client that can hold
+-- two accounts filters its own reads by account_id (header, THE account_id CONTRACT). Said
+-- here as well as in the header because this is the section a reader lands on when they
+-- want to know what "user X only accesses user X's data" is actually worth.
+--
 -- accounts and account_members are READ ONLY to the browser. They are the anchor the
 -- allowance is resolved through, so a client that could INSERT an account_members row
 -- could hand itself a colleague's data, and a client that could INSERT an account could
@@ -763,6 +882,201 @@ grant all on public.accounts        to service_role;
 grant all on public.account_members to service_role;
 grant all on public.specifications  to service_role;
 grant all on public.products        to service_role;
+
+-- ---------------------------------------------------------------------------
+-- 7b. created_by IS THE DATABASE'S ANSWER, NOT THE CLIENT'S.
+--
+-- The grants above are table-wide, and `grant insert on public.specifications to
+-- authenticated` covers every column of the table — created_by included. No policy narrows
+-- it either: every predicate in section 7 tests account_id and nothing else. So without
+-- what follows, a raw PostgREST call
+--
+--   POST /rest/v1/specifications
+--     {"name":"x","category_id":"home-fragrance","created_by":"<a colleague's user id>"}
+--
+-- succeeds and files the row under that colleague, and a PATCH rewrites the attribution of
+-- an existing row afterwards, on either table.
+--
+-- This is not a cross-account write — account_id must still be an account the caller
+-- belongs to — so with one member per account the only person it deceives is its author,
+-- and on its own it would be worth a note rather than a trigger. It stops being harmless
+-- at precisely the point section 2 is built for: the invite flow, where 'viewer' exists
+-- because "who signed this off" is the trail the whole product keeps (§5.4). An editor who
+-- can attribute a composition change to the competent person who signs the sheets off has
+-- broken that trail, and the row does not say so. Attribution has to be unforgeable BEFORE
+-- there is a second person to forge it onto, because the rows written in between are the
+-- ones nobody re-examines.
+--
+-- Secondary, and the reason not to leave it for the invites migration: created_by is a
+-- foreign key to auth.users, so a supplied uuid coming back 23503 rather than 201 answers
+-- "is this a real user id?" for any signed-in caller. Pinning the column throws the
+-- client's value away before the constraint is checked, and the oracle goes with it.
+--
+-- THE RULE, and it is this file's rule everywhere else too: a session that HAS an
+-- auth.uid() does not get to choose an identity — created_by is overwritten with it on
+-- insert and frozen on update. A session with NO auth.uid() (service_role, a migration,
+-- psql) is left exactly as it is: nothing running there is inferring whose data it writes,
+-- and a server-side repair of a mis-attributed row has to stay possible. The same
+-- asymmetry as current_account_id(), for the same reason.
+--
+-- A trigger rather than column-level grants. `grant insert (name, category_id, ...)` would
+-- have to be re-issued in full, on both tables, every time a column is added, and the
+-- failure mode of forgetting is a column nobody can write — discovered by a customer. The
+-- trigger names one column and survives the next one.
+--
+-- Not SECURITY DEFINER: it reads auth.uid() and touches NEW, and needs no privilege it
+-- would not otherwise have. search_path is pinned all the same, so a caller cannot shadow
+-- what `auth.uid()` resolves to.
+-- ---------------------------------------------------------------------------
+create or replace function public.pin_created_by()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  -- No JWT: service_role, a migration, or psql. Trusted, and deliberately not
+  -- second-guessed — see the rule above.
+  if auth.uid() is null then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    new.created_by := auth.uid();
+  else
+    -- Immutable once written.
+    --
+    -- The TG_OP branch is not decoration. OLD carries no prior row on an INSERT (PG 18
+    -- reads it as null; older versions raise instead — checked, because the comment that
+    -- was here first claimed the opposite), so a single unguarded
+    -- `new.created_by := old.created_by` would null the column out on every insert and
+    -- undo the pin. It has to be two branches.
+    new.created_by := old.created_by;
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function public.pin_created_by() is
+  'BEFORE INSERT OR UPDATE on specifications and products: sets created_by to auth.uid() on insert and freezes it on update, so a signed-in caller cannot attribute a row to somebody else through the table-wide INSERT/UPDATE grants. Leaves the row alone when there is no auth.uid() (service_role, migrations), which keeps server-side repair possible. Also closes the auth.users existence oracle a client-supplied created_by would otherwise give.';
+
+revoke all on function public.pin_created_by() from public, anon, authenticated;
+
+-- One trigger per table covering both events. The SKU meter had to be split in two because
+-- a WHEN clause may not reference OLD on an INSERT; this one branches on TG_OP inside the
+-- body, where that restriction does not apply, so one trigger is enough.
+drop trigger if exists specifications_pin_created_by on public.specifications;
+create trigger specifications_pin_created_by
+  before insert or update on public.specifications
+  for each row execute function public.pin_created_by();
+
+drop trigger if exists products_pin_created_by on public.products;
+create trigger products_pin_created_by
+  before insert or update on public.products
+  for each row execute function public.pin_created_by();
+
+-- ---------------------------------------------------------------------------
+-- 7c. "NO ACCOUNT" HAS TO BE SAYABLE. The NOT NULL constraint cannot say it.
+--
+-- THE FACT THIS SECTION EXISTS FOR, because it is not what anybody assumes and it was
+-- found by running it rather than by reading it:
+--
+--   A null account_id does NOT come back as a NOT NULL violation (23502). It comes back
+--   as 42501, "new row violates row-level security policy".
+--
+-- PostgreSQL evaluates the RLS WITH CHECK expression BEFORE it checks table constraints
+-- (ExecInsert: ExecWithCheckOptions, then ExecConstraints). is_member_of(null) is false,
+-- so the policy refuses the row first and the NOT NULL is never reached. Verified against
+-- a real server, for both an omitted column and an explicit null, for a user with no
+-- membership and for one with two.
+--
+-- Two consequences, and both matter more than the error code itself:
+--
+--   * 23502 IS UNREACHABLE from a browser on these two tables. Any client code branching
+--     on it to mean "you have no account yet" is dead, and the sentence it was written to
+--     show has never once been shown.
+--   * 42501 CANNOT CARRY THAT SENTENCE EITHER. It is the same code a genuine cross-account
+--     attempt returns, and it must stay that way — a policy refusal is deliberately
+--     uninformative (section 6 makes the same argument for the SKU meter). So "you have no
+--     account" and "that is not your account" are indistinguishable to the app, and the
+--     honest thing for a screen to say about a 42501 is nothing specific at all.
+--
+-- The house rule is that no screen may state as fact something the software has not
+-- established. Without this trigger the app has exactly two options: say nothing useful to
+-- a customer whose signup did not finish, or say something it cannot know. So the database
+-- says it instead, at the only point that can tell the two cases apart — before RLS turns
+-- them both into one code. This is the same device as the SKU meter's hint: a stable token
+-- to match on, never the sentence, which is customer-facing copy and will be rewritten.
+--
+--   hint = 'account_missing'    no active membership. TRANSIENT: it resolves when signup
+--                              completes, so "still being set up" is true here.
+--   hint = 'account_ambiguous'  more than one active membership. PERMANENT until the app
+--                              sends an account_id (see THE account_id CONTRACT in the
+--                              header). "Still being set up" is false here, and telling a
+--                              customer to wait for something that will never happen is
+--                              the failure this file is trying not to ship.
+--
+-- Nothing here weakens isolation: it fires only when account_id is null, which is a row
+-- that could not be written by anyone, and it counts only the CALLER's own memberships. It
+-- discloses nothing about anybody else, and the cross-account case never reaches it —
+-- a non-null id belonging to someone else still meets RLS and still gets a bare 42501.
+--
+-- INSERT only. An UPDATE cannot null the column (NOT NULL), and moving a row to an account
+-- you do not belong to is a policy question that deserves the uninformative answer.
+-- ---------------------------------------------------------------------------
+create or replace function public.require_account_id()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_memberships integer;
+begin
+  if new.account_id is not null then
+    return new;
+  end if;
+
+  -- The caller's own memberships and nobody else's — auth.uid(), never an argument, the
+  -- same rule as is_member_of.
+  select count(*)::integer into v_memberships
+    from public.account_members am
+   where am.user_id = auth.uid()
+     and am.status  = 'active';
+
+  if v_memberships > 1 then
+    raise exception using
+      errcode = 'P0001',
+      message = 'This could not be saved because it is not clear which account it belongs to: you are a member of more than one. Choosing the account is the app''s job, not the database''s.',
+      detail  = format('table=%s active_memberships=%s', tg_table_name, v_memberships),
+      hint    = 'account_ambiguous';
+  end if;
+
+  raise exception using
+    errcode = 'P0001',
+    message = 'There is no account to save this into yet. An account is created when signup is completed.',
+    detail  = format('table=%s active_memberships=%s', tg_table_name, v_memberships),
+    hint    = 'account_missing';
+end;
+$$;
+
+comment on function public.require_account_id() is
+  'BEFORE INSERT on specifications and products: when account_id resolves to null, raises P0001 with hint = account_missing (no active membership — transient) or account_ambiguous (more than one — needs an explicit account_id from the app). Exists because RLS refuses a null account_id with a bare 42501 BEFORE the NOT NULL constraint is reached, so without it the two cases are indistinguishable from a genuine cross-account refusal and no screen can say anything true about either. Reads only the caller''s own memberships.';
+
+revoke all on function public.require_account_id() from public, anon, authenticated;
+
+-- Named to sort before the SKU meter on products, so the account question is answered
+-- before the allowance question. "You have no account" beats "you are over your limit"
+-- as an explanation of the same failed click.
+drop trigger if exists specifications_account_required on public.specifications;
+create trigger specifications_account_required
+  before insert on public.specifications
+  for each row execute function public.require_account_id();
+
+drop trigger if exists products_account_required on public.products;
+create trigger products_account_required
+  before insert on public.products
+  for each row execute function public.require_account_id();
 
 -- ---------------------------------------------------------------------------
 -- 8. A CLEAN SLATE ON SIGNUP.
@@ -1256,6 +1570,7 @@ grant  execute on function public.get_entitlement(text) to authenticated;
 do $$
 declare
   v_orphans integer;
+  v_pins    integer;
 begin
   -- THE ruling that must never regress: unknown allowance -> allowed.
   if not public.sku_within_limit(99999, null) then
@@ -1302,7 +1617,61 @@ begin
       using errcode = '22023';
   end if;
 
-  raise notice 'account_data_schema: SKU rule verified (fails open on unknown, strict at the limit); every membership has an account.';
+  -- The created_by pin (section 7b). STRUCTURAL, not behavioural, and that is a decision
+  -- rather than an omission: proving the behaviour needs a session carrying an auth.uid()
+  -- and a specification row to write, and section 8's guarantee — that no code path in
+  -- this file ever inserts a specification or a product — is worth more than the test.
+  -- What is checked is what actually goes wrong: a trigger dropped in a rebuild, or
+  -- attached to INSERT but not UPDATE, which would leave PATCH free to rewrite
+  -- attribution. tgtype bits: 1 = FOR EACH ROW, 2 = BEFORE, 4 = INSERT, 16 = UPDATE.
+  select count(*) into v_pins
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+   where not t.tgisinternal
+     and c.relnamespace = 'public'::regnamespace
+     and t.tgname in ('specifications_pin_created_by', 'products_pin_created_by')
+     and t.tgfoid = 'public.pin_created_by()'::regprocedure
+     and (t.tgtype &  1) <> 0
+     and (t.tgtype &  2) <> 0
+     and (t.tgtype &  4) <> 0
+     and (t.tgtype & 16) <> 0;
+
+  if v_pins <> 2 then
+    raise exception
+      'created_by is not pinned: expected 2 row-level BEFORE INSERT OR UPDATE triggers on specifications and products, found %. Without both, a signed-in client can file a row under another user through the table-wide grants.', v_pins
+      using errcode = '22023';
+  end if;
+
+  -- The null-account answer (section 7c), same reasoning: structural. Lose these and the
+  -- failure is silent — inserts still fail, exactly as before, just with a 42501 nobody
+  -- can write honest copy about.
+  select count(*) into v_pins
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+   where not t.tgisinternal
+     and c.relnamespace = 'public'::regnamespace
+     and t.tgname in ('specifications_account_required', 'products_account_required')
+     and t.tgfoid = 'public.require_account_id()'::regprocedure
+     and (t.tgtype & 1) <> 0
+     and (t.tgtype & 2) <> 0
+     and (t.tgtype & 4) <> 0;
+
+  if v_pins <> 2 then
+    raise exception
+      'the null-account guard is missing: expected 2 row-level BEFORE INSERT triggers, found %. Without them a customer with no account, and one with two, both get the same bare RLS refusal.', v_pins
+      using errcode = '22023';
+  end if;
+
+  -- The ordering 7c depends on: on products, the account question must be answered before
+  -- the allowance question. Postgres fires same-event triggers in name order, so this is a
+  -- property of the two names and would break silently if either were renamed.
+  if 'products_account_required' >= 'products_enforce_sku_limit_on_insert' then
+    raise exception
+      'trigger name order broken: products_account_required must sort before products_enforce_sku_limit_on_insert, or a customer with no account is told they are over their SKU limit.'
+      using errcode = '22023';
+  end if;
+
+  raise notice 'account_data_schema: SKU rule verified (fails open on unknown, strict at the limit); every membership has an account; created_by is pinned on both tables; a null account_id answers with a hint rather than a bare policy refusal.';
 end
 $$;
 
