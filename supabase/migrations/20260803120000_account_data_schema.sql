@@ -144,6 +144,52 @@
 --                                           entitlements.membership_status and .active
 --                                           already say so, on a read it makes first.
 --
+--   6. THE SAME ID SCOPES EVERY READ, AND A NULL ID MEANS "DO NOT READ" — NEVER "READ
+--      WITHOUT A FILTER". This is the half of rule 3 that does not carry over, and the
+--      asymmetry is the entire reason it is written separately. An omitted account_id on a
+--      WRITE is refused loudly: section 7c raises with a hint, or the policy refuses with
+--      42501, and either way nothing is stored. An omitted account_id on a READ succeeds,
+--      silently, and returns every account the caller is a member of. Silence is the
+--      dangerous half, so the fallbacks are not symmetric: on a write, omit and be told;
+--      on a read, do not issue the query at all. When entitlements.account_id is null the
+--      honest surface is the state the app is in, not a list — because the list it would
+--      draw is not this workspace's.
+--
+--      AND SELECT account_id BACK. Both tables grant the column; a client whose row shape
+--      cannot say which account a row came from cannot detect a mis-scoped read even in
+--      principle, and "we would have noticed" is not a property, it is a hope.
+--
+-- THREE WAYS entitlements.account_id COMES BACK NULL, AND HOW THE APP TELLS THEM APART.
+-- The column is not a boolean "do you have an account". It is "which account did we resolve
+-- for you, on this brand, in this session", and it is null in three unrelated situations —
+-- every one of which the app can name from other columns on the same row it has already
+-- read. Nothing here needs a second query, and nothing here should be guessed at:
+--
+--   (a) NO ACCOUNT YET. Signup did not finish — the OAuth completion path is the live case.
+--       membership_status is 'active' and active may be true. A write that omits the column
+--       raises account_missing, and that is the one place "still being set up" is true.
+--   (b) AN ACCOUNT SOMEBODY ELSE OWNS. Section 10 resolves the account by OWNERSHIP, so an
+--       invited member who owns nothing reads null. Deferred with invites; named again at
+--       the end of this block.
+--   (c) SUSPENDED OR DEPARTED — NEW WITH SECTION 3, AND THE ONE THAT WILL SURPRISE YOU.
+--       is_member_of is now false for this caller; section 10's view is security_invoker;
+--       so the view's own `accounts` lateral, running under the caller's RLS, matches
+--       nothing. account_id and sku_count both come back null for a customer who has an
+--       account and forty live products sitting in it. membership_status says 'suspended'
+--       or 'left' and active is false, ON THE SAME ROW, on the read the app makes before it
+--       renders anything.
+--
+-- (c) IS NOT "UNKNOWN ACCOUNT" AND MUST NOT BE RENDERED AS ONE. A suspended caller's
+-- `select from products` returns zero rows and NO error, because a policy declining to
+-- return rows is not an error — it is an empty result, and it is indistinguishable, in this
+-- database, from a virgin account. That is not a defect to be fixed here: an RLS predicate
+-- that raised instead of filtering would announce the existence of rows to anyone who
+-- asked. The database cannot tell those two apart and should not try. The APP can, and only
+-- the app can: it holds membership_status. An empty list rendered as "No products yet —
+-- create your first one" to a maker holding forty SKUs is this schema behaving exactly as
+-- designed and the product lying anyway, and the only place that lie can be stopped is the
+-- surface that draws the list.
+--
 -- WHY THIS WAY ROUND, rather than a brand-aware default. entitlements.account_id is
 -- already resolved per brand (section 10: the lateral matches the membership's own
 -- brand_slug) and the app already filters that read to its BRAND_SLUG — so in the one
@@ -170,14 +216,33 @@
 -- account_id — the same id rule 1 has it send on writes. That is not belt-and-braces over
 -- RLS; it is the part RLS was never doing.
 --
+-- AND THE FILTER IS NOT OPTIONAL WHEN THE ID IS MISSING; THAT IS WHEN IT MATTERS MOST. Drop
+-- the predicate on a null id and the query does not narrow to nothing, it widens to
+-- everything: for a person holding an account on Batchlabel and another on a sibling
+-- Orchestrate brand, the Batchlabel deployment draws the sibling's products under its own
+-- chrome. Case (c) above makes that reachable rather than theoretical — suspend the
+-- Batchlabel business and this brand's account_id goes null while the sibling's rows stay
+-- readable. Same human, so nothing crosses a privacy boundary; wrong workspace, which is
+-- the thing section 1 says must not happen ("those are two accounts and they must not see
+-- each other's products"). Hence rule 6: null is a state to render, not a filter to skip.
+--
 -- =============================================================================
 --
 -- Read surface (public.entitlements / public.get_entitlement) gains, this migration:
 --   account_id   NOW RESOLVES TO accounts.id. It used to be aliased from user_id
 --                (20260802120000 section 8 said only this expression would change, and
 --                this is that change). It is NOT auth.uid(). Do not assume it is.
---   sku_count    live (archived_at is null) products for the account. integer.
---   can_modify   false exactly when the SKU trigger would refuse a new product.
+--   sku_count    live (archived_at is null) products for the account. integer. NULL when no
+--                account resolves — unknown, never zero.
+--   can_modify   THE ALLOWANCE QUESTION AND ONLY THAT: false exactly when the SKU trigger
+--                would refuse a new product. NULL when no account resolves, alongside
+--                sku_count and for the same reason — `true` is a claim ("one more is
+--                permitted") and there is no account here to make it about. Read null as
+--                unknown and FAIL OPEN; never as false.
+--                IT IS NOT "MAY THIS CALLER WRITE". A suspended member is refused by the
+--                policy, not by the meter, and dressing that up as a SKU refusal would put
+--                "you have reached your allowance" in front of someone whose allowance has
+--                nothing to do with it. membership_status answers the standing question.
 --
 -- ARTEFACTS AND RECORDS ARE NOT HERE. Artefacts are derived and "can never be made by
 -- hand" (products.ts:531); records are the batch log. Both are additive later and
@@ -1568,6 +1633,19 @@ on conflict (account_id, user_id) do nothing;
 -- caller's own row resolves correctly and there is no path to anybody else's count.
 -- Under the service role (which bypasses RLS) they resolve correctly too, by ownership
 -- rather than by session — so this is not a view that only works when a browser reads it.
+--
+-- AND IT CUTS BOTH WAYS, WHICH IS NEW AND IS NOT A BUG TO ROUTE AROUND. Section 3 made
+-- is_member_of false for a suspended or departed caller, so for that caller the `accounts`
+-- lateral matches nothing and account_id, sku_count and can_modify all come back null on a
+-- row that still says membership_status = 'suspended'. That is case (c) of the header's
+-- three-nulls block, and the temptation it creates is to resolve the account through a
+-- SECURITY DEFINER helper so the id survives suspension. Do not. It would hand the id back
+-- and change nothing that matters — every read scoped to it still returns zero rows and
+-- every write is still refused — while quietly making this view report an account the
+-- caller has no right to act in, which is the one property security_invoker is here to
+-- guarantee. The null is honest: through this caller's eyes there is no such account today.
+-- What the app must not do is confuse it with case (a) or (b); membership_status is on the
+-- same row precisely so it does not have to.
 -- ---------------------------------------------------------------------------
 drop view     if exists public.entitlements;
 drop function if exists public.get_entitlement(text);
@@ -1597,7 +1675,21 @@ select
   sku.n          as sku_count,
   -- NEW. Exactly the rule the trigger enforces, via the same function, so the button the
   -- app disables and the insert the database refuses can never disagree.
-  public.sku_within_limit(sku.n, m.sku_limit) as can_modify
+  --
+  -- NULL — not true — when no account resolves, which is the same discipline sku_count gets
+  -- eight lines up and the same argument: zero is a claim and so is `true`. Without the
+  -- guard this column reads sku_within_limit(null, 3), which fails open to TRUE by design
+  -- (ruling (a) of section 6, and section 11 asserts it), so a suspended member — whose
+  -- account is invisible to them through this very view, header case (c) — would be told in
+  -- so many words that they may add a product, on the one row that also says
+  -- membership_status = 'suspended'. Fail-open is right for the TRIGGER, where the cost of
+  -- guessing wrong is a paying customer locked out of their own data. It is not right for a
+  -- READ SURFACE, where the cost is a sentence on a screen that the next write disproves.
+  -- The app's reader fails open on null of its own accord, so no ability is withdrawn from
+  -- anybody by this; what stops is the claim.
+  case
+    when acct.id is not null then public.sku_within_limit(sku.n, m.sku_limit)
+  end            as can_modify
 from public.brand_memberships m
 left join lateral (
   select a.id
@@ -1623,7 +1715,7 @@ left join lateral (
 ) sku on true;
 
 comment on view public.entitlements is
-  'Read-only entitlement state for the signed-in user. security_invoker = true, so brand_memberships RLS applies and a caller sees only their own row. `active` answers whether they may use the product; sku_limit / sku_count / can_modify answer how much, and the two must never be conflated. can_modify is computed by the same function the enforcement trigger calls. Never grant to anon.';
+  'Read-only entitlement state for the signed-in user. security_invoker = true, so brand_memberships RLS applies and a caller sees only their own row. `active` answers whether they may use the product; sku_limit / sku_count / can_modify answer how much, and the two must never be conflated. can_modify is computed by the same function the enforcement trigger calls, and answers the ALLOWANCE question only — it is not "may this caller write", which membership_status and `active` answer. account_id, sku_count and can_modify are ALL null when no account resolves for this caller, which happens in three unrelated cases (signup unfinished, an account owned by somebody else, or a suspended/departed membership whose account is invisible to them through this very view). Null means unknown and must fail open; the caller distinguishes the three from membership_status on the same row, and must never read a null account_id as licence to query unscoped. Never grant to anon.';
 
 revoke all    on public.entitlements from anon, authenticated;
 grant  select on public.entitlements to authenticated;
