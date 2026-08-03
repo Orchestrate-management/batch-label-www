@@ -579,6 +579,28 @@ begin
     return new;
   end if;
 
+  -- METER ONLY AN ACCOUNT THE CALLER BELONGS TO.
+  --
+  -- PostgreSQL fires BEFORE ROW triggers BEFORE it evaluates the RLS WITH CHECK
+  -- expression, so at this point new.account_id has been validated by nothing. This
+  -- function is SECURITY DEFINER, so everything below it — the lock, account_sku_limit,
+  -- the count — runs with RLS bypassed against whatever account id the caller put in the
+  -- row. Reached that way, the exception below hands back the victim's live product
+  -- count, their plan allowance and their account id, to any signed-in user willing to
+  -- POST to /rest/v1/products with somebody else's id in the body. Proved with a working
+  -- exploit against a real Postgres before this guard existed.
+  --
+  -- Worse than the numbers is the oracle: a full account raises P0001 while an account
+  -- under its limit falls through to a 42501, so the two responses distinguish "this
+  -- account exists and is full" from everything else.
+  --
+  -- Returning NEW here is deliberate rather than raising. RLS refuses the insert a moment
+  -- later with a generic 42501 that says nothing about whether the account exists — which
+  -- is the correct answer to a question the caller had no right to ask.
+  if not public.is_member_of(new.account_id) then
+    return new;
+  end if;
+
   -- (c) Serialise concurrent creations for this account before counting. SECURITY
   -- DEFINER is what makes this possible at all: `select ... for update` needs an UPDATE
   -- policy as well as a SELECT one, and section 7 deliberately grants the browser
