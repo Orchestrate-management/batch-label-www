@@ -1,3 +1,4 @@
+import { allowedOrigins, handlePlansRequest, readServerConfig } from './_server.js';
 /**
  * GET /api/plans
  *
@@ -13,9 +14,6 @@
  * projection already printed on the public pricing page.
  */
 
-import { allowedOrigins } from '../src/server/cors.js';
-import { readServerConfig } from '../src/server/config.js';
-import { handlePlansRequest } from '../src/server/plans.js';
 
 export default {
   async fetch(request: Request): Promise<Response> {

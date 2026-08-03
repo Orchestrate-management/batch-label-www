@@ -1,88 +1,84 @@
 import { describe, expect, it } from 'vitest';
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
- * Every relative import reachable from `api/` must carry a `.js` extension.
+ * A deployed handler may import from `./_server.js` and nothing else relative.
  *
- * WHY THIS TEST EXISTS. All four endpoints returned 500 in production with
- * ERR_MODULE_NOT_FOUND while typecheck, 772 tests and the build were green. Nothing was
- * wrong with the code — only with how it resolved once deployed:
+ * WHY THIS TEST EXISTS. All four endpoints returned 500 in production while typecheck, 772
+ * tests and the build were green. Nothing was wrong with the code — the build tooling and
+ * the deployed runtime disagreed about module resolution, and CI only runs the build tooling.
+ * Two import styles failed two different ways:
  *
- *   * `package.json` sets `"type": "module"`, so Vercel runs these handlers as real Node
- *     ESM, and Node ESM requires a file extension on every relative specifier.
- *   * `tsconfig` sets `"moduleResolution": "bundler"`, which lets Vite and tsc resolve
- *     `'./foo'` perfectly happily.
+ *   `'../src/server/cors'`     -> ERR_MODULE_NOT_FOUND
+ *   `'../src/server/cors.js'`  -> "does not provide an export named 'allowedOrigins'"
  *
- * So the build tooling and the runtime disagreed, and the build tooling is what CI runs.
- * A test suite that only exercises the modules through Vite can never see this: the import
- * graph is correct in every environment except the one that serves customers.
+ * The second is what importing a named export from CommonJS via ESM looks like, so the
+ * runtime was resolving the file and handing back the wrong module format. `"type": "module"`
+ * in package.json, `moduleResolution: "bundler"` in tsconfig and Vercel's own TypeScript
+ * loader each behave differently, and Vite papers over all of it — which is exactly why a
+ * test suite that only exercises these modules through Vite can never see the problem.
  *
- * `'./foo.js'` is the specifier that satisfies both — TypeScript maps it back to `foo.ts`,
- * Vite rewrites it, and Node resolves the emitted file directly.
+ * scripts/bundle-api.mjs removes the disagreement instead of guessing at it: esbuild emits
+ * one plain ESM `api/_server.js` with no relative imports left to resolve. This test guards
+ * the other half of that contract — that no handler quietly reintroduces a cross-directory
+ * import and starts depending on the runtime's resolution again.
  *
- * This walks the real import graph from `api/` rather than checking a hard-coded list,
- * because the failure mode is a NEW file added later without the extension. A fixed list
- * would pass while the thing it guards regressed.
+ * It reads the handlers rather than a fixed list, because the failure mode is a NEW handler
+ * added later. A hard-coded list would pass while the thing it guards regressed.
  */
 
 const ROOT = join(__dirname, '..', '..');
+const API_DIR = join(ROOT, 'api');
 
-/** Resolve a relative specifier to a real source file, mirroring bundler resolution. */
-function resolveModule(fromFile: string, spec: string): string | null {
-  const base = join(dirname(fromFile), spec.replace(/\.js$/, ''));
-  for (const candidate of [`${base}.ts`, `${base}.tsx`, join(base, 'index.ts')]) {
-    if (existsSync(candidate)) return candidate;
-  }
-  return null;
+/** Handlers only. `_`-prefixed files are not routes and the bundle is generated. */
+function handlerFiles(): string[] {
+  return readdirSync(API_DIR).
+  filter((f) => f.endsWith('.ts') && !f.startsWith('_')).
+  sort();
 }
 
 function relativeSpecifiers(source: string): string[] {
   return [...source.matchAll(/(?:from|import\()\s*'(\.[^']*)'/g)].map((m) => m[1]);
 }
 
-/** Every module reachable from the deployed handlers, handlers included. */
-function serverModuleGraph(): string[] {
-  const seen = new Set<string>();
-  const queue = readdirSync(join(ROOT, 'api')).
-  filter((f) => f.endsWith('.ts')).
-  map((f) => join(ROOT, 'api', f));
+describe('deployed handlers depend only on the generated bundle', () => {
+  const handlers = handlerFiles();
 
-  while (queue.length > 0) {
-    const file = queue.shift() as string;
-    if (seen.has(file)) continue;
-    seen.add(file);
-    for (const spec of relativeSpecifiers(readFileSync(file, 'utf8'))) {
-      const resolved = resolveModule(file, spec);
-      if (resolved && !seen.has(resolved)) queue.push(resolved);
-    }
-  }
-  return [...seen].sort();
-}
-
-describe('every module Vercel deploys resolves under Node ESM', () => {
-  const graph = serverModuleGraph();
-
-  it('found the handlers and what they import', () => {
-    // Non-vacuity. If the walk breaks — a renamed directory, a changed regex — it would
-    // otherwise return nothing and the suite below would pass by finding no violations,
-    // which is the same green it showed while production was down.
-    expect(graph.length).toBeGreaterThanOrEqual(10);
-    expect(graph.some((f) => f.endsWith('api/plans.ts'))).toBe(true);
-    expect(graph.some((f) => f.endsWith('src/server/config.ts'))).toBe(true);
+  it('found the handlers', () => {
+    // Non-vacuity. A broken glob would otherwise find no files, report no violations, and
+    // show the same green that production was down behind.
+    expect(handlers.length).toBeGreaterThanOrEqual(4);
+    expect(handlers).toContain('plans.ts');
+    expect(handlers).toContain('stripe-webhook.ts');
   });
 
-  it.each(serverModuleGraph().map((f) => f.slice(ROOT.length + 1)))(
-    '%s imports with explicit .js extensions',
-    (relative) => {
-      const specs = relativeSpecifiers(readFileSync(join(ROOT, relative), 'utf8'));
-      const missing = specs.filter((s) => !s.endsWith('.js'));
+  it.each(handlerFiles())('%s imports only ./_server.js', (file) => {
+    const specs = relativeSpecifiers(readFileSync(join(API_DIR, file), 'utf8'));
+    const offenders = specs.filter((s) => s !== './_server.js');
+    expect(
+      offenders,
+      `api/${file} imports ${offenders.join(', ')}. Serverless handlers may only import ` +
+      "'./_server.js' — a real file in the same directory, produced by " +
+      'scripts/bundle-api.mjs. A cross-directory import puts module resolution back in the ' +
+      "hands of the deployed runtime, which is what made every endpoint 500 with a green " +
+      'build. Add the export to a handler import and the bundle picks it up automatically.'
+    ).toEqual([]);
+  });
+
+  it('the bundler reads the handlers, so the bundle cannot miss an export', () => {
+    // The barrel is derived from these same import statements. If that derivation stopped
+    // matching the handlers' import syntax it would silently emit a bundle missing exports,
+    // which surfaces only as a runtime 500 — so assert the shape it depends on.
+    const bundler = readFileSync(join(ROOT, 'scripts', 'bundle-api.mjs'), 'utf8');
+    expect(bundler).toContain('readdirSync');
+    for (const file of handlerFiles()) {
+      const source = readFileSync(join(API_DIR, file), 'utf8');
       expect(
-        missing,
-        `${relative} has extensionless relative import(s): ${missing.join(', ')}. ` +
-        'Node ESM cannot resolve these at runtime, so the endpoint 500s with ' +
-        'ERR_MODULE_NOT_FOUND while typecheck and build stay green. Append .js.'
-      ).toEqual([]);
+        source,
+        `api/${file} must import from './_server.js' with a braced named-import, which is ` +
+        'the form scripts/bundle-api.mjs scans for.'
+      ).toMatch(/import\s*\{[^}]+\}\s*from\s*'\.\/_server\.js'/);
     }
-  );
+  });
 });

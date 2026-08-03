@@ -12,7 +12,12 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "preview": "npx vite preview"
+    "preview": "npx vite preview",
+    "bundle:api": "node scripts/bundle-api.mjs",
+    "pretypecheck": "npm run bundle:api",
+    "prebuild": "npm run bundle:api",
+    "pretest:run": "npm run bundle:api",
+    "pretest:coverage": "npm run bundle:api"
   },
   "dependencies": {
     "@emotion/react": "^11.13.3",
