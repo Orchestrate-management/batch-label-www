@@ -33,6 +33,7 @@ import { trackBeginCheckout, trackPurchaseRedirect } from './analytics';
 import { getAttribution } from './attribution';
 import { advertisingConsentFromBanner } from './consent';
 import { isValidFbc, isValidFbp } from './meta-events';
+import { PLANS, priceForInterval } from './plans';
 import { supabase } from './supabase';
 
 export type BillingInterval = 'monthly' | 'annual';
@@ -51,18 +52,40 @@ export type CheckoutTier = 'maker' | 'studio' | 'consultant';
 export const DEFAULT_CHECKOUT_TIER: CheckoutTier = 'maker';
 
 /**
- * DISPLAY ONLY, in major GBP units, EXCLUSIVE of VAT — never consulted to decide anything.
+ * Maker's two amounts in major GBP units, EXCLUSIVE of VAT.
  *
- * The server never reads these: it resolves the price id from the tier through the plan
- * contract, so a tampered value here changes what a page prints and nothing about what is
- * charged. `plan-contract.test.ts` asserts these against the contract's pence amounts, which
- * is the drift alarm — a price change made in one place and not the other fails the build
- * rather than being discovered by a customer.
+ * DERIVED, NOT DECLARED. This used to be the second place a price was written down on www —
+ * `src/lib/plans.ts` being the first — and two hand-maintained copies of a price is the
+ * failure mode that puts one number on a pricing card and a different one on the invoice.
+ * There is now exactly one client-side projection, `PLANS`, and this reads from it, so it
+ * cannot drift by construction. `plan-contract.test.ts` asserts that projection against the
+ * server contract, which is the alarm that catches a price changed in only one of them.
+ *
+ * IT SURVIVES ONLY FOR ITS TWO REMAINING CALLERS on this branch (`src/pages/Pricing.tsx` and
+ * `src/lib/structured-data.ts`), both of which read from `PLANS` directly on the copy branch.
+ * Delete it once those land — nothing else imports it.
  */
 export const PRICES: Record<BillingInterval, number> = {
-  monthly: 14,
-  annual: 140
+  monthly: PLANS.maker.monthlyPence / 100,
+  annual: PLANS.maker.annualPence / 100
 };
+
+/**
+ * The ex-VAT value in major GBP units to report to the analytics layer for a tier and
+ * interval, or 0 when this deploy's projection has no amount for that pair.
+ *
+ * Keyed on the TIER as well as the interval. It used to read Maker's price whatever was being
+ * bought, so a Consultant annual checkout — £1,990 — was reported to GA4 and Meta as a £140
+ * begin_checkout. That is not a display bug: an ad platform optimises against those numbers.
+ *
+ * Ex-VAT deliberately, matching the rule the server applies to the Purchase event: prices are
+ * stored exclusive of VAT, so a tax-inclusive value would make the same tier worth different
+ * amounts in different countries and corrupt ROAS.
+ */
+function checkoutValue(tier: CheckoutTier, interval: BillingInterval): number {
+  const pence = priceForInterval(PLANS[tier], interval);
+  return pence === null ? 0 : pence / 100;
+}
 
 export const CHECKOUT_ENDPOINT = '/api/create-checkout-session';
 export const PORTAL_ENDPOINT = '/api/create-portal-session';
@@ -141,7 +164,7 @@ export async function startCheckout(
 interval: BillingInterval,
 tier: CheckoutTier = DEFAULT_CHECKOUT_TIER)
 : Promise<{error: string | null;}> {
-  const value = PRICES[interval];
+  const value = checkoutValue(tier, interval);
   const token = await accessToken();
   if (!token) {
     return { error: 'Please sign in to subscribe, then press this again.' };

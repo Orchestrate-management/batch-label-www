@@ -180,6 +180,14 @@ brand: string)
  * Note that it is a single RPC, not a PATCH. The idempotency claim, the ordering guard and
  * the update have to happen in one transaction or they guarantee nothing — a
  * read-then-write from here would race with the second delivery of the same event.
+ *
+ * ALL SIXTEEN ARGUMENTS ARE NAMED, INCLUDING THE TWO THAT MAY BE NULL. PostgREST resolves an
+ * overload by the set of argument names it is given, and 20260802120000_plan_limits.sql drops
+ * the 14-argument signature precisely so a short call cannot silently land on a function that
+ * ignores the allowance. Omitting p_sku_limit and p_editor_seat_limit here would not fail —
+ * they default to null — it would simply never write an allowance, which is the defect this
+ * call site was fixed for: every membership would keep the fail-closed column defaults
+ * (3 SKUs, 1 editor seat) for ever, including a £199/mo Consultant.
  */
 export function createEntitlementStore(admin: SupabaseClient): EntitlementStore {
   return {
@@ -200,7 +208,12 @@ export function createEntitlementStore(admin: SupabaseClient): EntitlementStore 
         p_current_period_end: intent.currentPeriodEnd,
         p_cancel_at_period_end: intent.cancelAtPeriodEnd,
         p_trial_end: intent.trialEnd,
-        p_billing: intent.billing
+        p_billing: intent.billing,
+        // HOW MUCH, resolved server-side from the plan contract by intentFromEvent. Null when
+        // the event says nothing about the tier, which the function reads as leave-alone —
+        // and which it also enforces itself, refusing an allowance without a plan.
+        p_sku_limit: intent.skuLimit,
+        p_editor_seat_limit: intent.editorSeatLimit
       });
 
       if (error) throw new Error(error.message);

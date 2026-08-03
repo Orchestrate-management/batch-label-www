@@ -1,4 +1,6 @@
 // @vitest-environment node
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
   BILLING_INTERVALS,
@@ -16,6 +18,7 @@ import {
   type PlanSlug } from
 './plan-contract';
 import { DEFAULT_CHECKOUT_TIER, PRICES } from '../lib/billing';
+import { PUBLIC_PLANS } from '../lib/plans';
 
 /** Every price id a fully configured deployment sets. */
 const FULL_ENV: Record<string, string> = {
@@ -259,19 +262,141 @@ describe('displayNameForPlan', () => {
 /**
  * THE DRIFT ALARM for the client display projection.
  *
- * src/lib/billing.ts holds major-unit amounts because a page prints them, and it cannot
- * import the contract (server-only). This test imports both and asserts they agree, so a
- * price changed in one place and not the other fails the build rather than being discovered
- * by a customer reading one number and being charged another.
+ * THERE IS EXACTLY ONE. `src/lib/plans.ts` is the only place www writes a plan number down,
+ * because it cannot import this contract — the contract is server-only, and it holds the
+ * price-id-to-entitlement mapping a browser must never see. A projection with no test against
+ * its source is a second source, which is how a customer comes to read one number on a
+ * pricing card and be charged another. `PRICES` in src/lib/billing.ts is now DERIVED from
+ * that projection rather than declaring anything, so there is nothing else to assert.
+ *
+ * Every field is compared, not just the amounts: an allowance that drifts is worse than a
+ * price that drifts, because the customer only finds out after they have paid.
  */
 describe('the client display projection agrees with the contract', () => {
-  it('prints the same monthly and annual amounts the contract charges', () => {
-    const maker = PLAN_CONTRACT.maker;
-    expect(PRICES.monthly * 100).toBe(maker.monthly?.amountPence);
-    expect(PRICES.annual * 100).toBe(maker.annual?.amountPence);
+  it('prints the same amounts, in pence, for every publicly listed tier', () => {
+    for (const plan of PUBLIC_PLANS) {
+      const entry = PLAN_CONTRACT[plan.slug];
+      expect(plan.monthlyPence).toBe(entry.monthly?.amountPence ?? null);
+      expect(plan.annualPence).toBe(entry.annual?.amountPence ?? null);
+    }
+  });
+
+  it('states the same allowance the webhook will write onto the membership row', () => {
+    for (const plan of PUBLIC_PLANS) {
+      const { skuLimit, editorSeatLimit } = allowanceForPlan(plan.slug);
+      expect(plan.editors).toBe(editorSeatLimit);
+      // The int4 sentinel is a server-side detail; the projection carries the boolean and a
+      // null count, so no surface built from it can render "2,147,483,647 SKUs".
+      expect(plan.skusUnlimited).toBe(skuLimit === UNLIMITED);
+      expect(plan.skus).toBe(skuLimit === UNLIMITED ? null : skuLimit);
+    }
+  });
+
+  it('labels each tier the way the contract names it', () => {
+    for (const plan of PUBLIC_PLANS) expect(plan.label).toBe(PLAN_CONTRACT[plan.slug].displayName);
+  });
+
+  /** The projection is what every public surface maps over. The penny rail-test item must
+   *  not be in it, and the contract's own `publiclyListed` flag is what says so. */
+  it('contains every publicly listed plan and nothing else', () => {
+    const listed = PLAN_SLUGS.filter((slug) => PLAN_CONTRACT[slug].publiclyListed);
+    expect([...PUBLIC_PLANS.map((plan) => plan.slug)].sort()).toEqual([...listed].sort());
+  });
+
+  /** DERIVED, so it cannot drift — asserted anyway, because "derived" is a claim until a
+   *  test holds it to the number the contract actually charges. */
+  it('derives the www display prices from that one projection', () => {
+    expect(PRICES.monthly * 100).toBe(PLAN_CONTRACT.maker.monthly?.amountPence);
+    expect(PRICES.annual * 100).toBe(PLAN_CONTRACT.maker.annual?.amountPence);
   });
 
   it('defaults to a tier the contract says is purchasable', () => {
     expect(PAID_TIERS as readonly string[]).toContain(DEFAULT_CHECKOUT_TIER);
+  });
+});
+
+/**
+ * ENTITLING_PLANS EXISTS TWICE: as the TypeScript array above, and as a SQL array inside
+ * public.entitlement_is_active. Ruling R1 wants both emitted from this constant by
+ * scripts/emit-plan-check.ts. That script is not in this workstream, so until it lands the
+ * two lists are hand-maintained — and two hand-maintained copies of "which plans entitle" is
+ * exactly the shape of the defect R1 was written to close. A slug added here and forgotten
+ * there sells a tier the database refuses to honour; forgotten the other way, a slug nobody
+ * has thought about starts granting the product.
+ *
+ * So the guard is a test rather than a generator, for now. It reads the migrations off disk
+ * and compares. When the emitter lands, this becomes the test OF the emitter.
+ */
+describe('ENTITLING_PLANS is the same list in TypeScript and in SQL', () => {
+  const dir = fileURLToPath(new URL('../../supabase/migrations', import.meta.url));
+
+  /** Every definition of the function, newest migration last. */
+  const definitions = readdirSync(dir).
+  filter((name) => name.endsWith('.sql')).
+  sort().
+  flatMap((file) => {
+    const sql = readFileSync(`${dir}/${file}`, 'utf8');
+    const bodies = sql.match(
+      /create\s+or\s+replace\s+function\s+public\.entitlement_is_active\b[\s\S]*?\$\$;/gi
+    );
+    return (bodies ?? []).map((body) => ({ file, body }));
+  });
+
+  /** The `= any (array[...])` form R1 requires, parsed into slugs. */
+  const allowLists = definitions.
+  map(({ file, body }) => ({
+    file,
+    slugs: /coalesce\s*\(\s*p_plan\s*,\s*'free'\s*\)\s*=\s*any\s*\(\s*array\s*\[([^\]]*)\]/i.
+    exec(body)?.[1].
+    split(',').
+    map((slug) => slug.trim().replace(/^'|'$/g, '')).
+    filter(Boolean)
+  })).
+  filter((hit): hit is {file: string;slugs: string[];} => Boolean(hit.slugs));
+
+  /** The pre-R1 predicate this replaces: "anything that is not free entitles". */
+  const legacy = definitions.filter(({ body }) =>
+  /coalesce\s*\(\s*p_plan\s*,\s*'free'\s*\)\s*<>\s*'free'/i.test(body)
+  );
+
+  /**
+   * Without this the suite would go green by finding nothing at all — a renamed migration
+   * directory, or a predicate rewritten into a shape these patterns do not recognise, would
+   * silently disable every assertion below.
+   */
+  it('finds a migration that decides which plans entitle', () => {
+    expect(definitions.length).toBeGreaterThan(0);
+    expect(allowLists.length + legacy.length).toBe(definitions.length);
+  });
+
+  /**
+   * Set equality, not array equality: a reordering is not a divergence, and holding a
+   * generated file to an order would fail for a reason nobody could act on.
+   */
+  it('agrees with the SQL array in every migration that writes one', () => {
+    for (const { file, slugs } of allowLists) {
+      expect(`${file}: ${[...slugs].sort().join(',')}`).toBe(
+        `${file}: ${[...ENTITLING_PLANS].sort().join(',')}`
+      );
+    }
+  });
+
+  it('names only slugs this deploy has heard of', () => {
+    for (const { slugs } of allowLists) {
+      for (const slug of slugs) expect(PLAN_SLUGS as readonly string[]).toContain(slug);
+    }
+  });
+
+  /**
+   * The rail-test item and the free tier must never be on the SQL list, whatever it says
+   * about the rest. This is the assertion that would have caught the £0.01-buys-a-paid-tier
+   * bug, and it stands on its own so it cannot be weakened by an edit to the comparison above.
+   */
+  it('never lets a non-entitling slug into the SQL list', () => {
+    for (const { slugs } of allowLists) {
+      expect(slugs).not.toContain('rail_test');
+      expect(slugs).not.toContain('free');
+      expect(slugs.length).toBeGreaterThan(0);
+    }
   });
 });

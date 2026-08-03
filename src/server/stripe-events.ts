@@ -33,6 +33,7 @@ import {
 './entitlements';
 import {
   FREE_PLAN,
+  allowanceForPlan,
   isEntitlingPlan,
   isPlanSlug,
   planEntryForPrice,
@@ -62,6 +63,16 @@ export interface EntitlementIntent {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean | null;
   trialEnd: string | null;
+  /**
+   * HOW MUCH, as opposed to WHETHER. Resolved from `plan` through the contract and from
+   * nothing else — never from Stripe metadata, never from the price id, never from a default.
+   *
+   * Null carries the same meaning every other field's null carries: this event says nothing
+   * about the allowance, so apply_stripe_entitlement leaves the column alone. It is null
+   * exactly when `plan` is null, which is the invariant enforced in intentFromEvent below.
+   */
+  skuLimit: number | null;
+  editorSeatLimit: number | null;
   /** Merged into brand_memberships.data->'billing'. Brand-specific extras live here. */
   billing: Record<string, unknown>;
 }
@@ -210,19 +221,50 @@ function baseIntent(event: Stripe.Event, config: IntentConfig, brand: string): E
     currentPeriodEnd: null,
     cancelAtPeriodEnd: null,
     trialEnd: null,
+    skuLimit: null,
+    editorSeatLimit: null,
     billing: {}
   };
+}
+
+/**
+ * THE ALLOWANCE THAT TRAVELS WITH A PLAN.
+ *
+ * Null rather than allowanceForPlan()'s Free fallback when the plan is null, and the
+ * difference is the direction of travel. allowanceForPlan is a READ path: it is handed a slug
+ * that already passed the database's CHECK constraint, so an unrecognised one means an old
+ * deploy reading a new row, where granting least is right. This is the WRITE path, where
+ * "we do not know" must leave the stored allowance alone — falling back to Free here would
+ * let one late invoice event cut a paying Consultant down to three SKUs.
+ */
+function allowanceForIntent(plan: PlanSlug | null): Pick<EntitlementIntent, 'skuLimit' | 'editorSeatLimit'> {
+  if (!isPlanSlug(plan)) return { skuLimit: null, editorSeatLimit: null };
+  const { skuLimit, editorSeatLimit } = allowanceForPlan(plan);
+  return { skuLimit, editorSeatLimit };
 }
 
 /**
  * Returns the entitlement change an event implies, or null when the event is none of our
  * business. Never throws: a malformed payload yields null rather than a 500 that makes
  * Stripe retry a poisoned event for three days.
+ *
+ * THE ALLOWANCE IS RESOLVED HERE AND IN NO OTHER PLACE, deliberately mirroring the single
+ * enforcement point in apply_stripe_entitlement (20260802120000_plan_limits.sql §6). Each
+ * builder below decides the TIER, under its own rules; this decides how much that tier
+ * allows, once, after every branch that could have declined to name one. Resolving it inside
+ * the builders would put the rule in three places and would eventually leave one branch
+ * writing an allowance for a plan it had just refused to write.
  */
 export function intentFromEvent(
 event: Stripe.Event,
 config: IntentConfig)
 : EntitlementIntent | null {
+  const intent = interpretEvent(event, config);
+  if (!intent) return null;
+  return { ...intent, ...allowanceForIntent(intent.plan) };
+}
+
+function interpretEvent(event: Stripe.Event, config: IntentConfig): EntitlementIntent | null {
   switch (event.type) {
     case 'checkout.session.completed':
       return fromCheckoutSession(event, config);

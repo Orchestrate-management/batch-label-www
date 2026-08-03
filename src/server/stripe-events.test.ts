@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
 import { HANDLED_EVENT_TYPES, intentFromEvent, purchaseSignal, readUserId, type IntentConfig } from './stripe-events';
-import { buildPriceIndex } from './plan-contract';
+import { ENTITLING_PLANS, PLAN_CONTRACT, UNLIMITED, buildPriceIndex } from './plan-contract';
 import {
   CUSTOMER_ID,
   PERIOD_END_ISO,
@@ -247,6 +247,127 @@ describe('customer.subscription.deleted', () => {
     expect(intent?.planStatus).toBe('canceled');
     expect(intent?.plan).toBe('free');
     expect(intent?.cancelAtPeriodEnd).toBe(false);
+  });
+});
+
+/**
+ * THE ALLOWANCE. Every one of these used to be silently absent: the intent carried no
+ * allowance at all, the RPC was called with the fourteen arguments that predate it, and every
+ * membership therefore kept the fail-closed column defaults — three SKUs and one editor seat
+ * — for ever, including a £199/mo Consultant.
+ *
+ * The invariant asserted throughout is one sentence: the allowance travels with the plan, and
+ * is null exactly when the plan is null.
+ */
+describe('the allowance travels with the plan', () => {
+  const allowanceOf = (intent: {skuLimit: number | null;editorSeatLimit: number | null;} | null) => ({
+    skuLimit: intent?.skuLimit ?? null,
+    editorSeatLimit: intent?.editorSeatLimit ?? null
+  });
+
+  it('writes each tier its own allowance when that tier is bought', () => {
+    for (const tier of ENTITLING_PLANS) {
+      const intent = intentFromEvent(checkoutSessionCompleted({ plan: tier }), config);
+      expect(intent?.plan).toBe(tier);
+      expect(allowanceOf(intent)).toEqual({
+        skuLimit: PLAN_CONTRACT[tier].skuLimit,
+        editorSeatLimit: PLAN_CONTRACT[tier].editorSeatLimit
+      });
+    }
+  });
+
+  /** The number a Consultant's row must hold. The sentinel never reaches a browser — the
+   *  view turns it into a boolean — but it is what the column stores. */
+  it('gives Consultant the unlimited sentinel rather than a large finite number', () => {
+    const intent = intentFromEvent(checkoutSessionCompleted({ plan: 'consultant' }), config);
+    expect(intent?.skuLimit).toBe(UNLIMITED);
+    expect(intent?.editorSeatLimit).toBe(10);
+  });
+
+  it('resolves the allowance from the PRICE on a subscription event, like the tier', () => {
+    const studio = intentFromEvent(subscriptionEvent({ priceId: PRICE_STUDIO_MONTHLY }), config);
+    expect(allowanceOf(studio)).toEqual({ skuLimit: 180, editorSeatLimit: 3 });
+
+    // A portal upgrade whose metadata still reads `maker`: the allowance must follow the
+    // price too, or the customer pays for Studio and keeps Maker's forty-five SKUs.
+    const upgraded = intentFromEvent(subscriptionEvent({ priceId: PRICE_STUDIO_MONTHLY, plan: 'maker' }), config);
+    expect(allowanceOf(upgraded)).toEqual({ skuLimit: 180, editorSeatLimit: 3 });
+  });
+
+  /**
+   * THE ONE THAT MATTERS MOST. An unknown plan writes NOTHING — not the Free allowance.
+   * allowanceForPlan grants least for an unrecognised slug, which is right when READING a row
+   * an older deploy does not understand and wrong here: a single unresolvable event would
+   * otherwise cut a paying Consultant down to three SKUs, and no screen would show anything
+   * wrong because the plan name would still say `consultant`.
+   */
+  it('writes no allowance at all when the event says nothing about the tier', () => {
+    const cases = [
+    // Neither the price nor the metadata resolves.
+    intentFromEvent(subscriptionEvent({ priceId: 'price_replacement_2027', plan: null }), config),
+    // A tier this deploy does not sell.
+    intentFromEvent(checkoutSessionCompleted({ plan: 'enterprise_unlimited' }), config),
+    // Paid nothing yet, so nothing is granted.
+    intentFromEvent(checkoutSessionCompleted({ paymentStatus: 'unpaid' }), config),
+    // An invoice may annotate a membership; it may never resize one.
+    intentFromEvent(invoicePaymentFailed(), config)];
+
+    for (const intent of cases) {
+      expect(intent).not.toBeNull();
+      expect(intent?.plan).toBeNull();
+      expect(allowanceOf(intent)).toEqual({ skuLimit: null, editorSeatLimit: null });
+    }
+  });
+
+  /** A penny buys the rail a heartbeat and nothing else — including no extra capacity. */
+  it('gives the rail-test plan exactly what free gets', () => {
+    const intent = intentFromEvent(subscriptionEvent({ priceId: PRICE_RAIL_TEST, plan: null }), config);
+    expect(intent?.plan).toBe('rail_test');
+    expect(allowanceOf(intent)).toEqual({
+      skuLimit: PLAN_CONTRACT.free.skuLimit,
+      editorSeatLimit: PLAN_CONTRACT.free.editorSeatLimit
+    });
+  });
+
+  /**
+   * A lapsed account is a Free account, with Free's allowance. Nothing about having once paid
+   * may leave a customer worse off than a new signup, and that includes leaving them on a
+   * paid allowance they no longer pay for.
+   */
+  it('resizes a cancelled subscription down to the free allowance', () => {
+    const intent = intentFromEvent(subscriptionEvent({ type: 'customer.subscription.deleted' }), config);
+    expect(intent?.plan).toBe('free');
+    expect(allowanceOf(intent)).toEqual({ skuLimit: 3, editorSeatLimit: 1 });
+  });
+
+  /** An unpaid or incomplete subscription is not a customer. planForStatus drops it to free,
+   *  and the allowance has to follow the plan down as well as up. */
+  it('follows the plan down when the status stops entitling', () => {
+    const intent = intentFromEvent(
+      subscriptionEvent({ priceId: PRICE_CONSULTANT_ANNUAL, status: 'incomplete' }),
+      config
+    );
+    expect(intent?.plan).toBe('free');
+    expect(allowanceOf(intent)).toEqual({ skuLimit: 3, editorSeatLimit: 1 });
+  });
+
+  it('never sends half an answer — an allowance without a plan, or a plan without one', () => {
+    const events = [
+    checkoutSessionCompleted(),
+    checkoutSessionCompleted({ plan: 'consultant' }),
+    checkoutSessionCompleted({ paymentStatus: 'unpaid' }),
+    subscriptionEvent(),
+    subscriptionEvent({ priceId: PRICE_RAIL_TEST, plan: null }),
+    subscriptionEvent({ type: 'customer.subscription.deleted' }),
+    subscriptionEvent({ priceId: 'price_made_by_hand', plan: null }),
+    invoicePaymentFailed()];
+
+    for (const event of events) {
+      const intent = intentFromEvent(event, config);
+      expect(intent).not.toBeNull();
+      expect(intent?.skuLimit === null).toBe(intent?.plan === null);
+      expect(intent?.editorSeatLimit === null).toBe(intent?.plan === null);
+    }
   });
 });
 

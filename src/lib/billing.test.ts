@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PRICES, startCheckout, openBillingPortal, CHECKOUT_ENDPOINT, PORTAL_ENDPOINT } from './billing';
+import { PLANS } from './plans';
 
 const mocks = vi.hoisted(() => ({
   session: { access_token: 'the.access.token' } as {access_token: string;} | null
@@ -49,8 +50,14 @@ describe('billing', () => {
     vi.unstubAllGlobals();
   });
 
-  it('PRICES are the published Maker figures in GBP', () => {
-    expect(PRICES).toEqual({ monthly: 14, annual: 140 });
+  /**
+   * PRICES no longer holds a price, it derives one. There is exactly one client-side
+   * projection of the ladder (src/lib/plans.ts) and this reads from it, so the number a page
+   * prints and the number the projection holds cannot disagree.
+   */
+  it('derives the Maker figures from the plan projection rather than restating them', () => {
+    expect(PRICES.monthly * 100).toBe(PLANS.maker.monthlyPence);
+    expect(PRICES.annual * 100).toBe(PLANS.maker.annualPence);
   });
 
   describe('startCheckout', () => {
@@ -188,6 +195,18 @@ describe('billing', () => {
       await startCheckout('annual');
       const events = (window.dataLayer ?? []) as Array<Record<string, unknown>>;
       expect(events.some((e) => e.event === 'begin_checkout' && e.value === 140)).toBe(true);
+    });
+
+    /**
+     * The value used to be Maker's price whatever tier was clicked, so a £1,990 Consultant
+     * annual was reported as a £140 begin_checkout. Ad platforms optimise against that number.
+     */
+    it('reports the value of the tier actually being bought, ex VAT', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(fakeResponse({ url: 'https://x', id: 'y' })));
+      await startCheckout('annual', 'consultant');
+      const events = (window.dataLayer ?? []) as Array<Record<string, unknown>>;
+      expect(events.some((e) => e.event === 'begin_checkout' && e.value === 1990)).toBe(true);
+      expect(events.some((e) => e.event === 'begin_checkout' && e.value === 140)).toBe(false);
     });
   });
 
