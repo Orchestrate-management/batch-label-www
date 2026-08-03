@@ -7,6 +7,11 @@
  * silently stop matching what a reader sees, which is exactly the drift Google penalises.
  * `FaqEntry` is structurally assignable to `AccordionItem`, so the components take it
  * unchanged.
+ *
+ * Because they are plain strings they cannot interpolate, so **no answer may carry a
+ * price or an allowance**. Every figure lives in `src/lib/plans.ts` and answers defer to
+ * the pricing page rather than restating it. Eight hand-typed copies of one price is how
+ * this site ended up quoting a figure the checkout did not charge.
  */
 export interface FaqEntry {
   question: string;
@@ -18,12 +23,12 @@ export const homeFaqs: FaqEntry[] = [
 {
   question: 'Do I still need to read the safety data sheet myself?',
   answer:
-  'You upload it, and we read the parts that matter for labelling. It is worth keeping a copy on file, because your supplier will send an updated one when a fragrance is reformulated. If the sheet is missing information we need, we tell you which line to ask your supplier about.'
+  'You upload it, and we read the parts that matter for labelling. It is worth keeping a copy on file, because your supplier will send an updated one when a fragrance is reformulated, and we do not yet watch for that on your behalf. If the sheet is missing information we need, we tell you which line to ask your supplier about.'
 },
 {
   question: 'What is a UFI and do I need one?',
   answer:
-  'A UFI is a Unique Formula Identifier, the 16 character code that links your product to the recipe you notified to the poison centres. If your product is classified as hazardous and you sell it to the public in the UK or EU, it belongs on the label. Batchlabel generates the code and places it for you.'
+  'A UFI is a Unique Formula Identifier, the 16 character code that links your product to the recipe you notified to the poison centres. If your product is classified as hazardous and you sell it to the public in the UK or EU, it belongs on the label. Batchlabel places it on the label where CLP requires it, but it does not generate the code yet: get it from ECHA\'s free UFI generator when you make your notification, and enter it here.'
 },
 {
   question: 'Is Batchlabel a substitute for a compliance consultant?',
@@ -38,12 +43,12 @@ export const homeFaqs: FaqEntry[] = [
 {
   question: 'What if I change my recipe?',
   answer:
-  'Open the saved recipe, change the fragrance percentage or the pack size, and download a new label. Nothing is hard coded into a spreadsheet, so a change of fragrance load does not mean rebuilding your formulas.'
+  'Change the fragrance percentage and the label changes with it, including which precautionary statements apply, and reprinting costs nothing. Nothing is hard coded into a spreadsheet, so a change of load does not mean rebuilding your formulas. Selling the same fragrance in a different pack size is a different SKU, because it is a different thing on a shelf: it gets its own label and it counts towards your plan.'
 },
 {
   question: 'Can I print the labels at home?',
   answer:
-  'Yes. Paid plans give you a print ready PDF at true size plus an SVG if your printer asks for vector artwork. Both keep the pictograms and regulated text at the minimum sizes the rules require.'
+  'Not yet, and we would rather say so plainly. Batchlabel works out the exact wording, pictograms and minimum sizes and shows you the label at true size, but downloading it as a PDF or an SVG is still being built. When that lands it will be on every plan, including Free, and the file will be identical on all of them.'
 }];
 
 
@@ -75,7 +80,7 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   {
     question: 'What do I need before I start?',
     answer:
-    'The safety data sheet from your fragrance oil supplier, the percentage of fragrance in your product, and your pack size. That is it. If you sell more than one size, you can produce a label for each.'
+    'The safety data sheet from your fragrance oil supplier, the percentage of fragrance in your product, and your pack size. That is it. If you sell more than one size you can build a label for each, and each size is its own SKU, so each one counts towards your plan.'
   },
   {
     question: 'Where do I get a safety data sheet?',
@@ -110,7 +115,7 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   {
     question: 'What about poison centre notification?',
     answer:
-    'Notification is a separate submission to the relevant authority. Batchlabel generates the UFI, which is the code that ties your notified recipe to the label, but you still make the submission yourself.'
+    'Notification is a separate submission to the relevant authority, and you make it yourself. The UFI is the code that ties your notified recipe to the label. We place it on the label, but we do not generate it for you yet, so get it from ECHA\'s free UFI generator at the point you notify.'
   }]
 
 },
@@ -130,7 +135,7 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   {
     question: 'What file formats do I get?',
     answer:
-    'The free plan gives you a watermarked PNG preview. The Maker plan gives you print ready PDF and SVG with no watermark.'
+    'None yet. File export is the piece we are building now: today you build the label in Batchlabel and read it at true size on screen. PDF and SVG export will be included on every plan, including Free, and identical on all of them. Plans differ by how many SKUs you can hold, never by what comes out of them.'
   }]
 
 },
@@ -140,48 +145,53 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   {
     question: 'Is there a free option?',
     answer:
-    'Yes. You can make one label and see the full preview without entering a card. It is watermarked and PNG only, but the wording on it is the real thing.'
+    'Yes, and it is permanent rather than a trial. The Free plan gives you a small number of SKUs with no card, and the count is on the pricing page. The label is the real thing: nothing the regulations require is left off, and nothing about it is cut down because you have not paid.'
   },
   {
-    question: 'Is VAT included?',
+    question: 'Does the price include VAT?',
     answer:
-    'Prices shown are inclusive of VAT for consumers. If you are a VAT registered business, enter your VAT number at checkout and Stripe will show the correct treatment on your invoice.'
+    'No. Every price on the site excludes VAT. Stripe adds VAT at checkout based on where you are, and on your VAT number if you give one. Prices are in GBP wherever you are buying from.'
   },
   {
     question: 'Can I cancel?',
     answer:
-    'Any time, from the billing section in your dashboard. Your plan runs to the end of the period you have paid for, and we do not ask you why.'
+    'Any time, from the billing portal. Your plan runs to the end of the period you have paid for, and we do not ask you why.'
   },
   {
     question: 'Do you refund?',
     answer:
-    'If something is wrong within 14 days of paying and we cannot put it right, email us and we will refund you. Annual plans cancelled part way through are refunded pro rata on request.'
+    'If something is wrong within 14 days of paying and we cannot put it right, email us and we will refund you. Outside that, cancelling stops the next payment rather than refunding the current period, so you keep your plan until the period you paid for runs out.'
   }]
 
 }];
 
 
-/** Pricing page questions: VAT, cancellation and refunds. */
+/** Pricing page questions: how the meter works, VAT, cancellation and refunds. */
 export const pricingFaqs: FaqEntry[] = [
 {
-  question: 'Is VAT included in the price?',
+  question: 'How is the price metered?',
   answer:
-  'Yes. The £14 monthly and £140 annual prices are inclusive of VAT for consumers. VAT registered businesses can add a VAT number at checkout and it will be reflected on the invoice.'
+  'By SKU. One scent sold in three pack sizes counts as three, because each one is a separate thing on a shelf with its own label. Reprints are never counted, archived SKUs are never counted, and reading supplier safety data sheets is never counted on any plan.'
+},
+{
+  question: 'Does the price include VAT?',
+  answer:
+  'No. Every price on this page excludes VAT. Stripe adds it at checkout based on where you are, and VAT registered businesses can add a VAT number at checkout so it is reflected on the invoice. Prices are in GBP for customers in every country.'
 },
 {
   question: 'How do I cancel?',
   answer:
-  'Open Billing in your dashboard and cancel in two clicks. You keep access until the end of the period you have paid for. No email, no retention call.'
+  'Open the billing portal from your account and cancel in two clicks. You keep access until the end of the period you have paid for. No email, no retention call.'
 },
 {
   question: 'What is your refund policy?',
   answer:
-  'If Batchlabel does not do what this page says within 14 days of your payment, email us and we will refund you in full. Cancelled annual plans are refunded pro rata on request.'
+  'If Batchlabel does not do what this page says within 14 days of your payment, email us and we will refund you in full. Outside that window, cancelling ends the plan at the end of the period you have already paid for rather than refunding it.'
 },
 {
-  question: 'Do I need a card for the free label?',
+  question: 'Do I need a card to start?',
   answer:
-  'No. The free label needs an email address only. We ask for a card when you decide you want unwatermarked, print ready files.'
+  'No. The Free plan needs an email address only, and it is permanent. We ask for a card when you want to hold more SKUs than Free covers, never to unlock something on the label itself.'
 },
 {
   question: 'Can I switch between monthly and annual?',
@@ -189,9 +199,9 @@ export const pricingFaqs: FaqEntry[] = [
   'Yes, from the billing portal. Changes are prorated by Stripe, so you are only charged for the difference.'
 },
 {
-  question: 'Do you offer anything for larger teams?',
+  question: 'Can more than one person use the account?',
   answer:
-  'The Maker plan covers teams of up to five people. If you run something bigger, email us and we will talk it through rather than sell you a tier you do not need.'
+  'Not yet. Every account is a single login today. Editor seats and free read-only seats are designed and not built, so no plan currently admits a second person, and we are not selling one that does.'
 }];
 
 /** Every question on the FAQ page, flattened, in the order a reader meets them. */

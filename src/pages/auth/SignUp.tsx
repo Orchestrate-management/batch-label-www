@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePageMeta } from '../../lib/seo';
 import { useAuth } from '../../lib/auth';
+import { PLANS } from '../../lib/plans';
 import { AuthShell } from '../../components/auth/AuthShell';
 import { Field, Alert, Checkbox, RequiredKey } from '../../components/ui/Field';
 import { Button } from '../../components/ui/Button';
@@ -92,7 +93,7 @@ export function SignUp() {
   return (
     <AuthShell
       title="Make your first label, free"
-      intro="One label, no payment card, about ten minutes. You need the safety data sheet from your fragrance supplier to hand."
+      intro={`${PLANS.free.skus} SKUs free, no payment card, about ten minutes for the first one. You need the safety data sheet from your fragrance supplier to hand.`}
       footer={
       <p>
           Already have an account?{' '}

@@ -13,6 +13,7 @@
 
 import { supabase } from './supabase';
 import { BRAND_SLUG } from './brand';
+import { PLANS, skuAllowance, type PlanDisplay, type PublicPlanSlug } from './plans';
 
 export interface Entitlement {
   brand: string;
@@ -80,12 +81,28 @@ export interface PlanSummary {
 }
 
 /**
+ * The plan the row names, or null when it names one this build does not know about.
+ *
+ * A slug we do not recognise is not an error to shout about on an account page — the
+ * database CHECK constraint is what guarantees only legal slugs are ever written, and a
+ * www deploy can legitimately lag a new tier. Returning null lets the caller fall back to
+ * wording that is true of every plan rather than inventing one.
+ */
+function planFor(slug: string): PlanDisplay | null {
+  return (PLANS as Record<string, PlanDisplay | undefined>)[slug as PublicPlanSlug] ?? null;
+}
+
+/**
  * What the account screen should say.
  *
  * Kept as a pure function so every branch is testable without rendering, and so the rule
  * "never offer to sell a plan to someone who already has one" is stated in one place. The
  * server refuses a second subscription regardless — this is what stops the customer being
  * invited to try.
+ *
+ * Every branch reads the plan off the row. It used to hard-code "Maker" in all five, so a
+ * paying Studio or Consultant customer was shown a tier they had not bought and a lapsed
+ * one was told the wrong plan had ended — with the slug already in hand at the select.
  */
 export function summarisePlan(entitlement: Entitlement | null): PlanSummary {
   if (!entitlement) {
@@ -110,25 +127,35 @@ export function summarisePlan(entitlement: Entitlement | null): PlanSummary {
     };
   }
 
+  // A lapsed account IS a Free account, with Free's allowance and Free's abilities.
+  // Nothing about having once paid may leave someone worse off than a new signup.
   if (!entitlement.active) {
     return {
-      label: 'Free plan',
-      detail: '1 label, watermarked PNG preview',
+      label: `${PLANS.free.label} plan`,
+      detail: `${skuAllowance(PLANS.free)}, the same label every paid plan makes, unlimited reprints.`,
       showUpgrade: true,
       // A former subscriber still has invoices to download, so the portal stays available.
       showManageBilling: true,
       warning:
       entitlement.status === 'canceled' ?
-      'Your Maker plan has ended. Subscribe again whenever you are ready.' :
+      'Your subscription has ended. Subscribe again whenever you are ready.' :
       null
     };
   }
 
+  const plan = planFor(entitlement.plan);
+  const label = plan ? `${plan.label} plan` : 'Your plan';
+  // The allowance, and nothing about what happens at it. No SKU limit is enforced anywhere
+  // in the product yet, so a sentence about being stopped would be a promise the software
+  // cannot keep in either direction.
+  const allowance = plan ?
+  `${skuAllowance(plan)}, unlimited reprints.` :
+  'Unlimited reprints, and the same label every plan makes.';
   const endsOn = formatPeriodEnd(entitlement.currentPeriodEnd);
 
   if (entitlement.status === 'trialing') {
     return {
-      label: 'Maker plan (trial)',
+      label: `${label} (trial)`,
       detail: endsOn ? `Your trial runs until ${endsOn}.` : 'You are on a trial.',
       showUpgrade: false,
       showManageBilling: true,
@@ -138,8 +165,8 @@ export function summarisePlan(entitlement: Entitlement | null): PlanSummary {
 
   if (entitlement.status === 'past_due') {
     return {
-      label: 'Maker plan',
-      detail: 'Unlimited labels, print ready PDF and SVG, UFI generation and saved recipes.',
+      label,
+      detail: allowance,
       showUpgrade: false,
       showManageBilling: true,
       warning:
@@ -149,7 +176,7 @@ export function summarisePlan(entitlement: Entitlement | null): PlanSummary {
 
   if (entitlement.cancelAtPeriodEnd) {
     return {
-      label: 'Maker plan',
+      label,
       detail: endsOn ?
       `Cancelled — your plan stays on until ${endsOn}.` :
       'Cancelled — your plan stays on until the end of the period you have paid for.',
@@ -160,10 +187,8 @@ export function summarisePlan(entitlement: Entitlement | null): PlanSummary {
   }
 
   return {
-    label: 'Maker plan',
-    detail: endsOn ?
-    `Unlimited labels, print ready PDF and SVG, UFI generation and saved recipes. Renews ${endsOn}.` :
-    'Unlimited labels, print ready PDF and SVG, UFI generation and saved recipes.',
+    label,
+    detail: endsOn ? `${allowance} Renews ${endsOn}.` : allowance,
     showUpgrade: false,
     showManageBilling: true,
     warning: null

@@ -42,7 +42,7 @@ export function Faq() {
 
       <CtaBand
         location="faq_final"
-        heading="Try one label before you decide"
+        heading="Try it free before you decide"
         body="No card needed. It is the quickest way to see whether we handle your fragrance properly." />
       
     </>);

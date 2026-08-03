@@ -14,7 +14,7 @@ import {
   websiteSchema
 } from './structured-data';
 import { SITE_ORIGIN } from './routes';
-import { PRICES } from './billing';
+import { PLANS, PUBLIC_PLANS, priceForInterval, skuAllowance } from './plans';
 import { homeFaqs, pricingFaqs, allFaqEntries, faqGroups } from '../content/faqs';
 
 const indexHtml = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
@@ -80,29 +80,47 @@ describe('SoftwareApplication', () => {
   const app = softwareApplicationSchema();
   const offers = app.offers as Record<string, unknown>[];
 
-  it('offers exactly the three things the pricing page shows', () => {
-    expect(offers).toHaveLength(3);
+  it('offers every publicly listed plan, and nothing the pricing page does not show', () => {
+    // Free (one offer) plus a monthly and an annual for each priced plan.
+    const priced = PUBLIC_PLANS.filter((plan) => plan.monthlyPence !== null);
+    expect(offers).toHaveLength(1 + priced.length * 2);
     expect(offers.map((offer) => offer.name)).toEqual([
       'Free',
       'Maker, billed monthly',
-      'Maker, billed yearly'
+      'Maker, billed yearly',
+      'Studio, billed monthly',
+      'Studio, billed yearly',
+      'Consultant, billed monthly',
+      'Consultant, billed yearly'
     ]);
   });
 
-  it('takes both prices from PRICES, so the markup cannot drift from the page', () => {
-    expect(offers[1].price).toBe(String(PRICES.monthly));
-    expect(offers[2].price).toBe(String(PRICES.annual));
-    expect(offers[1].price).toBe('14');
-    expect(offers[2].price).toBe('140');
+  /** The 1p payment-rail item is not in the projection, so it cannot reach the markup. */
+  it('never advertises the payment rail test item', () => {
+    const serialised = JSON.stringify(app);
+    expect(serialised).not.toMatch(/rail.?test|payment rail/i);
+    expect(serialised).not.toContain('0.01');
   });
 
-  it('prices in sterling and says VAT is included, which is what the page says', () => {
+  it('takes every price from the plan projection, so the markup cannot drift from the page', () => {
+    for (const plan of PUBLIC_PLANS) {
+      for (const interval of ['monthly', 'annual'] as const) {
+        const pence = priceForInterval(plan, interval);
+        if (pence === null) continue;
+        const name = `${plan.label}, billed ${interval === 'monthly' ? 'monthly' : 'yearly'}`;
+        const offer = offers.find((entry) => entry.name === name);
+        expect(offer?.price).toBe(String(pence / 100));
+      }
+    }
+  });
+
+  it('prices in sterling and says VAT is EXCLUDED, which is what the checkout charges', () => {
     for (const offer of offers) {
       expect(offer.priceCurrency).toBe('GBP');
     }
     for (const offer of offers.slice(1)) {
       const spec = offer.priceSpecification as Record<string, unknown>;
-      expect(spec.valueAddedTaxIncluded).toBe(true);
+      expect(spec.valueAddedTaxIncluded).toBe(false);
       expect(spec['@type']).toBe('UnitPriceSpecification');
     }
   });
@@ -117,10 +135,54 @@ describe('SoftwareApplication', () => {
     expect(unit(offers[2])).toBe('ANN');
   });
 
+  it('describes the free tier as the decided allowance, not a watermarked preview', () => {
+    expect(offers[0].description as string).toContain(skuAllowance(PLANS.free));
+  });
+
   it('never claims a category Batchlabel has not built', () => {
     const serialised = JSON.stringify(app).toLowerCase();
     for (const forbidden of ['cosmetic', 'skincare', 'electronic', 'coming soon', 'in build']) {
       expect(serialised).not.toContain(forbidden);
+    }
+  });
+
+  /**
+   * This markup is indexed and quoted verbatim by answer engines, so a false line here
+   * outlives its correction on the page. It once advertised a watermarked PNG free tier,
+   * print-ready PDF and SVG export and UFI generation, none of which existed anywhere.
+   */
+  it('never claims a capability Batchlabel has not built', () => {
+    const serialised = JSON.stringify(app);
+    for (const forbidden of [
+      /watermark/i,
+      /\bPNG\b/,
+      /\bSVG\b/,
+      /print ready/i,
+      /generates? a UFI/i,
+      /saved recipes/i,
+      /unlimited labels?/i
+    ]) {
+      expect(serialised).not.toMatch(forbidden);
+    }
+  });
+});
+
+describe('the free-tier sentence in index.html', () => {
+  /**
+   * Three static meta descriptions carry the free allowance for crawlers that run no
+   * JavaScript, and src/pages/Home.tsx carries a fourth for those that do. All four must
+   * agree with the plan projection, or a link preview advertises a different offer from
+   * the page it links to.
+   */
+  it('states the decided free allowance in all three static descriptions', () => {
+    const sentence = `${PLANS.free.skus} SKUs free, no card.`;
+    const occurrences = indexHtml.split(sentence).length - 1;
+    expect(occurrences).toBe(3);
+  });
+
+  it('carries no claim the software cannot keep', () => {
+    for (const forbidden of [/watermark/i, /first label free/i, /VAT included/i]) {
+      expect(indexHtml).not.toMatch(forbidden);
     }
   });
 });

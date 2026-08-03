@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button';
 export function CheckoutCancelled() {
   usePageMeta({
     title: 'Checkout cancelled',
-    description: 'You have not been charged. Your free label is still available.',
+    description: 'You have not been charged. Your Free plan is untouched.',
     noIndex: true
   });
 
@@ -15,8 +15,8 @@ export function CheckoutCancelled() {
           No payment taken
         </h1>
         <p className="mx-auto mt-3 max-w-prose text-[1.02rem] leading-relaxed text-ink-soft">
-          You closed the checkout, so nothing has been charged. Your free label is still there
-          whenever you want it.
+          You closed the checkout, so nothing has been charged. Your Free plan and its SKUs are
+          untouched.
         </p>
         <p className="mx-auto mt-3 max-w-prose text-[0.97rem] leading-relaxed text-ink-muted">
           If something on the pricing page was unclear, tell us. We would rather answer a question

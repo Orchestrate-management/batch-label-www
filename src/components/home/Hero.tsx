@@ -1,9 +1,13 @@
 import { CheckIcon } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { LabelPreview } from '../LabelPreview';
+import { PLANS } from '../../lib/plans';
 
+// The free allowance is read from the plan projection, never typed. "SKU" is deliberately
+// not glossed here: the definition is stated once, on /pricing, and paraphrasing it in the
+// hero is how a unit ends up meaning three different things.
 const reassurances = [
-'First label free, no card',
+`${PLANS.free.skus} SKUs free, no card`,
 'Candles, wax melts, reed diffusers and room sprays',
 'UK and EU CLP wording'];
 
@@ -21,7 +25,8 @@ export function Hero() {
           </h1>
           <p className="mt-4 max-w-prose text-[1.08rem] leading-relaxed text-ink-soft">
             Upload the safety data sheet from your fragrance supplier, enter how much fragrance is
-            in the product and how big the pack is, then download a print ready label.
+            in the product and how big the pack is, and get the exact wording, pictograms and
+            minimum sizes your label needs.
           </p>
           <p className="mt-3 max-w-prose text-[0.98rem] leading-relaxed text-ink-muted">
             Candles and home fragrance is the only category we cover. We would like to add more,

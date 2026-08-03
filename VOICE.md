@@ -74,4 +74,4 @@ sentence was already the best one, so it is the only one left.
 **Pricing badge** — invented social proof, on a site that elsewhere says it is new.
 > Most makers pick this
 
-> Unlimited labels
+> 45 SKUs

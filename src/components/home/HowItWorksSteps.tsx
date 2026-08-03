@@ -15,8 +15,8 @@ export const steps = [
 },
 {
   kind: 'download' as const,
-  title: 'Download your print ready label',
-  body: 'Check the preview, then download a PDF at true size or an SVG for your printer. Pictograms and minimum text sizes are set for you.'
+  title: 'Check your label at true size',
+  body: 'The preview is at true size, so you see the label as it will print. Pictograms and minimum text sizes are set for you. Downloading it as a PDF or an SVG is still being built.'
 }];
 
 

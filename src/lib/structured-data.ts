@@ -5,11 +5,16 @@
  *
  * 1. Only mark up what is on the page. The FAQ graphs are built from
  *    `src/content/faqs.ts`, which is the same array the accordions render, so the markup
- *    cannot drift from the visible answers. Prices come from `PRICES` in `lib/billing.ts`
- *    for the same reason.
+ *    cannot drift from the visible answers. Offers are built from `PLANS` in `lib/plans.ts`,
+ *    the same projection the pricing page maps over, for the same reason.
  * 2. Never claim a category we have not built. Candles and home fragrance is the only
  *    live category (see POSITIONING.md), so nothing here mentions cosmetics, wider
  *    consumer goods or electronics as something Batchlabel does.
+ * 3. Never claim a *capability* we have not built either. This file is indexed and quoted
+ *    verbatim by answer engines, so a false line here outlives its correction on the page.
+ *    It once advertised a watermarked PNG free tier, print-ready PDF and SVG export and UFI
+ *    generation, none of which existed in any repo. `featureList` now describes only what
+ *    the software does today.
  *
  * `Organization` and `WebSite` are also emitted statically in `index.html` so a crawler
  * that does not run JavaScript still sees them. Everything else is per page and is
@@ -17,7 +22,7 @@
  */
 
 import { SITE_ORIGIN, SITE_NAME, canonicalUrl } from './routes';
-import { PRICES } from './billing';
+import { PLANS, PUBLIC_PLANS, priceForInterval, skuAllowance, type BillingInterval } from './plans';
 import type { FaqEntry } from '../content/faqs';
 
 export const ORGANIZATION_ID = `${SITE_ORIGIN}/#organization`;
@@ -82,25 +87,46 @@ export function websiteSchema(): JsonLd {
 }
 
 /**
- * The product itself. Both Maker prices are VAT inclusive for consumers, which is what
- * the pricing page says, so `valueAddedTaxIncluded` is true on both.
+ * The product itself.
+ *
+ * Every price is exclusive of VAT — Stripe adds it at checkout from the buyer's location —
+ * so `valueAddedTaxIncluded` is false. Leaving it true published a tax claim that
+ * contradicted the checkout, which is the most expensive kind of wrong a price can be.
+ *
+ * The offers are generated from the same projection the pricing page maps over, so the
+ * markup cannot advertise a ladder the page does not show, and the £0.01 payment-rail test
+ * item cannot appear here because it is not in the projection at all.
  */
 export function softwareApplicationSchema(): JsonLd {
   const subscription = (name: string, price: number, unitCode: 'MON' | 'ANN'): JsonLd => ({
     '@type': 'Offer',
     name,
-    price: String(price),
+    price: String(price / 100),
     priceCurrency: 'GBP',
     url: `${SITE_ORIGIN}/pricing`,
     availability: 'https://schema.org/InStock',
     priceSpecification: {
       '@type': 'UnitPriceSpecification',
-      price,
+      price: price / 100,
       priceCurrency: 'GBP',
-      valueAddedTaxIncluded: true,
+      valueAddedTaxIncluded: false,
       referenceQuantity: { '@type': 'QuantitativeValue', value: 1, unitCode }
     }
   });
+
+  const paidOffers = PUBLIC_PLANS.flatMap((plan) =>
+    (['monthly', 'annual'] as BillingInterval[]).flatMap((interval) => {
+      const pence = priceForInterval(plan, interval);
+      if (pence === null) return [];
+      return [
+        subscription(
+          `${plan.label}, billed ${interval === 'monthly' ? 'monthly' : 'yearly'}`,
+          pence,
+          interval === 'monthly' ? 'MON' : 'ANN'
+        )
+      ];
+    })
+  );
 
   return {
     '@type': 'SoftwareApplication',
@@ -118,22 +144,20 @@ export function softwareApplicationSchema(): JsonLd {
       'Reads the classification, hazard statements and allergens out of a supplier safety data sheet',
       'Classifies the finished product from the fragrance percentage and pack size',
       'Places hazard pictograms and regulated text at the required minimum sizes',
-      'Generates a UFI, the Unique Formula Identifier used for poison centre notification',
-      'Print ready PDF and SVG downloads on the Maker plan',
-      'Saved recipes you can edit and reuse'
+      'Shows the finished label at true size before you print it',
+      'Works with any supplier safety data sheet and any fragrance percentage, on every plan'
     ],
     offers: [
       {
         '@type': 'Offer',
-        name: 'Free',
+        name: PLANS.free.label,
         price: '0',
         priceCurrency: 'GBP',
         url: `${SITE_ORIGIN}/pricing`,
         availability: 'https://schema.org/InStock',
-        description: 'One watermarked PNG label. No payment card needed.'
+        description: `${skuAllowance(PLANS.free)}, with the same CLP label wording every paid plan produces. No payment card needed.`
       },
-      subscription('Maker, billed monthly', PRICES.monthly, 'MON'),
-      subscription('Maker, billed yearly', PRICES.annual, 'ANN')
+      ...paidOffers
     ]
   };
 }
@@ -181,7 +205,7 @@ export function howToSchema(pathname: string, steps: HowToStepInput[]): JsonLd {
     '@id': `${url}#howto`,
     name: 'How to make a UK and EU CLP label for a candle',
     description:
-      'Turn the safety data sheet from your fragrance supplier into a print ready CLP label for a candle, wax melt, reed diffuser or room spray.',
+      'Turn the safety data sheet from your fragrance supplier into the correct CLP label wording for a candle, wax melt, reed diffuser or room spray.',
     inLanguage: 'en-GB',
     totalTime: 'PT10M',
     supply: [

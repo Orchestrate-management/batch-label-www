@@ -107,7 +107,7 @@ export function About() {
           },
           {
             title: 'Fair price',
-            body: 'One price, £14 a month. No tiers that punish you for growing.'
+            body: 'The cheapest plan is free and it makes the same label as the most expensive one. You are never charged for reprinting, for fixing a mistake, or for keeping your records, only for how many things you sell.'
           }].
           map((card) =>
           <div key={card.title} className="rounded-2xl border border-paper-edge bg-paper p-5">

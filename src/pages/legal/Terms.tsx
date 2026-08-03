@@ -2,6 +2,27 @@ import { Link } from 'react-router-dom';
 import { usePageMeta, useStructuredData } from '../../lib/seo';
 import { breadcrumbSchema, graph } from '../../lib/structured-data';
 import { LegalLayout, LegalSection, LegalList } from '../../components/legal/LegalLayout';
+import { PLANS, PUBLIC_PLANS, SKU_DEFINITION, priceWithInterval, skuAllowance } from '../../lib/plans';
+
+/**
+ * "Maker (£14/month exc VAT, £140/year exc VAT), Studio (…)".
+ *
+ * Derived rather than typed. A hand-typed price in a contract of sale is the worst place
+ * for the ladder to drift, and this page previously named one plan as if it were the only
+ * one that could be bought.
+ */
+function paidPlanSentence(): string {
+  return PUBLIC_PLANS.
+  filter((plan) => plan.monthlyPence !== null && plan.annualPence !== null).
+  map(
+    (plan) =>
+    `${plan.label} (${priceWithInterval(plan.monthlyPence as number, 'monthly')}, or ${priceWithInterval(
+      plan.annualPence as number,
+      'annual'
+    )})`
+  ).
+  join('; ');
+}
 
 export function Terms() {
   usePageMeta({
@@ -66,25 +87,53 @@ export function Terms() {
         <p>
           You must give an accurate email address, keep your password to yourself, and tell us
           promptly if you think someone else has access. You are responsible for activity under your
-          account. Accounts are for one business, and the Maker plan allows up to five named people
-          within that business.
+          account. Accounts are for one business, and an account is a single login: we do not
+          currently offer additional editor or read-only seats on any plan.
         </p>
       </LegalSection>
 
       <LegalSection title="5. Plans, prices and payment">
+        <p>
+          Plans are sold by the number of SKUs they cover. {SKU_DEFINITION}
+        </p>
         <LegalList
           items={[
-          'The Free plan allows one watermarked label and requires no payment card.',
-          'The Maker plan is £14 per month or £140 per year. Prices shown on the site are inclusive of VAT for consumers. VAT registered businesses may enter a VAT number at checkout, and Stripe Tax will apply the correct treatment on the invoice.',
+          `The Free plan covers ${skuAllowance(PLANS.free)} and requires no payment card. It is permanent rather than a trial, and it produces the same label as every paid plan: nothing that a label needs in order to be correct sits behind a price.`,
+          `Paid plans are ${paidPlanSentence()}.`,
+          'All prices shown on the site exclude VAT. VAT is added at checkout by Stripe according to your location and your VAT number if you give one. All prices are in GBP for customers in every country.',
           'Payments are handled by Stripe. We never see or store your full card details.',
-          'Subscriptions renew automatically until cancelled. You can cancel at any time through the billing portal in your dashboard, and you keep access until the end of the period you have paid for.',
-          'If Batchlabel does not do what the pricing page describes, tell us within 14 days of payment and we will refund you in full if we cannot put it right. Annual plans cancelled part way through are refunded pro rata on request.',
+          'Subscriptions renew automatically until cancelled. You can cancel at any time through the billing portal, and you keep access until the end of the period you have paid for.',
+          // No pro rata refund is promised, because none is issued: cancellation in the
+          // billing portal takes effect at the end of the paid period with no proration.
+          // Copy conforms to the mechanism, never the other way round.
+          'If Batchlabel does not do what the pricing page describes, tell us within 14 days of payment and we will refund you in full if we cannot put it right. Outside that, cancelling ends the plan at the end of the period you have already paid for rather than refunding any part of it.',
           'We may change prices for future billing periods. We will give you at least 30 days notice by email, and you may cancel before the change takes effect.']
           } />
-        
+
       </LegalSection>
 
-      <LegalSection title="6. Your content">
+      <LegalSection title="6. What is not included">
+        <p>
+          Some things people reasonably expect of a labelling tool are not built yet. They are not
+          part of what you are buying on any plan, and we will not charge for them separately when
+          they arrive.
+        </p>
+        <LegalList
+          items={[
+          'Downloading a label as a file. PDF and SVG export is in build and is not available on any plan today.',
+          'Generating a UFI. We place the UFI on the label where the rules require it; you obtain the code itself from the free ECHA generator.',
+          'Additional people on an account, whether editing or read only.',
+          'Alerts when a supplier reissues or reclassifies a safety data sheet.',
+          'Bulk generation, CSV import, API access and removal of Batchlabel branding.']
+          } />
+
+        <p>
+          The list on the <Link className="underline decoration-teal-700/40 underline-offset-2" to="/pricing">pricing page</Link>{' '}
+          is the current one. If something is listed as not built, it is not sold.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="7. Your content">
         <p>
           You keep ownership of everything you upload and of the label artwork you generate. You
           grant us permission to store and process your files only so far as we need to in order to
@@ -93,7 +142,7 @@ export function Terms() {
         </p>
       </LegalSection>
 
-      <LegalSection title="7. Acceptable use">
+      <LegalSection title="8. Acceptable use">
         <p>
           Our{' '}
           <Link className="underline decoration-teal-700/40 underline-offset-2" to="/acceptable-use">
@@ -104,14 +153,14 @@ export function Terms() {
         </p>
       </LegalSection>
 
-      <LegalSection title="8. Availability">
+      <LegalSection title="9. Availability">
         <p>
           We aim to keep Batchlabel available and quick, but we do not promise uninterrupted service.
           We may suspend access for maintenance, and we will avoid busy periods where we can.
         </p>
       </LegalSection>
 
-      <LegalSection title="9. Liability">
+      <LegalSection title="10. Liability">
         <p>
           Nothing in these terms limits liability that cannot be limited by law, including for death
           or personal injury caused by negligence, or for fraud.
@@ -129,7 +178,7 @@ export function Terms() {
         </p>
       </LegalSection>
 
-      <LegalSection title="10. Ending the agreement">
+      <LegalSection title="11. Ending the agreement">
         <p>
           You may stop using Batchlabel and delete your account at any time. We may suspend or close
           an account that breaches these terms or the acceptable use policy, and we will explain why
@@ -137,7 +186,7 @@ export function Terms() {
         </p>
       </LegalSection>
 
-      <LegalSection title="11. Law and disputes">
+      <LegalSection title="12. Law and disputes">
         <p>
           These terms are governed by the law of England and Wales, and the courts of England and
           Wales have exclusive jurisdiction. If you live in Scotland or Northern Ireland, you may
@@ -145,7 +194,7 @@ export function Terms() {
         </p>
       </LegalSection>
 
-      <LegalSection title="12. Contact">
+      <LegalSection title="13. Contact">
         <p>
           Questions about these terms: <a className="underline decoration-teal-700/40 underline-offset-2" href="mailto:hello@batchlabel.co.uk">hello@batchlabel.co.uk</a>.
         </p>

@@ -80,8 +80,9 @@ say a category does not exist. They will be wrong the day one does.
    before it gets any traffic?
 2. **Naming electronics at all.** It is two categories past anything real. Keep it
    on the page or cut it?
-3. **Pricing across categories.** One plan at £14 a month today. Same plan when a
-   second category arrives, or a separate line?
+3. **Pricing across categories.** A four-step ladder metered by SKU today, priced
+   from `src/lib/plans.ts`. Same ladder when a second category arrives, or a
+   separate line?
 4. **How prominent Orchestrate should be.** It appears on About only.
 5. **The name.** `batchlabel.co.uk` and a candle-heavy label preview both assume
    fragrance. Fine for now, worth revisiting if a second category ever lands.
