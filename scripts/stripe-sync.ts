@@ -299,8 +299,29 @@ async function archiveLegacy(mode: ModeContext, productIds: string[]): Promise<v
   }
 }
 
+/**
+ * The block below is pasted verbatim into a shell, so it may only ever contain values that
+ * are true at the moment it is printed. Two names are therefore held back rather than filled
+ * with something that looks like one.
+ *
+ * `STRIPE_PORTAL_CONFIGURATION_ID` is emitted only when a real `bpc_…` id is already in the
+ * environment — this script does not create the configuration, stripe-portal-config.ts does,
+ * and it prints the line. A placeholder would be worse than nothing: it is truthy, so
+ * readServerConfig passes it to Stripe as `configuration` and every "Manage billing" click
+ * 502s, while the branch that exists to report a MISSING portal id never fires because the
+ * var IS set. The result reads as a Stripe outage rather than an unset env var.
+ *
+ * `ALLOW_RAIL_TEST_CHECKOUT` is never emitted at all. With `--live` the targets here are
+ * ['production'], so pasting it would set one of the two gates the rail-test checkout
+ * requires — permanently, in live mode — and the £0.01 item is then purchasable by an
+ * ordinary customer, which the decided pricing forbids outright. It is a flag for the minutes
+ * a live rail test takes: set by hand, removed straight after.
+ */
 function envBlock(): string {
   const targets = mode.live ? ['production'] : ['preview', 'development'];
+  const portalId = process.env[PORTAL_CONFIG_ENV]?.trim();
+  const portalKnown = portalId?.startsWith('bpc_') === true;
+
   const lines: string[] = [];
   lines.push('cd ~/Documents/Orchestrate/batch-label');
   lines.push('');
@@ -311,8 +332,7 @@ function envBlock(): string {
   for (const price of ALL_PRICES) {
     lines.push(`  "${price.point.envVar}=${resolved.get(`${price.slug}:${price.interval}`) ?? 'MISSING'}"`);
   }
-  lines.push(`  "${PORTAL_CONFIG_ENV}=bpc_RUN_stripe-portal-config.ts_FIRST"`);
-  lines.push('  "ALLOW_RAIL_TEST_CHECKOUT=true"');
+  if (portalKnown) lines.push(`  "${PORTAL_CONFIG_ENV}=${portalId}"`);
   lines.push(')');
   lines.push('for PAIR in "${VALUES[@]}"; do');
   lines.push('  NAME="${PAIR%%=*}"; VALUE="${PAIR#*=}"');
@@ -321,6 +341,18 @@ function envBlock(): string {
   lines.push('    printf \'%s\' "$VALUE" | vercel env add "$NAME" "$ENV"');
   lines.push('  done');
   lines.push('done');
+  lines.push('');
+  lines.push('# NOT set above, deliberately — do not add either by hand:');
+  if (!portalKnown) {
+    lines.push(`#   ${PORTAL_CONFIG_ENV} — no configuration id is known to this run. Run`);
+    lines.push('#     scripts/stripe-portal-config.ts; it prints the real bpc_ id to set. Leave the');
+    lines.push('#     var UNSET until then: any placeholder is truthy, so the portal session would');
+    lines.push('#     send it to Stripe and every "Manage billing" click would 502, while the check');
+    lines.push('#     that reports a missing portal id stays silent because the var is set.');
+  }
+  lines.push('#   ALLOW_RAIL_TEST_CHECKOUT — set by hand for the minutes a live rail test takes,');
+  lines.push('#     then removed. Left set it makes the £0.01 rail-test item permanently');
+  lines.push('#     purchasable, which it must never be to an ordinary customer.');
   return lines.join('\n');
 }
 
