@@ -18,12 +18,8 @@
  * able to read the response.
  */
 
+import { createAdminClient, createConversionForwarder, createEntitlementStore, findAdvertisingConsent, handleStripeWebhook, json, readMetaConfig, readServerConfig } from './_server.js';
 import Stripe from 'stripe';
-import { readServerConfig } from '../src/server/config.js';
-import { json } from '../src/server/http.js';
-import { createAdminClient, createEntitlementStore, findAdvertisingConsent } from '../src/server/supabase-admin.js';
-import { createConversionForwarder, readMetaConfig } from '../src/server/meta-capi.js';
-import { handleStripeWebhook } from '../src/server/webhook.js';
 
 export default {
   async fetch(request: Request): Promise<Response> {

@@ -26,11 +26,8 @@
  * add-ons, the portal IS the tier-change screen, and there is no in-app substitute.
  */
 
+import { allowedOrigins, corsHeaders, createAdminClient, fail, findMembership, json, preflightResponse, readServerConfig, returnUrl, userFromRequest } from './_server.js';
 import Stripe from 'stripe';
-import { allowedOrigins, corsHeaders, preflightResponse } from '../src/server/cors.js';
-import { readServerConfig, returnUrl } from '../src/server/config.js';
-import { fail, json } from '../src/server/http.js';
-import { createAdminClient, findMembership, userFromRequest } from '../src/server/supabase-admin.js';
 
 export default {
   async fetch(request: Request): Promise<Response> {

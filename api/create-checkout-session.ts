@@ -45,13 +45,8 @@
  * country, with no presentment conversion.
  */
 
+import { allowedOrigins, checkoutMetadata, corsHeaders, createAdminClient, displayNameForPlan, fail, findEntitlement, findMembership, json, planEntryForPrice, preflightResponse, priceIdForTier, readServerConfig, resolveInterval, resolveRailTest, resolveTier, returnUrl, sanitiseMetaCookies, userFromRequest } from './_server.js';
 import Stripe from 'stripe';
-import { allowedOrigins, corsHeaders, preflightResponse } from '../src/server/cors.js';
-import { readServerConfig, returnUrl } from '../src/server/config.js';
-import { checkoutMetadata, resolveInterval, resolveRailTest, resolveTier, sanitiseMetaCookies } from '../src/server/checkout.js';
-import { displayNameForPlan, planEntryForPrice, priceIdForTier } from '../src/server/plan-contract.js';
-import { fail, json } from '../src/server/http.js';
-import { createAdminClient, findEntitlement, findMembership, userFromRequest } from '../src/server/supabase-admin.js';
 
 interface CheckoutRequestBody {
   tier?: unknown;
