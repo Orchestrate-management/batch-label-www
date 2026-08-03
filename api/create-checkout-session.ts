@@ -153,6 +153,7 @@ export default {
     let customerId: string | null = null;
     let alreadyEntitled = false;
     let heldPlan: string | null = null;
+    let sellable = true;
     try {
       const [membership, entitlement] = await Promise.all([
       findMembership(admin, userId, config.brand),
@@ -161,6 +162,24 @@ export default {
       customerId = membership?.stripe_customer_id ?? null;
       alreadyEntitled = entitlement?.active === true;
       heldPlan = entitlement?.plan ?? null;
+
+      // Can money actually become an entitlement for this account? Two states where it
+      // cannot, and both slip past the `alreadyEntitled` check below because both report
+      // active=false:
+      //   - a SUSPENDED membership. entitlement_is_active requires
+      //     coalesce(membership_status,'active')='active', so suspension pins active to
+      //     false forever. Selling here takes the money and apply_stripe_entitlement still
+      //     refuses to entitle.
+      //   - NO membership at all. apply_stripe_entitlement returns 'no_membership' and
+      //     writes nothing, so the subscription exists in Stripe attached to nobody.
+      // Charging for something the database is guaranteed to refuse is the worst failure
+      // this endpoint can have, so it is checked server-side and not left to the UI.
+      //
+      // Read from the ENTITLEMENT, not the membership: the entitlements view is the same
+      // surface entitlement_is_active reads, so membership_status here is by construction
+      // the value that decides. findMembership does not select it, and widening that read
+      // would put the answer in two places.
+      sellable = entitlement !== null && (entitlement.membership_status ?? 'active') === 'active';
     } catch (error) {
       return fail(
         { status: 503, message: 'We could not reach your account just now. Please try again in a moment.', detail: error },
@@ -186,6 +205,21 @@ export default {
           message:
           `You are already on the ${displayNameForPlan(heldPlan)} plan. Use Manage billing to change plan, ` +
           `switch between monthly and yearly, update your card, or cancel.`
+        },
+        cors
+      );
+    }
+
+    // Suspended, or no membership on this brand. Paying would not switch anything on, so do
+    // not take the payment. Deliberately not a 409 — nothing conflicts; this account simply
+    // cannot be sold to right now, and it needs a human rather than a retry.
+    if (!sellable) {
+      return fail(
+        {
+          status: 403,
+          message:
+          'This account cannot start a subscription at the moment, and paying would not ' +
+          'switch it back on. Email hello@batchlabel.co.uk and we will sort it out.'
         },
         cors
       );
