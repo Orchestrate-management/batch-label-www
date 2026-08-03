@@ -101,8 +101,9 @@ webhooks are at-least-once and unordered, so a plain PATCH stores whichever deli
 to land last — a coin toss between a cancelled customer keeping access and a paying one losing
 it. `public.apply_stripe_entitlement()` instead does the whole thing in one transaction:
 
-1. resolves the membership (metadata user id → subscription id → customer id → the email that
-   paid);
+1. resolves the membership (metadata user id → subscription id → customer id — **never** by
+   email; see the section-4 comment in that file for why that path was a critical
+   vulnerability rather than a convenience);
 2. claims the Stripe event id in `public.stripe_webhook_events`, whose **primary key** is what
    makes processing exactly-once;
 3. refuses any event older than the one already applied (monotonic on Stripe's `event.created`);
@@ -120,5 +121,30 @@ The route that calls it is [`/api/stripe-webhook.ts`](../api/stripe-webhook.ts) 
 
 `public.entitlements` (a `security_invoker` view) and `public.get_entitlement(brand)`. Both are
 readable by the owning user and nobody else, and both are granted to `authenticated` only.
+
+### Plan limits (`migrations/20260802120000_plan_limits.sql`)
+
+Two things, kept apart on purpose:
+
+- **Whether** — `entitlement_is_active()` now tests the plan against an explicit *entitling*
+  allow-list instead of "anything that is not free". The old predicate meant the £0.01
+  payment-rail test item bought a real paid tier; a slug now grants nothing until someone
+  adds it to that list. The function keeps its four-argument signature and still knows no
+  quantity of any kind, and the migration asserts the behaviour at apply time rather than
+  trusting the text.
+- **How much** — `sku_limit` and `editor_seat_limit` on `brand_memberships`, `NOT NULL` and
+  defaulting to the smallest allowance, written only by `apply_stripe_entitlement` (now
+  sixteen arguments) from the plan contract in `src/server/plan-contract.ts`. The rule that
+  produces the number lives in code; this database stores only the result. Unlimited is the
+  int4-max sentinel and is read through `sku_is_unlimited()`, never compared to by a client.
+
+The view and the RPC also expose `account_id` — the account key, under its final name, one
+account per user for now — and `business_name`.
+
+**`sku_limit` is stored and displayed but not yet enforced.** Enforcement is a trigger over
+the SKU table, which does not exist yet; `can_modify` and `sku_count` ship with it, in the
+same migration, so the rule and the numbers reporting it arrive together. Until then a
+reader must treat both as *absent* — unknown, never zero and never false. A missing column
+must not become a lockout, and no customer-facing copy may claim an enforced limit.
 The contract for the separate product app is [`../docs/ENTITLEMENTS.md`](../docs/ENTITLEMENTS.md);
 the founder's dashboard steps are [`../docs/STRIPE_SETUP.md`](../docs/STRIPE_SETUP.md).

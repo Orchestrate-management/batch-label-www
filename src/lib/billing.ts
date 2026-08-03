@@ -3,7 +3,15 @@
  *
  * Both calls hit our own API routes (the root `/api` directory — see src/api/README.md for
  * why that location matters) so secret keys and price ids never reach the browser. Stripe
- * Tax is on, and the Maker prices are stored in Stripe VAT-inclusive for consumers.
+ * Tax is on and every price is stored EXCLUSIVE of VAT, so the amounts below are ex-VAT and
+ * must be labelled as such wherever they are rendered.
+ *
+ * THIS MODULE IS ON ITS WAY OUT. Under the decided flow the app's billing page is the single
+ * place a customer picks a tier and is sent to Stripe Checkout; www keeps the public pricing
+ * page, whose buttons route a visitor into the app rather than creating a session here. What
+ * remains is kept alive only because www's own pages still import it, and it now speaks the
+ * endpoint's current contract (a `tier` as well as an interval) so that it cannot become the
+ * one caller that breaks when the endpoint gains a required field.
  *
  * WHAT THIS MODULE DELIBERATELY NO LONGER SENDS
  *
@@ -25,14 +33,59 @@ import { trackBeginCheckout, trackPurchaseRedirect } from './analytics';
 import { getAttribution } from './attribution';
 import { advertisingConsentFromBanner } from './consent';
 import { isValidFbc, isValidFbp } from './meta-events';
+import { PLANS, priceForInterval } from './plans';
 import { supabase } from './supabase';
 
 export type BillingInterval = 'monthly' | 'annual';
 
+/**
+ * The tier this module can ask for. www sells one tier from its own pages; the ladder lives
+ * on the app's billing page, which posts its own tier to the same endpoint.
+ *
+ * Kept as a plain string union rather than imported from the plan contract, because the
+ * contract is server-only and must never reach a browser bundle. `plan-contract.test.ts`
+ * asserts this union is a subset of the contract's purchasable tiers, so the two cannot
+ * drift without a test going red.
+ */
+export type CheckoutTier = 'maker' | 'studio' | 'consultant';
+
+export const DEFAULT_CHECKOUT_TIER: CheckoutTier = 'maker';
+
+/**
+ * Maker's two amounts in major GBP units, EXCLUSIVE of VAT.
+ *
+ * DERIVED, NOT DECLARED. This used to be the second place a price was written down on www —
+ * `src/lib/plans.ts` being the first — and two hand-maintained copies of a price is the
+ * failure mode that puts one number on a pricing card and a different one on the invoice.
+ * There is now exactly one client-side projection, `PLANS`, and this reads from it, so it
+ * cannot drift by construction. `plan-contract.test.ts` asserts that projection against the
+ * server contract, which is the alarm that catches a price changed in only one of them.
+ *
+ * IT SURVIVES ONLY FOR ITS TWO REMAINING CALLERS on this branch (`src/pages/Pricing.tsx` and
+ * `src/lib/structured-data.ts`), both of which read from `PLANS` directly on the copy branch.
+ * Delete it once those land — nothing else imports it.
+ */
 export const PRICES: Record<BillingInterval, number> = {
-  monthly: 14,
-  annual: 140
+  monthly: PLANS.maker.monthlyPence / 100,
+  annual: PLANS.maker.annualPence / 100
 };
+
+/**
+ * The ex-VAT value in major GBP units to report to the analytics layer for a tier and
+ * interval, or 0 when this deploy's projection has no amount for that pair.
+ *
+ * Keyed on the TIER as well as the interval. It used to read Maker's price whatever was being
+ * bought, so a Consultant annual checkout — £1,990 — was reported to GA4 and Meta as a £140
+ * begin_checkout. That is not a display bug: an ad platform optimises against those numbers.
+ *
+ * Ex-VAT deliberately, matching the rule the server applies to the Purchase event: prices are
+ * stored exclusive of VAT, so a tax-inclusive value would make the same tier worth different
+ * amounts in different countries and corrupt ROAS.
+ */
+function checkoutValue(tier: CheckoutTier, interval: BillingInterval): number {
+  const pence = priceForInterval(PLANS[tier], interval);
+  return pence === null ? 0 : pence / 100;
+}
 
 export const CHECKOUT_ENDPOINT = '/api/create-checkout-session';
 export const PORTAL_ENDPOINT = '/api/create-portal-session';
@@ -107,8 +160,11 @@ function metaCookiesForCheckout(): {fbp?: string;fbc?: string;} {
  * send a signed-out visitor to sign up first (see src/lib/checkout-intent.ts, which
  * remembers which plan they were about to buy).
  */
-export async function startCheckout(interval: BillingInterval): Promise<{error: string | null;}> {
-  const value = PRICES[interval];
+export async function startCheckout(
+interval: BillingInterval,
+tier: CheckoutTier = DEFAULT_CHECKOUT_TIER)
+: Promise<{error: string | null;}> {
+  const value = checkoutValue(tier, interval);
   const token = await accessToken();
   if (!token) {
     return { error: 'Please sign in to subscribe, then press this again.' };
@@ -121,6 +177,10 @@ export async function startCheckout(interval: BillingInterval): Promise<{error: 
       method: 'POST',
       headers: requestHeaders(token),
       body: JSON.stringify({
+        // REQUIRED by the endpoint, which allow-lists it and 400s on anything else. It
+        // selects which server-only env var holds the price id; it does not name a price,
+        // an amount or a currency, none of which this module has ever seen.
+        tier,
         interval,
         // Click identifiers ride along so the webhook can forward a server-side conversion
         // later without guessing which ad produced the sale.

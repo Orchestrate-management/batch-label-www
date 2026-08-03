@@ -23,22 +23,46 @@
  */
 
 import type Stripe from 'stripe';
-
-/** The free tier. Anything that is not this is a paid entitlement. */
-export const FREE_PLAN = 'free';
-
-/** The one paid tier Batchlabel sells today. */
-export const MAKER_PLAN = 'maker';
+import { FREE_PLAN, type PlanSlug } from './plan-contract';
 
 /**
- * Every paid tier this deployment is willing to grant.
+ * THE SIX FIRST-ITEM AND SINGLE-VALUE READS from docs/PRICING_RESEARCH.md §4.1, re-checked
+ * now that the "no add-ons" decision has landed — one Stripe product per subscription, one
+ * item, quantity always 1. Each was checked; none is assumed.
  *
- * An allow-list rather than a free-text field: the plan can be read from Stripe metadata
- * (which we wrote, and which arrives inside a signature-verified event), but a value that
- * is not on this list is ignored rather than stored. That keeps a hand-edited subscription
- * in the Stripe dashboard from inventing a tier the product has no idea how to price.
+ *   1. `subscriptionPriceId` — first item only. NO LONGER SAFE AS WRITTEN, for a new reason.
+ *      With no add-ons the first item IS the only item, so it returns the right price today.
+ *      But what a wrong answer costs has changed: it used to pick between a base price and an
+ *      add-on price on a subscription that was entitling either way; it now picks the TIER.
+ *      A second item can still appear from a hand-edit, a migration or a coupon materialised
+ *      as an item, none of which our own checkout decision prevents. Changed below to refuse
+ *      to answer rather than guess.
+ *   2. `subscriptionInterval` — first item only. SAFE, and demoted. The resolved price entry
+ *      now carries our own vocabulary ('monthly'/'annual'); this keeps Stripe's ('month'/
+ *      'year') as a cross-check, because the two must never be conflated.
+ *   3. `planForPrice` falling back to MAKER. NOT SAFE — deleted. With five entitling price
+ *      ids and a penny price whose env var is unset by default, that fallback was a live
+ *      pricing exploit. See planEntryForPrice in ./plan-contract.ts for the full argument.
+ *   4. `belongsToThisBrand` testing the first item's price. SAFE but needlessly
+ *      order-dependent; now scans every item (see ./stripe-events.ts).
+ *   5. `EntitlementIntent.priceId: string | null` — one price per event. SAFE, no change.
+ *      With one product per subscription this is not merely adequate, it is the correct
+ *      model: the intent's job is to say which tier this subscription now sells, and that is
+ *      one price. Widening it to an array would invent a shape neither the database (one
+ *      stripe_price_id column) nor the contract has, and every consumer would take [0].
+ *   6. `item.quantity` never read. NOW SAFE, and asserted anyway. Quantity must always be 1,
+ *      so discarding it loses nothing — but unread and asserted differ when a human edits a
+ *      subscription in the dashboard: unread, quantity 3 on a Studio price grants one Studio
+ *      silently; asserted, it refuses to resolve and logs. A stated property with no check is
+ *      a comment.
+ *
+ * The seventh row of that table is the migration's, not this file's.
+ *
+ * NOTE THE ASYMMETRY THIS LEAVES, deliberately: `subscriptionPeriodEnd` takes the MAX over
+ * all items, while tier resolution REFUSES if there is more than one. Access should last as
+ * long as anything on the subscription is paid up (permissive); a tier must never be guessed
+ * from an ambiguous object (strict). Harmonising those two breaks whichever one is changed.
  */
-export const PAID_PLANS: readonly string[] = [MAKER_PLAN];
 
 /**
  * Stripe statuses that entitle. Deliberately the same list as
@@ -58,37 +82,8 @@ export function isEntitlingStatus(status: string | null | undefined): boolean {
  * never disagree — "plan: maker, plan_status: canceled" is not a state this code can
  * produce.
  */
-export function planForStatus(status: string | null | undefined, paidPlan: string): string {
+export function planForStatus(status: string | null | undefined, paidPlan: PlanSlug): PlanSlug {
   return isEntitlingStatus(status) ? paidPlan : FREE_PLAN;
-}
-
-/** Maps a Stripe price id to the plan it sells. */
-export interface PriceMap {
-  [priceId: string]: string;
-}
-
-export function buildPriceMap(env: {
-  STRIPE_PRICE_MAKER_MONTHLY?: string;
-  STRIPE_PRICE_MAKER_ANNUAL?: string;
-}): PriceMap {
-  const map: PriceMap = {};
-  if (env.STRIPE_PRICE_MAKER_MONTHLY) map[env.STRIPE_PRICE_MAKER_MONTHLY] = MAKER_PLAN;
-  if (env.STRIPE_PRICE_MAKER_ANNUAL) map[env.STRIPE_PRICE_MAKER_ANNUAL] = MAKER_PLAN;
-  return map;
-}
-
-/**
- * The plan a price sells.
- *
- * An unrecognised price falls back to MAKER_PLAN on purpose. Batchlabel sells exactly one
- * paid product; if the founder creates a replacement price, or runs a one-off custom
- * price for a workshop, the alternative is a customer who has paid and gets nothing. The
- * fallback can only ever be reached from a signature-verified subscription that Stripe says
- * is active, so it grants the tier we sell, never more.
- */
-export function planForPrice(priceId: string | null | undefined, prices: PriceMap): string {
-  if (priceId && prices[priceId]) return prices[priceId];
-  return MAKER_PLAN;
 }
 
 /** Stripe sends unix seconds; Postgres wants an ISO instant. */
@@ -105,7 +100,12 @@ export function toIso(seconds: number | null | undefined): string | null {
 interface PeriodBearingSubscription {
   current_period_end?: number | null;
   trial_end?: number | null;
-  items?: {data?: Array<{current_period_end?: number | null;price?: {id?: string | null;recurring?: {interval?: string | null;} | null;} | null;}> | null;} | null;
+  items?: {data?: Array<{
+    current_period_end?: number | null;
+    /** Always 1 under the no-add-ons decision. Read so that "not 1" is visible. */
+    quantity?: number | null;
+    price?: {id?: string | null;recurring?: {interval?: string | null;} | null;} | null;
+  }> | null;} | null;
 }
 
 /**
@@ -129,12 +129,61 @@ export function subscriptionTrialEnd(subscription: Stripe.Subscription | unknown
   return toIso((subscription as PeriodBearingSubscription).trial_end);
 }
 
-export function subscriptionPriceId(subscription: Stripe.Subscription | unknown): string | null {
+/**
+ * Every item's price id, in payload order.
+ *
+ * For the brand check, which must not depend on which item Stripe happened to list first.
+ */
+export function subscriptionPriceIds(subscription: Stripe.Subscription | unknown): (string | null)[] {
   const sub = subscription as PeriodBearingSubscription;
-  return sub.items?.data?.[0]?.price?.id ?? null;
+  return (sub.items?.data ?? []).map((item) => item?.price?.id ?? null);
 }
 
-/** 'month' | 'year', recorded in data->'billing' for the account screen. */
+/** Why `subscriptionPriceId` declined to name a price. Distinct values because the two
+ *  mean very different things to whoever reads the log. */
+export type PriceIdRefusal = 'no_items' | 'multiple_items' | 'quantity_not_one' | 'no_price';
+
+/**
+ * THE price id, for tier resolution — or a reason it will not say.
+ *
+ * Refuses when the subscription does not have exactly one item, or when that item's quantity
+ * is present and not 1. Under the no-add-ons decision both are impossible for a subscription
+ * we created, so either one means the object means something this code does not model — for
+ * instance quantity 3 on a Studio price, which a human would read as three Studio allowances
+ * and which a bare `[0]` read would silently grant as one.
+ *
+ * The refusal propagates to `plan: null` — leave the tier alone — plus an error log. A
+ * visible "we did not change anything and here is why" beats a confident wrong tier.
+ */
+export function readSubscriptionPriceId(
+subscription: Stripe.Subscription | unknown)
+: {priceId: string;refusal: null;} | {priceId: null;refusal: PriceIdRefusal;} {
+  const items = (subscription as PeriodBearingSubscription).items?.data ?? [];
+  if (items.length === 0) return { priceId: null, refusal: 'no_items' };
+  if (items.length > 1) return { priceId: null, refusal: 'multiple_items' };
+  const item = items[0];
+  if (typeof item?.quantity === 'number' && item.quantity !== 1) {
+    return { priceId: null, refusal: 'quantity_not_one' };
+  }
+  const priceId = item?.price?.id ?? null;
+  return priceId ? { priceId, refusal: null } : { priceId: null, refusal: 'no_price' };
+}
+
+/** The price id alone, for callers that do not need to log the reason. */
+export function subscriptionPriceId(subscription: Stripe.Subscription | unknown): string | null {
+  return readSubscriptionPriceId(subscription).priceId;
+}
+
+/**
+ * STRIPE's interval vocabulary — 'month' | 'year' — recorded in data->'billing' as a
+ * cross-check only.
+ *
+ * The authority on the interval is now the resolved price entry, which speaks OUR vocabulary
+ * ('monthly' | 'annual') and is the same value the checkout wrote into Stripe metadata. The
+ * two vocabularies must not be conflated, so both are stored under distinct keys: if they
+ * ever disagree, the price index is wrong about an interval, which is a config bug worth
+ * seeing rather than one to paper over.
+ */
 export function subscriptionInterval(subscription: Stripe.Subscription | unknown): string | null {
   const sub = subscription as PeriodBearingSubscription;
   return sub.items?.data?.[0]?.price?.recurring?.interval ?? null;

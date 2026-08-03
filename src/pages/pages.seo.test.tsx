@@ -164,8 +164,32 @@ describe('page level structured data', () => {
     renderPage(PAGES[2]);
     expect(typesOnPage()).toEqual(['BreadcrumbList', 'SoftwareApplication', 'FAQPage']);
     const app = pageSchemas()[1];
-    expect((app.offers as unknown[]).length).toBe(3);
+    // Free, plus a monthly and an annual for each of the three priced plans.
+    expect((app.offers as unknown[]).length).toBe(7);
     expect((pageSchemas()[2].mainEntity as unknown[]).length).toBe(pricingFaqs.length);
+  });
+
+  /**
+   * The £0.01 payment-rail item exists to prove the live rail with real money and must
+   * never be stumbled into. The pricing page maps over a projection that does not contain
+   * it, so these are belt and braces rather than the only guard.
+   */
+  it('never renders the payment rail test item, in the page or in its markup', () => {
+    const { container } = renderPage(PAGES[2]);
+    expect(container.textContent ?? '').not.toMatch(/0\.01|rail.?test|payment rail/i);
+    expect(JSON.stringify(pageSchemas())).not.toMatch(/0\.01|rail.?test|payment rail/i);
+  });
+
+  /** Every price a visitor can read carries its tax qualifier in the same element. */
+  it('qualifies every price on the pricing page with exc VAT', () => {
+    const { container } = renderPage(PAGES[2]);
+    const priced = [...container.querySelectorAll('*')].filter(
+      (node) => node.children.length === 0 && /£\d/.test(node.textContent ?? '')
+    );
+    expect(priced.length).toBeGreaterThan(0);
+    for (const node of priced) {
+      expect(node.parentElement?.textContent ?? '').toMatch(/exc VAT|for ever/);
+    }
   });
 
   it('marks up every question on the FAQ page', () => {

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_BRAND, DEFAULT_SITE_URL, readServerConfig, returnUrl } from './config';
+import { DEFAULT_APP_URL, DEFAULT_BRAND, DEFAULT_SITE_URL, readServerConfig, returnUrl } from './config';
 
 describe('readServerConfig', () => {
   it('reads the Stripe and Supabase server secrets', () => {
@@ -17,7 +17,39 @@ describe('readServerConfig', () => {
     expect(config.stripeWebhookSecret).toBe('whsec_x');
     expect(config.supabaseUrl).toBe('https://ref.supabase.co');
     expect(config.serviceRoleKey).toBe('service_role_x');
-    expect(config.prices).toEqual({ price_m: 'maker', price_a: 'maker' });
+    expect(config.priceIndex.get('price_m')).toEqual({ slug: 'maker', interval: 'monthly' });
+    expect(config.priceIndex.get('price_a')).toEqual({ slug: 'maker', interval: 'annual' });
+  });
+
+  /** The catastrophic env misconfiguration must kill the deploy on the first request rather
+   *  than sell a paid tier for a penny on the thousandth. */
+  it('throws when two contract entries point at the same Stripe price id', () => {
+    expect(() =>
+    readServerConfig({ STRIPE_PRICE_MAKER_MONTHLY: 'price_x', STRIPE_PRICE_RAIL_TEST_MONTHLY: 'price_x' })
+    ).toThrow(/price_x/);
+  });
+
+  it('carries the raw env so a tier resolves through the same object the index was built from', () => {
+    const env = { STRIPE_PRICE_STUDIO_ANNUAL: 'price_studio_a' };
+    expect(readServerConfig(env).env).toBe(env);
+  });
+
+  /** Two independent gates on the penny price. The flag is the second one. */
+  it('leaves rail-test checkout off unless the flag is exactly the string true', () => {
+    expect(readServerConfig({}).allowRailTestCheckout).toBe(false);
+    expect(readServerConfig({ ALLOW_RAIL_TEST_CHECKOUT: 'false' }).allowRailTestCheckout).toBe(false);
+    expect(readServerConfig({ ALLOW_RAIL_TEST_CHECKOUT: '1' }).allowRailTestCheckout).toBe(false);
+    expect(readServerConfig({ ALLOW_RAIL_TEST_CHECKOUT: 'true' }).allowRailTestCheckout).toBe(true);
+  });
+
+  it('reads the rail-test price id and the portal configuration', () => {
+    const config = readServerConfig({
+      STRIPE_PRICE_RAIL_TEST_MONTHLY: 'price_penny',
+      STRIPE_PORTAL_CONFIGURATION_ID: 'bpc_test'
+    });
+    expect(config.railTestPriceId).toBe('price_penny');
+    expect(config.portalConfigurationId).toBe('bpc_test');
+    expect(readServerConfig({}).portalConfigurationId).toBeUndefined();
   });
 
   /** SUPABASE_URL is the server-only name; VITE_SUPABASE_URL already holds the same value. */
@@ -27,10 +59,21 @@ describe('readServerConfig', () => {
     );
   });
 
-  it('defaults the site url and brand', () => {
+  it('defaults the site url, the app url and the brand', () => {
     const config = readServerConfig({});
     expect(config.siteUrl).toBe(DEFAULT_SITE_URL);
+    expect(config.appUrl).toBe(DEFAULT_APP_URL);
     expect(config.brand).toBe(DEFAULT_BRAND);
+  });
+
+  /** Billing lands in the app, so the app url is the origin Stripe returns to. VITE_APP_URL
+   *  is what the client handoff already uses, and the two must never point at different
+   *  apps. */
+  it('takes the app url from either alias and trims a trailing slash', () => {
+    expect(readServerConfig({ VITE_APP_URL: 'https://app.local:3000/' }).appUrl).toBe('https://app.local:3000');
+    expect(
+      readServerConfig({ APP_URL: 'https://app.example', VITE_APP_URL: 'https://other.example' }).appUrl
+    ).toBe('https://app.example');
   });
 
   it('trims a trailing slash off SITE_URL so return urls never double up', () => {

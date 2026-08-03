@@ -9,8 +9,8 @@ export const labelContents = [
 'Hazard statements, the H codes, in full sentences',
 'Precautionary statements, the P codes, chosen and combined',
 'Allergen declarations from the fragrance, such as linalool and limonene',
-'A generated UFI, that is a Unique Formula Identifier, for poison centre notification',
-'Batch code and date fields you can fill per batch',
+'A place for your UFI, that is a Unique Formula Identifier, set where poison centre rules require it',
+'Batch code and date fields',
 'Your business name, address and contact details as the supplier',
 'Candle and diffuser safety wording, such as burn within sight',
 'CLP text set at the minimum size your pack size requires'];
@@ -34,6 +34,10 @@ export function WhatsIncluded() {
               </li>
             )}
           </ul>
+          <p className="mt-6 max-w-prose text-[0.97rem] leading-relaxed text-ink-soft">
+            Every line above is on every plan, including Free. Plans differ by how many things you
+            sell, never by what goes on the label.
+          </p>
         </div>
         <div className="lg:sticky lg:top-24">
           <LabelPreview compact />

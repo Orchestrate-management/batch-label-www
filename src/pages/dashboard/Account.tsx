@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { usePageMeta } from '../../lib/seo';
 import { useAuth } from '../../lib/auth';
-import { openBillingPortal, startCheckout } from '../../lib/billing';
+import { openBillingPortal } from '../../lib/billing';
+import { PUBLIC_PLANS, priceWithInterval, skuAllowance } from '../../lib/plans';
 import { fetchEntitlement, summarisePlan, type Entitlement } from '../../lib/entitlements';
 import { APP_URL } from '../../lib/app-handoff';
 import { Button } from '../../components/ui/Button';
@@ -16,7 +17,7 @@ export function Account() {
   });
 
   const { user } = useAuth();
-  const [busy, setBusy] = useState<'portal' | 'checkout' | null>(null);
+  const [busy, setBusy] = useState<'portal' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [entitlement, setEntitlement] = useState<Entitlement | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
@@ -44,14 +45,6 @@ export function Account() {
     // No user id: the endpoint resolves the Stripe customer from the access token, so a
     // billing-portal link can only ever be minted for the person who asked for it.
     const result = await openBillingPortal();
-    if (result.error) setError(result.error);
-    setBusy(null);
-  };
-
-  const handleUpgrade = async () => {
-    setBusy('checkout');
-    setError(null);
-    const result = await startCheckout('monthly');
     if (result.error) setError(result.error);
     setBusy(null);
   };
@@ -135,11 +128,23 @@ export function Account() {
         null}
 
         {summary.showUpgrade ?
-        <p className="mt-4 max-w-prose text-sm leading-relaxed text-ink-soft">
-            The Maker plan is £14 a month or £140 a year, VAT included. It gives you unlimited
-            labels, print ready PDF and SVG with no watermark, UFI generation, batch code fields and
-            saved recipes.
-          </p> :
+        <div className="mt-4 max-w-prose text-sm leading-relaxed text-ink-soft">
+            <p>
+              Paid plans buy you room for more SKUs, and nothing else: every plan makes the same
+              label.
+            </p>
+            <ul className="mt-3 space-y-1.5">
+              {PUBLIC_PLANS.map((plan) =>
+            plan.monthlyPence === null || plan.annualPence === null ?
+            null :
+            <li key={plan.slug}>
+                    <span className="font-medium text-ink">{plan.label}</span>,{' '}
+                    {skuAllowance(plan)}, {priceWithInterval(plan.monthlyPence, 'monthly')} or{' '}
+                    {priceWithInterval(plan.annualPence, 'annual')}.
+                  </li>
+            )}
+            </ul>
+          </div> :
         null}
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
@@ -149,13 +154,16 @@ export function Account() {
             The endpoint refuses a second subscription as well — this is so they are never
             invited to try.
            */}
+          {/*
+            The tier is chosen inside the app, not here. A single button that quietly bought
+            one fixed plan out of four is a wrong-plan purchase with a refund attached.
+           */}
           {summary.showUpgrade ?
           <Button
-            disabled={busy === 'checkout'}
-            onClick={handleUpgrade}
-            track={{ label: 'Upgrade to Maker', location: 'dashboard_account' }}>
+            href={`${APP_URL}/settings/billing`}
+            track={{ label: 'Choose a plan', location: 'dashboard_account' }}>
 
-              {busy === 'checkout' ? 'Opening checkout...' : 'Upgrade to Maker'}
+              Choose a plan
             </Button> :
           null}
           {summary.showManageBilling ?
@@ -176,9 +184,10 @@ export function Account() {
         null}
 
         <p className="mt-4 text-xs leading-relaxed text-ink-muted">
-          Manage billing opens the Stripe customer portal, where you can change your card, download
-          invoices, switch between monthly and yearly, or cancel. Cancelling leaves your access in
-          place until the end of the period you have paid for.
+          Manage billing opens the Stripe customer portal, where you can change your plan, switch
+          between monthly and yearly, change your card, download invoices, or cancel. Cancelling
+          leaves your access in place until the end of the period you have paid for, and no part of
+          it is refunded.
         </p>
       </section>
 

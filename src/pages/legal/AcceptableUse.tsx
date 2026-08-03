@@ -24,10 +24,12 @@ export function AcceptableUse() {
           'Upload safety data sheets or documents you have no right to use, or anyone else\u2019s confidential information.',
           'Use the service to label a product you know to be unsafe, or to hide a hazard you are aware of.',
           'Resell, white label or repackage Batchlabel output as a compliance assessment service without a written agreement with us.',
-          'Share one account across separate businesses, or exceed the number of people your plan allows.',
+          'Share one account across separate businesses, or share your login with someone else instead of waiting for the seats we have not built yet.',
           'Scrape, reverse engineer, load test or attack the service, or try to reach data belonging to another account.',
           'Upload malware, or use the service to send unlawful, abusive or infringing content.',
-          'Circumvent usage limits, watermarks or payment.']
+          // Not "watermarks": there has never been a watermark in either repo, and a clause
+          // forbidding the circumvention of something that does not exist is unenforceable.
+          'Circumvent your plan’s SKU allowance, or circumvent payment.']
           } />
         
       </LegalSection>

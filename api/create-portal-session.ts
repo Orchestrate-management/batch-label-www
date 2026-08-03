@@ -17,10 +17,17 @@
  *
  * There is no `user_id` parameter here, at all, on purpose. It cannot be misused if it does
  * not exist.
+ *
+ * WHY THE `configuration` MATTERS. Without it the session uses the Stripe ACCOUNT DEFAULT
+ * configuration, and that account is shared across Orchestrate brands — so it cannot be the
+ * place Batchlabel's tier list is enabled without surfacing Batchlabel prices inside another
+ * brand's portal. It is also the only thing that turns on `subscription_update`, which is
+ * what makes tier switching possible at all: with one product per subscription and no
+ * add-ons, the portal IS the tier-change screen, and there is no in-app substitute.
  */
 
 import Stripe from 'stripe';
-import { allowedOrigins, corsHeaders, isAllowedOrigin, preflightResponse } from '../src/server/cors';
+import { allowedOrigins, corsHeaders, preflightResponse } from '../src/server/cors';
 import { readServerConfig, returnUrl } from '../src/server/config';
 import { fail, json } from '../src/server/http';
 import { createAdminClient, findMembership, userFromRequest } from '../src/server/supabase-admin';
@@ -62,14 +69,25 @@ export default {
       return fail({ status: 404, message: 'We could not find a billing record for this account yet. If you have just subscribed, give it a moment and refresh.' }, cors);
     }
 
-    const trustedOrigin = isAllowedOrigin(origin, allowList) ? origin : config.siteUrl;
     const body = (await request.json().catch(() => null)) as {return_path?: unknown;} | null;
+
+    if (!config.portalConfigurationId) {
+      // Loud, because the silent version is worse than an outage: the portal still opens, it
+      // just quietly loses tier switching, and the support ticket that follows reads like a
+      // Stripe bug rather than a missing environment variable.
+      console.error('[portal] STRIPE_PORTAL_CONFIGURATION_ID is unset; falling back to the shared account default');
+    }
 
     try {
       const stripe = new Stripe(config.stripeSecretKey);
       const session = await stripe.billingPortal.sessions.create({
         customer: customerId,
-        return_url: returnUrl(trustedOrigin, body?.return_path as string | undefined, config.siteUrl, '/dashboard/account')
+        // Spread rather than an unconditional `configuration: undefined`, so the absence is
+        // visible in the request we build rather than normalised away by the SDK.
+        ...(config.portalConfigurationId ? { configuration: config.portalConfigurationId } : {}),
+        // Back to the app, never to www: the app owns billing, and www no longer has an
+        // account screen to return to.
+        return_url: returnUrl(config.appUrl, body?.return_path as string | undefined, config.appUrl, '/billing')
       });
       return json({ url: session.url }, 200, cors);
     } catch (error) {

@@ -5,9 +5,13 @@ import {
   checkoutMetadata,
   resolveInterval,
   sanitiseAttribution,
+  resolveRailTest,
+  resolveTier,
   sanitiseMetaCookies } from
 './checkout';
-import { MAKER_PLAN } from './entitlements';
+import { PAID_TIERS } from './plan-contract';
+
+const MAKER_PLAN = 'maker' as const;
 
 describe('resolveInterval', () => {
   it('accepts annual', () => {
@@ -19,6 +23,56 @@ describe('resolveInterval', () => {
     expect(resolveInterval('ANNUAL')).toBe('monthly');
     expect(resolveInterval(undefined)).toBe('monthly');
     expect(resolveInterval({ toString: () => 'annual' })).toBe('monthly');
+  });
+});
+
+/**
+ * The tier is allow-listed and never coerced, while the interval directly above it IS
+ * coerced. That asymmetry is deliberate: guessing the interval wrong costs a billing period
+ * the portal fixes in one click; guessing the tier wrong sells the customer a different
+ * product at a different price with a different allowance.
+ */
+describe('resolveTier', () => {
+  it('accepts each purchasable tier exactly as written', () => {
+    for (const tier of PAID_TIERS) expect(resolveTier(tier)).toBe(tier);
+  });
+
+  it('returns null rather than coercing anything else to a tier', () => {
+    const rejected = [undefined, null, '', '   ', 'Maker', 'MAKER', 'makerr', {}, [], 0, 1, true];
+    for (const value of rejected) expect(resolveTier(value)).toBeNull();
+  });
+
+  /** 'free' has no Stripe price to sell — it is the ABSENCE of a subscription. */
+  it('refuses free, which is not a thing that can be bought', () => {
+    expect(resolveTier('free')).toBeNull();
+  });
+
+  /**
+   * Half of the pair that makes the £0.01 exploit unrepresentable: a `tier` request can
+   * never resolve to the penny price. The other half is that railTest cannot select a paid
+   * one.
+   */
+  it('refuses rail_test, which is requested through a different field entirely', () => {
+    expect(resolveTier('rail_test')).toBeNull();
+    expect(resolveTier(' rail_test ')).toBeNull();
+  });
+
+  it('trims surrounding whitespace on an otherwise valid tier', () => {
+    expect(resolveTier('  studio  ')).toBe('studio');
+  });
+});
+
+describe('resolveRailTest', () => {
+  it('needs BOTH the request field and the server flag', () => {
+    expect(resolveRailTest(true, true)).toBe(true);
+    expect(resolveRailTest(true, false)).toBe(false);
+    expect(resolveRailTest(false, true)).toBe(false);
+  });
+
+  it('honours nothing but a real boolean true', () => {
+    for (const value of ['true', 1, {}, 'rail_test', undefined]) {
+      expect(resolveRailTest(value, true)).toBe(false);
+    }
   });
 });
 

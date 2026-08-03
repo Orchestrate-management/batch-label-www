@@ -55,9 +55,9 @@ export function Labels() {
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         {[
-        { title: 'Saved recipes', body: 'Reuse a fragrance and pack size instead of starting again.' },
-        { title: 'Batch codes', body: 'Add a batch code and date to each print run.' },
-        { title: 'Print ready files', body: 'PDF at true size, plus SVG for a print shop.' }].
+        { title: 'One fragrance, many sizes', body: 'Reuse a fragrance across pack sizes. Each pack size is its own SKU.' },
+        { title: 'Batch codes', body: 'Batch code and date fields on the label.' },
+        { title: 'True size preview', body: 'See the label at the size it will print, before you commit to a run.' }].
         map((card) =>
         <div key={card.title} className="rounded-2xl border border-paper-edge bg-white p-5">
             <h3 className="font-display text-[1rem] font-semibold text-ink">{card.title}</h3>

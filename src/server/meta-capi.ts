@@ -90,8 +90,18 @@ export interface PurchaseSignal {
   supabaseUserId: string | null;
   /** Stripe's event.created, unix SECONDS. The time the purchase happened. */
   eventTimeUnix: number;
-  /** Minor units, as Stripe reports them. 1400 = £14.00. */
-  amountTotalMinor: number | null;
+  /**
+   * Minor units, EX-VAT, as Stripe reports them. 1400 = £14.00.
+   *
+   * The subtotal rather than the total, because prices are stored exclusive of VAT: the
+   * total includes whatever VAT was added for that customer's country, so reporting it
+   * would make one tier worth different amounts by geography and corrupt ROAS.
+   */
+  amountSubtotalMinor: number | null;
+  /** The VAT Stripe added, minor units. Reported alongside so net stays recoverable. */
+  taxMinor: number | null;
+  /** The plan slug from the Checkout Session metadata, for content_ids. */
+  plan: string | null;
   currency: string | null;
   /** First-touch click id, carried through Checkout metadata. */
   fbclid: string | null;
@@ -259,9 +269,12 @@ export function buildPurchasePayload(input: BuildPurchaseInput): MetaCapiPayload
     // Batchlabel sells in GBP only. The Stripe value is used rather than a constant so a
     // second currency would be reported correctly instead of mislabelled as pounds.
     currency: (signal.currency ?? 'GBP').toUpperCase(),
-    value: signal.amountTotalMinor === null ? 0 : minorToMajor(signal.amountTotalMinor),
+    value: signal.amountSubtotalMinor === null ? 0 : minorToMajor(signal.amountSubtotalMinor),
     content_type: 'product',
-    content_ids: ['maker'],
+    // The tier actually bought, not a hardcoded one. Reporting every sale as `maker` made
+    // Consultant and Studio invisible in ad reporting, and would report a £0.01 rail-test
+    // purchase as a Maker sale. The slug is what makes the rail test filterable out.
+    content_ids: [signal.plan ?? 'unknown'],
     num_items: 1
   };
 

@@ -38,6 +38,8 @@ export default defineConfig({
         // absent: it is Supabase wiring whose only testable logic (bearerToken,
         // userFromRequest) is covered directly, and measuring the client calls around it
         // would only measure the mocks.
+        'src/server/plan-contract.ts',
+        'src/server/plans.ts',
         'src/server/entitlements.ts',
         'src/server/stripe-events.ts',
         'src/server/checkout.ts',

@@ -25,11 +25,16 @@
       It has to be static, because the crawlers that matter most for link previews —
       Facebook, LinkedIn, Slack, X — do not execute JavaScript. Before this, a shared
       Batchlabel link had no description and no image at all.
+
+      The three description strings below must stay byte-identical to the one in
+      src/pages/Home.tsx, which is what a browser running JavaScript sees. They carry the
+      free-tier allowance, so src/lib/structured-data.test.ts asserts they agree with each
+      other and with src/lib/plans.ts. Change the plan and this file changes with it.
     -->
     <title>CLP labels for candle and wax melt makers | Batchlabel</title>
     <meta
       name="description"
-      content="Turn your fragrance supplier's safety data sheet into a print ready UK and EU CLP label for candles, wax melts, diffusers and room sprays. First label free."
+      content="Turn your fragrance supplier's safety data sheet into correct UK and EU CLP label wording for candles, wax melts, diffusers and room sprays. 3 SKUs free, no card."
     />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://www.batchlabel.xyz/" />
@@ -40,7 +45,7 @@
     <meta property="og:title" content="CLP labels for candle and wax melt makers | Batchlabel" />
     <meta
       property="og:description"
-      content="Turn your fragrance supplier's safety data sheet into a print ready UK and EU CLP label for candles, wax melts, diffusers and room sprays. First label free."
+      content="Turn your fragrance supplier's safety data sheet into correct UK and EU CLP label wording for candles, wax melts, diffusers and room sprays. 3 SKUs free, no card."
     />
     <meta property="og:url" content="https://www.batchlabel.xyz/" />
     <meta property="og:image" content="https://www.batchlabel.xyz/og/batchlabel-share.png" />
@@ -55,7 +60,7 @@
     <meta name="twitter:title" content="CLP labels for candle and wax melt makers | Batchlabel" />
     <meta
       name="twitter:description"
-      content="Turn your fragrance supplier's safety data sheet into a print ready UK and EU CLP label for candles, wax melts, diffusers and room sprays. First label free."
+      content="Turn your fragrance supplier's safety data sheet into correct UK and EU CLP label wording for candles, wax melts, diffusers and room sprays. 3 SKUs free, no card."
     />
     <meta name="twitter:image" content="https://www.batchlabel.xyz/og/batchlabel-share.png" />
     <meta

@@ -20,6 +20,7 @@
  */
 
 import { isValidFbc, isValidFbp } from '../lib/meta-events';
+import { PAID_TIERS, type BillingInterval, type PaidTier, type PlanSlug } from './plan-contract';
 
 /** Stripe's limits: 50 keys, 40 chars per key, 500 chars per value. */
 const MAX_METADATA_VALUE = 480;
@@ -41,11 +42,43 @@ export const ATTRIBUTION_KEYS: readonly string[] = [
 'first_seen_at'];
 
 
-export type BillingInterval = 'monthly' | 'annual';
+export type { BillingInterval };
 
 /** Anything that is not exactly 'annual' is monthly. Never trust the string as-is. */
 export function resolveInterval(value: unknown): BillingInterval {
   return value === 'annual' ? 'annual' : 'monthly';
+}
+
+/**
+ * The requested tier, or null.
+ *
+ * ALLOW-LISTED AND NEVER COERCED, unlike `resolveInterval` directly above it — and a
+ * reviewer will ask why two functions side by side behave differently, so: guessing the
+ * interval wrong costs a billing period the portal fixes in one click, while guessing the
+ * TIER wrong sells the customer a different product from the one they clicked, at a
+ * different price, with a different allowance. The interval is also a visible, changeable
+ * toggle on the billing page, so a missing one is a client bug that degrades to the cheaper
+ * option. The tier is the whole content of the request.
+ *
+ * Returns null for garbage, for absence, and — deliberately — for 'free' and 'rail_test'.
+ * 'free' is not purchasable: it is the ABSENCE of a subscription and has no Stripe price to
+ * sell. 'rail_test' is requested through a different field entirely (see resolveRailTest),
+ * so a `tier` request can never resolve to the penny price and a penny can never buy a paid
+ * tier. The pair is not representable in either direction.
+ */
+export function resolveTier(value: unknown): PaidTier | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return (PAID_TIERS as readonly string[]).includes(trimmed) ? trimmed as PaidTier : null;
+}
+
+/**
+ * The £0.01 rail test, requested through its own boolean and honoured only when the server
+ * flag is on. Two independent gates, neither sufficient alone: the flag is unset in
+ * production except for the minutes it takes to run a live rail test.
+ */
+export function resolveRailTest(value: unknown, allowed: boolean): boolean {
+  return allowed && value === true;
 }
 
 /**
@@ -118,8 +151,15 @@ export interface CheckoutMetadataInput {
   userId: string | null;
   /** A server constant, never a request parameter. */
   brand: string;
+  /**
+   * BOTH of these come from the SERVER-RESOLVED price entry — planEntryForPrice(priceId) —
+   * never from the request body. The body's `tier` selects which env var to read and is then
+   * discarded. That is what closes the round trip: a claim the price does not support cannot
+   * survive into Stripe, so even a bug in the request validation would write the tier the
+   * price actually sells rather than the one the caller asked for.
+   */
   interval: BillingInterval;
-  plan: string;
+  plan: PlanSlug;
   attribution: unknown;
   /** Meta's `_fbp` / `_fbc`, if the browser had them. Validated by the caller. */
   meta?: MetaCookies;
