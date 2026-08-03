@@ -43,7 +43,7 @@ export const homeFaqs: FaqEntry[] = [
 {
   question: 'What if I change my recipe?',
   answer:
-  'Change the fragrance percentage and the label changes with it, including which precautionary statements apply, and reprinting costs nothing. Nothing is hard coded into a spreadsheet, so a change of load does not mean rebuilding your formulas. Selling the same fragrance in a different pack size is a different SKU, because it is a different thing on a shelf: it gets its own label and it counts towards your plan.'
+  'Change the fragrance percentage and the label changes with it, including which precautionary statements apply. Nothing is hard coded into a spreadsheet, so a change of load does not mean rebuilding your formulas. Selling the same fragrance in a different pack size is a different SKU, because it is a different thing on a shelf: it gets its own label and it counts towards your plan.'
 },
 {
   question: 'Can I print the labels at home?',
@@ -130,7 +130,7 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   {
     question: 'Can I match it to my brand?',
     answer:
-    'You can set the label size, choose a layout, and place your own logo. The regulated text stays at the sizes and spacing the rules require, because that is the part that gets a listing pulled down.'
+    'Only a little, and not with a logo yet. You can choose the label size, set the type size and line spacing, and turn on an optional block carrying your business name. There is no way to upload a logo or artwork, and we are not going to pretend otherwise. The regulated text stays at the sizes and spacing the rules require whatever you change, because that is the part that gets a listing pulled down.'
   },
   {
     question: 'What file formats do I get?',
@@ -171,7 +171,7 @@ export const pricingFaqs: FaqEntry[] = [
 {
   question: 'How is the price metered?',
   answer:
-  'By SKU. One scent sold in three pack sizes counts as three, because each one is a separate thing on a shelf with its own label. Reprints are never counted, archived SKUs are never counted, and reading supplier safety data sheets is never counted on any plan.'
+  'By SKU. One scent sold in three pack sizes counts as three, because each one is a separate thing on a shelf with its own label. Reading supplier safety data sheets is never counted, on any plan. There is no archive yet, so a SKU you have stopped selling still counts towards your plan.'
 },
 {
   question: 'Does the price include VAT?',
@@ -196,7 +196,7 @@ export const pricingFaqs: FaqEntry[] = [
 {
   question: 'Can I switch between monthly and annual?',
   answer:
-  'Yes, from the billing portal. Changes are prorated by Stripe, so you are only charged for the difference.'
+  'Yes, from the billing portal, and which way you are going changes when it happens. Moving up, monthly to yearly or to a larger plan, takes effect straight away. Moving down, yearly back to monthly or to a smaller plan, is scheduled for the end of the period you have already paid for: you keep what you bought until then, and nothing is credited or refunded in the meantime.'
 },
 {
   question: 'Can more than one person use the account?',

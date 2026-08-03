@@ -132,7 +132,7 @@ export function summarisePlan(entitlement: Entitlement | null): PlanSummary {
   if (!entitlement.active) {
     return {
       label: `${PLANS.free.label} plan`,
-      detail: `${skuAllowance(PLANS.free)}, the same label every paid plan makes, unlimited reprints.`,
+      detail: `${skuAllowance(PLANS.free)}, and the same label every paid plan makes.`,
       showUpgrade: true,
       // A former subscriber still has invoices to download, so the portal stays available.
       showManageBilling: true,
@@ -147,10 +147,12 @@ export function summarisePlan(entitlement: Entitlement | null): PlanSummary {
   const label = plan ? `${plan.label} plan` : 'Your plan';
   // The allowance, and nothing about what happens at it. No SKU limit is enforced anywhere
   // in the product yet, so a sentence about being stopped would be a promise the software
-  // cannot keep in either direction.
+  // cannot keep in either direction. Nor may it offer unlimited reprints as the consolation:
+  // there is no print or export path in either repo, so a reprint is not an operation that
+  // exists to be unlimited.
   const allowance = plan ?
-  `${skuAllowance(plan)}, unlimited reprints.` :
-  'Unlimited reprints, and the same label every plan makes.';
+  `${skuAllowance(plan)}.` :
+  'The same label every plan makes.';
   const endsOn = formatPeriodEnd(entitlement.currentPeriodEnd);
 
   if (entitlement.status === 'trialing') {

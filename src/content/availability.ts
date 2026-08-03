@@ -37,6 +37,14 @@ export const NOT_YET_BUILT: NotYetBuilt[] = [
     body: 'We place the UFI on the label where CLP requires it, but we do not generate the code itself yet. Generate it with ECHA\'s free UFI generator when you make your poison centre notification, and enter it here.'
   },
   {
+    title: 'Archiving a SKU you have stopped selling',
+    body: 'There is no archive yet, so every SKU you make counts towards your plan whether you still sell it or not. This one matters if you run a seasonal range: plan for the number of SKUs you will have made by the end of the year, not the number on sale this month.'
+  },
+  {
+    title: 'Putting your logo or your artwork on the label',
+    body: 'Not built. You can choose the label size and adjust the type size and line spacing, and there is an optional block carrying your business name, but nothing accepts an uploaded image.'
+  },
+  {
     title: 'More than one person on an account',
     body: 'Every account is one login today. Editor seats and read-only seats are designed and not built, so no plan currently lets a second person in.'
   },

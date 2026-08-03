@@ -40,10 +40,12 @@ journey, landscape, "in today's world", "peace of mind", "game-changer", "design
 
 > Candles and home fragrance is the only category we cover today. We would like to add more. None of them are built yet, and we will not pretend otherwise.
 
-**Hero body** — rule of three, doing no work.
+**Hero body** — rule of three, doing no work. The rewrite fixed the rhythm and kept the
+claim, which is the more expensive of the two mistakes: nothing in either repo writes a
+file, so both versions promised an export that does not exist.
 > ...and download a print ready label. No consultant, no spreadsheet, no guesswork.
 
-> ...then download a print ready label.
+> ...and get the exact wording, pictograms and minimum sizes your label needs.
 
 **Homepage categories** — abstraction where a fact belongs.
 > The hard part is never the artwork, it is turning safety and regulatory data into the exact words the rules require. That engine is the same whatever you make, so we are opening it up one category at a time, starting where we started, with candles.

@@ -144,7 +144,7 @@ export function softwareApplicationSchema(): JsonLd {
       'Reads the classification, hazard statements and allergens out of a supplier safety data sheet',
       'Classifies the finished product from the fragrance percentage and pack size',
       'Places hazard pictograms and regulated text at the required minimum sizes',
-      'Shows the finished label at true size before you print it',
+      'Shows the finished label on screen at true size',
       'Works with any supplier safety data sheet and any fragrance percentage, on every plan'
     ],
     offers: [

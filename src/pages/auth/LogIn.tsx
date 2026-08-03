@@ -11,7 +11,7 @@ import { GoogleButton, AuthDivider, isGoogleAuthEnabled } from '../../components
 export function LogIn() {
   usePageMeta({
     title: 'Log in',
-    description: 'Log in to Batchlabel to make and download your CLP labels.',
+    description: 'Log in to Batchlabel to pick up a SKU you were working on, or start a new one.',
     noIndex: true
   });
 

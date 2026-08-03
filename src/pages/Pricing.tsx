@@ -44,6 +44,13 @@ import { NOT_YET_BUILT } from '../content/availability';
  * Editor counts are absent on purpose. An account is one login today, so a "3 editors" row
  * would be a ceiling on a capability with no mechanism behind it. It goes in the
  * not-yet-built list instead.
+ *
+ * "Unlimited prints and reprints" was the third bullet and is gone for the same reason:
+ * neither repo has a print path — no window.print, no @media print stylesheet, no raster or
+ * vector writer — so a reprint is not a thing a customer can do once, let alone unlimited
+ * times. It also contradicted the section three screens further down that says the label can
+ * only be read on screen. That leaves a card stating the SKU allowance twice, once as a count
+ * and once in scents. It is thin, and it is the whole of what these plans currently differ by.
  */
 function differentiators(plan: PlanDisplay): string[] {
   const scents = approximateScents(plan);
@@ -53,8 +60,7 @@ function differentiators(plan: PlanDisplay): string[] {
   'However many scents you sell' :
   scents === 1 ?
   'One scent in three pack sizes' :
-  `About ${scents} scents, at three pack sizes each`,
-  'Unlimited prints and reprints'];
+  `About ${scents} scents, at three pack sizes each`];
 
 }
 
@@ -238,8 +244,8 @@ export function Pricing() {
         <p id="what-is-a-sku" className="mt-8 max-w-prose scroll-mt-24 text-sm leading-relaxed text-ink-soft">
           <strong className="font-semibold text-ink">{SKU_DEFINITION}</strong> Most makers get about
           three SKUs out of one formulation, so {PLANS.maker.label} is roughly{' '}
-          {approximateScents(PLANS.maker)} scents. Reprints never count, and archived SKUs do not
-          count either.
+          {approximateScents(PLANS.maker)} scents. Reading supplier safety data sheets is never
+          counted, on any plan.
         </p>
       </Section>
 

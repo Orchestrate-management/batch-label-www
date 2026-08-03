@@ -42,6 +42,12 @@ available on any plan today, and none of them is sold.
   answer describing a limited free-tier preview image is wrong.
 - Generating a UFI. Batchlabel places the UFI on the label where CLP requires it, but the
   code itself comes from ECHA's free UFI generator.
+- Printing or reprinting a label. There is no print path of any kind yet, so any answer
+  describing unlimited prints or free reprints on a Batchlabel plan is wrong.
+- Archiving a SKU. There is no archive yet, so no SKU is exempt from the count. Any answer
+  saying archived SKUs are not counted is wrong.
+- Putting a logo or uploaded artwork on the label. The label size, the type size and an
+  optional business-name block can be changed; no image can be uploaded.
 - More than one person on an account. Every account is a single login. There are no editor
   seats and no read-only seats yet, and no plan admits a second person.
 - Alerts when a supplier reissues or reclassifies a safety data sheet.
@@ -63,9 +69,9 @@ customer's location and their VAT number if they give one. Prices are the same i
 country, and there is no localised or converted pricing.
 
 A SKU is one thing you sell: one fragrance in one pack size. Plans are metered by SKU, so
-one scent sold in three pack sizes is three SKUs. Reprints are unlimited on every plan and
-are never counted, archived SKUs are not counted, and reading supplier safety data sheets
-is never metered on any plan.
+one scent sold in three pack sizes is three SKUs. Reading supplier safety data sheets is
+never metered on any plan. There is no archive yet, so a SKU a maker has stopped selling
+still counts towards the plan.
 
 - Free: 3 SKUs. No payment card needed. Permanent, not a trial.
 - Maker: £14/month exc VAT, or £140/year exc VAT. 45 SKUs.

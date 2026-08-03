@@ -11,7 +11,10 @@ export const steps = [
 {
   kind: 'recipe' as const,
   title: 'Enter your fragrance percentage and pack size',
-  body: 'Tell us how much fragrance is in the product and how big the pack is. Save it as a recipe and reuse it for every batch.'
+  // No saved recipe. Products live in an in-memory array in the app, so nothing survives a
+  // reload, let alone gets reused for a second batch. The same claim was struck from three
+  // other surfaces and survived here.
+  body: 'Tell us how much fragrance is in the product and how big the pack is. The classification follows from the load, not from the neat oil, and that is the calculation we do for you.'
 },
 {
   kind: 'download' as const,

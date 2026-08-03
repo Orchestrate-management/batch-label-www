@@ -20,6 +20,11 @@ import { PLANS, PUBLIC_PLANS, gbpNumeral, priceWithInterval, skuAllowance } from
  *
  * When one of these ships, delete its row here in the same commit as the code. Do not
  * weaken a pattern to let a string through.
+ *
+ * There are two registers in this file. `BANNED` below is literal: exact strings from a past
+ * audit, cheap and exact. `CAPABILITY_CLAIMS` further down is the general one, and it is the
+ * one that catches copy nobody has written yet. Read its comment before adding to either —
+ * a new row usually belongs there, not here.
  */
 
 const ROOT = resolve(__dirname, '../..');
@@ -122,6 +127,127 @@ describe('no surface repeats a claim the software cannot keep', () => {
       filter((surface) => pattern.test(surface.text)).
       map((surface) => surface.name);
     expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * The second register, and the one that matters.
+ *
+ * The literal register above only ever knows the exact strings of the last audit. It was
+ * fully green — 662 tests green — while four fresh claims shipped: a live-category card
+ * promising you could "download a UK and EU CLP label", "Unlimited prints and reprints" on
+ * every pricing card, an FAQ answer offering to "place your own logo", and "archived SKUs
+ * are never counted" in three places including the machine-readable surfaces. None of them
+ * reused a banned string, so none of them was caught. A register of yesterday's sentences
+ * cannot catch tomorrow's, and writing one row per sentence is a losing race.
+ *
+ * So these patterns match the *shape* of a capability claim rather than its wording, and the
+ * rule is not "never say this" but "never say this as a plain fact". Honest copy about an
+ * absent capability always names it and disclaims it in the same breath — that is what the
+ * not-yet-built register on /pricing, in the terms and in llms.txt is for. A claim standing
+ * on its own, with no disclaimer anywhere near it, is being sold.
+ *
+ * When one of these ships, delete its row. Until then, if a sentence trips this, the fix is
+ * the sentence.
+ */
+interface CapabilityClaim {
+  /** What is missing, and where we checked. */
+  why: string;
+  pattern: RegExp;
+}
+
+/**
+ * The ways we say "not built". Deliberately narrow: plain negation is not on this list,
+ * because "reprints are never counted" and "archived SKUs do not count" are both negations
+ * and both were claims. Only wording about *availability* disclaims.
+ */
+const DISCLAIMED =
+  /not built|never built|not been built|not available|is in build|being built|are building|we are building|no way to|does not exist|\b(not|no|none)\b[^.]{0,60}\byet\b/i;
+
+/**
+ * How far either side of a claim we will look for its disclaimer, in characters of
+ * whitespace-normalised text. Wide enough that a not-yet-built entry's heading is covered by
+ * its own body, narrow enough that a bullet cannot borrow a disclaimer from three bullets
+ * away.
+ */
+const DISCLAIMER_WINDOW = 220;
+
+/** Every match of `pattern` in `text` that has no availability disclaimer near it. */
+function undisclaimed(text: string, pattern: RegExp): string[] {
+  // Prose in JSX and in llms.txt wraps across lines, so a sentence is only whole once the
+  // newlines are gone. Everything downstream is offset arithmetic on this flattened string.
+  const flat = text.replace(/\s+/g, ' ');
+  const scan = new RegExp(pattern.source, 'gi');
+  return [...flat.matchAll(scan)].
+    filter((match) => {
+      const at = match.index ?? 0;
+      const from = Math.max(0, at - DISCLAIMER_WINDOW);
+      const to = at + match[0].length + DISCLAIMER_WINDOW;
+      return !DISCLAIMED.test(flat.slice(from, to));
+    }).
+    map((match) => match[0]);
+}
+
+const CAPABILITY_CLAIMS: CapabilityClaim[] = [
+  {
+    why: 'Nothing writes a file. Both export buttons in the app are toast() stubs and no raster or vector writer exists.',
+    pattern:
+      /\b(?:download|export|save)\w*\s+(?:it|them|the|a|an|your|my|our|this|each|any|every|as)\b[^.]{0,24}\b(?:labels?|pdfs?|svgs?|artefacts?|files?)\b|\b(?:pdf|svg|file|label)s?\s+(?:download|export)\w*/i
+  },
+  {
+    why: 'There is no print path in either repo — no window.print, no @media print stylesheet, no writer. A reprint is not an operation that exists.',
+    pattern: /\bre-?print\w*|\bunlimited\s+(?:prints?|printing|reprints?)|\bprint\s+(?:it|them|the|your|a|an|these|those|at)\b/i
+  },
+  {
+    why: 'There is no archive concept in the app. Every SKU a maker makes counts, and a seasonal range cannot be parked.',
+    pattern: /\barchiv(?:e|es|ed|ing)\b/i
+  },
+  {
+    why: 'Nothing accepts an uploaded image. The designer\'s optional block carries the business name as text; there is no logo, artwork or upload anywhere in the app.',
+    pattern:
+      /\b(?:upload|add|place|drop|insert|put|use|choose|set)\w*\s+(?:your|their|our|a|an|the|its)\b[\w\s'’-]{0,20}\b(?:logos?|artwork|brand ?marks?)\b|\b(?:your|their|own|custom)\s+(?:own\s+)?(?:logos?|artwork|brand ?marks?)\b|\bupload\w*\s+(?:your|a|an|the)\b[\w\s'’-]{0,20}\b(?:images?|photos?|pictures?|graphics?)\b/i
+  },
+  {
+    why: 'Nothing saves or reuses a recipe. Products live in an in-memory array, so nothing survives a reload.',
+    pattern:
+      /\b(?:save|saved|saves|saving|store|stored|stores|storing|keep|keeps|reuse|reuses)\b[^.]{0,26}\b(?:recipes?|formulations?)\b|\b(?:recipes?|formulations?)\b[^.]{0,26}\b(?:saved|stored|kept|reused|reuse)\b/i
+  }
+];
+
+describe('no surface states an absent capability as a plain fact', () => {
+  it.each(CAPABILITY_CLAIMS)('$why', ({ pattern }) => {
+    const offenders = surfaces.flatMap((surface) =>
+      undisclaimed(surface.text, pattern).map((claim) => `${surface.name}: ${claim}`)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * The guard is worth only what it catches, and it went green through four of these. Each
+   * string below shipped; if a refactor stops one being caught, the register has quietly
+   * gone back to being a list of yesterday's sentences.
+   */
+  it.each([
+    ['download a UK and EU CLP label', 'enter your recipe and pack size, and download a UK and EU CLP label.'],
+    ['unlimited prints and reprints', 'Unlimited prints and reprints'],
+    ['place your own logo', 'You can set the label size, choose a layout, and place your own logo.'],
+    ['archived SKUs are never counted', 'Reprints are never counted, archived SKUs are never counted.'],
+    ['save it as a recipe', 'Save it as a recipe and reuse it for every batch.'],
+    ['download your CLP labels', 'Log in to Batchlabel to make and download your CLP labels.']
+  ])('still catches the shipped claim: %s', (_name, shipped) => {
+    const caught = CAPABILITY_CLAIMS.some((claim) => undisclaimed(shipped, claim.pattern).length > 0);
+    expect(caught).toBe(true);
+  });
+
+  /** And the other half: the not-yet-built copy has to survive, or the guard gets deleted. */
+  it.each([
+    'PDF and SVG export is being built and is not available yet.',
+    'Downloading the label as a PDF or an SVG is the piece we are building now, and it is not available on any plan yet.',
+    'There is no archive yet, so a SKU you have stopped selling still counts towards your plan.',
+    'Only a little, and not with a logo yet. There is no way to upload a logo or artwork.'
+  ])('leaves honestly disclaimed copy alone: %s', (honest) => {
+    const caught = CAPABILITY_CLAIMS.flatMap((claim) => undisclaimed(honest, claim.pattern));
+    expect(caught).toEqual([]);
   });
 });
 

@@ -131,7 +131,7 @@ export function Account() {
         <div className="mt-4 max-w-prose text-sm leading-relaxed text-ink-soft">
             <p>
               Paid plans buy you room for more SKUs, and nothing else: every plan makes the same
-              label, and reprints are free on all of them.
+              label.
             </p>
             <ul className="mt-3 space-y-1.5">
               {PUBLIC_PLANS.map((plan) =>
