@@ -2,21 +2,22 @@
 import { describe, it, expect } from 'vitest';
 import {
   ENTITLING_STATUSES,
-  FREE_PLAN,
-  MAKER_PLAN,
-  buildPriceMap,
   idOf,
   invoiceSubscriptionId,
   isEntitlingStatus,
   isRenewalFailure,
-  planForPrice,
   planForStatus,
+  readSubscriptionPriceId,
   subscriptionInterval,
   subscriptionPeriodEnd,
   subscriptionPriceId,
+  subscriptionPriceIds,
   subscriptionTrialEnd,
   toIso } from
 './entitlements';
+import { FREE_PLAN } from './plan-contract';
+
+const MAKER_PLAN = 'maker' as const;
 
 describe('status -> entitlement', () => {
   it('treats active, trialing and past_due as entitling', () => {
@@ -46,26 +47,11 @@ describe('status -> entitlement', () => {
   });
 });
 
-describe('price -> plan', () => {
-  const prices = buildPriceMap({
-    STRIPE_PRICE_MAKER_MONTHLY: 'price_monthly',
-    STRIPE_PRICE_MAKER_ANNUAL: 'price_annual'
-  });
-
-  it('maps both configured prices to the Maker plan', () => {
-    expect(planForPrice('price_monthly', prices)).toBe(MAKER_PLAN);
-    expect(planForPrice('price_annual', prices)).toBe(MAKER_PLAN);
-  });
-
-  it('falls back to the Maker plan for an unknown price rather than selling nothing', () => {
-    expect(planForPrice('price_replacement_2027', prices)).toBe(MAKER_PLAN);
-    expect(planForPrice(null, prices)).toBe(MAKER_PLAN);
-  });
-
-  it('ignores prices that are not configured', () => {
-    expect(buildPriceMap({})).toEqual({});
-  });
-});
+/**
+ * Price -> plan now lives in ./plan-contract.ts, and its fallback is the opposite of the one
+ * that used to be here: an unrecognised price resolves to NULL rather than to Maker. See
+ * plan-contract.test.ts.
+ */
 
 describe('subscriptionPeriodEnd (the API-version trap)', () => {
   const AT = 1893456000; // 2030-01-01T00:00:00Z
@@ -115,6 +101,59 @@ describe('other subscription readers', () => {
     expect(subscriptionTrialEnd({})).toBeNull();
     expect(subscriptionPriceId({})).toBeNull();
     expect(subscriptionInterval({})).toBeNull();
+  });
+});
+
+/**
+ * The tier is now derived from this price id, so a wrong answer no longer costs a redundant
+ * lookup — it costs the customer the wrong product. Under the no-add-ons decision a
+ * subscription we created always has exactly one item at quantity 1, so anything else means
+ * the object means something this code does not model. It refuses rather than guessing.
+ */
+describe('readSubscriptionPriceId — refusing to guess a tier', () => {
+  const item = (over: Record<string, unknown> = {}) => ({ price: { id: 'price_studio_m' }, ...over });
+
+  it('names the price for exactly one item at quantity 1, or with no quantity at all', () => {
+    expect(readSubscriptionPriceId({ items: { data: [item()] } })).toEqual({
+      priceId: 'price_studio_m',
+      refusal: null
+    });
+    expect(readSubscriptionPriceId({ items: { data: [item({ quantity: 1 })] } }).priceId).toBe('price_studio_m');
+  });
+
+  /** Quantity 3 on a Studio price reads to a human as three Studio allowances. A bare [0]
+   *  read would silently grant one. */
+  it('refuses a quantity that is not 1, and says why', () => {
+    expect(readSubscriptionPriceId({ items: { data: [item({ quantity: 3 })] } })).toEqual({
+      priceId: null,
+      refusal: 'quantity_not_one'
+    });
+    expect(readSubscriptionPriceId({ items: { data: [item({ quantity: 0 })] } }).refusal).toBe('quantity_not_one');
+  });
+
+  it('refuses a subscription with more than one item', () => {
+    expect(
+      readSubscriptionPriceId({ items: { data: [item(), { price: { id: 'price_addon' } }] } }).refusal
+    ).toBe('multiple_items');
+  });
+
+  it('distinguishes no items at all from an item carrying no price', () => {
+    expect(readSubscriptionPriceId({ items: { data: [] } }).refusal).toBe('no_items');
+    expect(readSubscriptionPriceId({}).refusal).toBe('no_items');
+    expect(readSubscriptionPriceId({ items: { data: [{ price: null }] } }).refusal).toBe('no_price');
+  });
+});
+
+/** The brand check must not depend on which item Stripe happened to list first. */
+describe('subscriptionPriceIds', () => {
+  it('returns every item price in payload order', () => {
+    expect(
+      subscriptionPriceIds({ items: { data: [{ price: { id: 'a' } }, { price: { id: 'b' } }] } })
+    ).toEqual(['a', 'b']);
+  });
+
+  it('returns an empty list rather than throwing on an empty subscription', () => {
+    expect(subscriptionPriceIds({})).toEqual([]);
   });
 });
 

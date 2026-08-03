@@ -3,7 +3,15 @@
  *
  * Both calls hit our own API routes (the root `/api` directory — see src/api/README.md for
  * why that location matters) so secret keys and price ids never reach the browser. Stripe
- * Tax is on, and the Maker prices are stored in Stripe VAT-inclusive for consumers.
+ * Tax is on and every price is stored EXCLUSIVE of VAT, so the amounts below are ex-VAT and
+ * must be labelled as such wherever they are rendered.
+ *
+ * THIS MODULE IS ON ITS WAY OUT. Under the decided flow the app's billing page is the single
+ * place a customer picks a tier and is sent to Stripe Checkout; www keeps the public pricing
+ * page, whose buttons route a visitor into the app rather than creating a session here. What
+ * remains is kept alive only because www's own pages still import it, and it now speaks the
+ * endpoint's current contract (a `tier` as well as an interval) so that it cannot become the
+ * one caller that breaks when the endpoint gains a required field.
  *
  * WHAT THIS MODULE DELIBERATELY NO LONGER SENDS
  *
@@ -29,6 +37,28 @@ import { supabase } from './supabase';
 
 export type BillingInterval = 'monthly' | 'annual';
 
+/**
+ * The tier this module can ask for. www sells one tier from its own pages; the ladder lives
+ * on the app's billing page, which posts its own tier to the same endpoint.
+ *
+ * Kept as a plain string union rather than imported from the plan contract, because the
+ * contract is server-only and must never reach a browser bundle. `plan-contract.test.ts`
+ * asserts this union is a subset of the contract's purchasable tiers, so the two cannot
+ * drift without a test going red.
+ */
+export type CheckoutTier = 'maker' | 'studio' | 'consultant';
+
+export const DEFAULT_CHECKOUT_TIER: CheckoutTier = 'maker';
+
+/**
+ * DISPLAY ONLY, in major GBP units, EXCLUSIVE of VAT — never consulted to decide anything.
+ *
+ * The server never reads these: it resolves the price id from the tier through the plan
+ * contract, so a tampered value here changes what a page prints and nothing about what is
+ * charged. `plan-contract.test.ts` asserts these against the contract's pence amounts, which
+ * is the drift alarm — a price change made in one place and not the other fails the build
+ * rather than being discovered by a customer.
+ */
 export const PRICES: Record<BillingInterval, number> = {
   monthly: 14,
   annual: 140
@@ -107,7 +137,10 @@ function metaCookiesForCheckout(): {fbp?: string;fbc?: string;} {
  * send a signed-out visitor to sign up first (see src/lib/checkout-intent.ts, which
  * remembers which plan they were about to buy).
  */
-export async function startCheckout(interval: BillingInterval): Promise<{error: string | null;}> {
+export async function startCheckout(
+interval: BillingInterval,
+tier: CheckoutTier = DEFAULT_CHECKOUT_TIER)
+: Promise<{error: string | null;}> {
   const value = PRICES[interval];
   const token = await accessToken();
   if (!token) {
@@ -121,6 +154,10 @@ export async function startCheckout(interval: BillingInterval): Promise<{error: 
       method: 'POST',
       headers: requestHeaders(token),
       body: JSON.stringify({
+        // REQUIRED by the endpoint, which allow-lists it and 400s on anything else. It
+        // selects which server-only env var holds the price id; it does not name a price,
+        // an amount or a currency, none of which this module has ever seen.
+        tier,
         interval,
         // Click identifiers ride along so the webhook can forward a server-side conversion
         // later without guessing which ad produced the sale.

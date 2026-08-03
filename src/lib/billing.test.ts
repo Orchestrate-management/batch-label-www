@@ -95,6 +95,33 @@ describe('billing', () => {
     });
 
     /**
+     * The endpoint allow-lists the tier and 400s without one, so a caller that forgets it
+     * cannot sell anything. It also carries no price, amount or currency — the tier only
+     * names which server-only env var holds the price id.
+     */
+    it('sends the tier, and no price, amount or currency', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(fakeResponse({ url: 'https://x', id: 'y' }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await startCheckout('monthly', 'studio');
+
+      const { body } = lastRequest(fetchMock);
+      expect(body.tier).toBe('studio');
+      for (const forbidden of ['price', 'price_id', 'amount', 'currency', 'plan', 'brand']) {
+        expect(body).not.toHaveProperty(forbidden);
+      }
+    });
+
+    it('defaults to the one tier www itself sells rather than omitting the field', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(fakeResponse({ url: 'https://x', id: 'y' }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await startCheckout('monthly');
+
+      expect(lastRequest(fetchMock).body.tier).toBe('maker');
+    });
+
+    /**
      * Checkout requires a session, and that is a security decision as much as a product
      * one: selling to a signed-out visitor forced the webhook to work out afterwards who
      * had paid, and the only thing it had for that was the email typed into Stripe

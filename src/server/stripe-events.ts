@@ -19,22 +19,27 @@
 import type Stripe from 'stripe';
 import type { PurchaseSignal } from './meta-capi';
 import {
-  FREE_PLAN,
-  MAKER_PLAN,
-  PAID_PLANS,
   idOf,
   invoiceSubscriptionId,
   invoiceSubscriptionMetadata,
   isRenewalFailure,
-  planForPrice,
   planForStatus,
+  readSubscriptionPriceId,
   subscriptionInterval,
   subscriptionPeriodEnd,
-  subscriptionPriceId,
+  subscriptionPriceIds,
   subscriptionTrialEnd,
-  toIso,
-  type PriceMap } from
+  toIso } from
 './entitlements';
+import {
+  FREE_PLAN,
+  isEntitlingPlan,
+  isPlanSlug,
+  planEntryForPrice,
+  type PlanSlug,
+  type PriceIndex,
+  type ResolvedPrice } from
+'./plan-contract';
 
 /**
  * What we ask the database to write. Mirrors apply_stripe_entitlement()'s arguments.
@@ -49,7 +54,9 @@ export interface EntitlementIntent {
   customerId: string | null;
   subscriptionId: string | null;
   email: string | null;
-  plan: string | null;
+  /** A contract slug or null. Null means "this event says nothing about the tier", which the
+   *  entitlement RPC treats as leave-alone — never as a downgrade to free. */
+  plan: PlanSlug | null;
   planStatus: string | null;
   priceId: string | null;
   currentPeriodEnd: string | null;
@@ -62,7 +69,9 @@ export interface EntitlementIntent {
 export interface IntentConfig {
   /** The brand this deployment sells for. A server constant, never a request parameter. */
   brand: string;
-  prices: PriceMap;
+  /** price id -> { slug, interval }, from the plan contract. The same index the checkout
+   *  endpoint resolves against, so what was sold and what is granted cannot disagree. */
+  priceIndex: PriceIndex;
 }
 
 /** Event types this endpoint acts on. Anything else is acknowledged and ignored. */
@@ -111,15 +120,20 @@ export function readUserId(metadata: Stripe.Metadata | null | undefined): string
  * Anything else is not ours. It is IGNORED rather than rejected: erroring would return a
  * non-2xx to Stripe for a perfectly valid event about somebody else's product, and a run of
  * those gets the endpoint disabled, taking Batchlabel billing down with it.
+ *
+ * The price clause takes EVERY item, not the first. Stripe does not guarantee item order, so
+ * a first-item test makes the answer depend on something we do not control — and with the
+ * full price index it now recognises every Batchlabel price rather than only the two Maker
+ * ones, which makes the fallback materially stronger for a hand-made subscription.
  */
 export function belongsToThisBrand(
 metadata: Stripe.Metadata | null | undefined,
-priceId: string | null,
+priceIds: readonly (string | null)[],
 config: IntentConfig)
 : boolean {
   const brand = typeof metadata?.brand === 'string' ? metadata.brand.trim() : '';
   if (brand) return brand === config.brand;
-  return Boolean(priceId && config.prices[priceId]);
+  return priceIds.some((id) => Boolean(id && config.priceIndex.has(id)));
 }
 
 /**
@@ -142,23 +156,42 @@ config: IntentConfig)
 }
 
 /**
- * The paid tier a subscription sells, preferring what we recorded at checkout.
+ * The tier a subscription grants — or null when nothing on the event says.
  *
- * Order matters. `planForPrice` falls back to the Maker plan for an unrecognised price, on
- * the grounds that a customer who has paid and gets nothing is the worse failure. But
- * Orchestrate runs one Stripe account across sub-brands, so "any subscription with an
- * unknown price grants Batchlabel Maker" is a real cross-brand hazard as soon as there is a
- * second product. Our own checkout writes `plan` into the subscription metadata, so reading
- * that first means the fallback is only reached for a subscription created outside this
- * codebase — and the value is allow-listed, so it can only ever name a tier we sell.
+ * THE PRICE WINS. The price id is the thing Stripe actually charges against; the metadata is
+ * a copy we wrote once at checkout and never update. This inverts the order that used to be
+ * here, and the reason is the Customer Portal: tier switching is done natively there via
+ * `default_allowed_updates: ['price']`, and A PORTAL PRICE CHANGE DOES NOT REWRITE
+ * SUBSCRIPTION METADATA. After a Maker upgrades to Studio the metadata still reads `maker`.
+ * Reading metadata first pins every self-serve upgrade at the tier originally bought, and
+ * keeps granting the higher tier after every downgrade.
+ *
+ * Metadata is consulted ONLY when the price does not resolve — a subscription created by
+ * hand in the dashboard against a price this deploy has no env var for. It is allow-listed
+ * against the entitling plans, so it can only ever name a tier we sell, and never
+ * `rail_test` or `free`.
+ *
+ * A disagreement is LOGGED AND IGNORED, not arbitrated. "Take the lower tier on
+ * disagreement" was considered and rejected: every upgrade disagrees in exactly that
+ * direction, so it is the metadata-first bug wearing a different hat.
  */
-export function readPlan(
-metadata: Stripe.Metadata | null | undefined,
-fallback: string)
-: string {
-  const raw = metadata?.plan;
-  if (typeof raw === 'string' && PAID_PLANS.includes(raw.trim())) return raw.trim();
-  return fallback;
+export function resolvePlan(
+resolved: ResolvedPrice | null,
+metadata: Stripe.Metadata | null | undefined)
+: PlanSlug | null {
+  const claimed = typeof metadata?.plan === 'string' ? metadata.plan.trim() : '';
+  const fromMetadata = isEntitlingPlan(claimed) ? claimed : null;
+
+  if (resolved) {
+    if (fromMetadata && fromMetadata !== resolved.entry.slug) {
+      console.warn(
+        `[stripe-events] price ${resolved.priceId} resolves to ${resolved.entry.slug} but metadata ` +
+        `claims ${fromMetadata}. Using the price. This is expected after a Customer Portal tier change.`
+      );
+    }
+    return resolved.entry.slug;
+  }
+  return fromMetadata;
 }
 
 function baseIntent(event: Stripe.Event, config: IntentConfig, brand: string): EntitlementIntent {
@@ -226,7 +259,7 @@ function fromCheckoutSession(event: Stripe.Event, config: IntentConfig): Entitle
   // line items on the webhook payload, so the brand metadata our own checkout writes is the
   // only signal available here — and a session with no brand metadata at all is, by
   // definition, not one we created.
-  if (!belongsToThisBrand(session.metadata, null, config)) return null;
+  if (!belongsToThisBrand(session.metadata, [], config)) return null;
 
   const intent = baseIntent(event, config, config.brand);
   intent.userId = readUserId(session.metadata);
@@ -236,21 +269,39 @@ function fromCheckoutSession(event: Stripe.Event, config: IntentConfig): Entitle
 
   const paid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
   if (paid) {
-    intent.plan = MAKER_PLAN;
+    // A session carries no line items on the webhook payload, so the price cannot be
+    // re-derived here — metadata is the only signal, which is exactly why the checkout
+    // writes `plan` onto it. And it is TRUSTWORTHY here in a way it is not on a subscription
+    // event: a session is immutable and the Customer Portal never touches one, so its
+    // metadata cannot go stale relative to a fact that moved. That asymmetry with
+    // resolvePlan above is deliberate; say it out loud in review rather than harmonising it.
+    const claimed = typeof session.metadata?.plan === 'string' ? session.metadata.plan.trim() : '';
+    if (isEntitlingPlan(claimed)) {
+      intent.plan = claimed;
+    }
+    // `rail_test` lands here by construction, because it is not an entitling plan. A penny
+    // checkout therefore never writes a tier on this path: it records the link and the
+    // active status, and the subscription event resolves rail_test through its own index
+    // entry — which grants exactly the Free allowance. No special case needed.
     intent.planStatus = 'active';
   }
 
   intent.billing = {
     checkout_session_id: session.id,
     checkout_completed_at: intent.eventAt,
+    // What the customer was actually charged, VAT included — the right number for a support
+    // conversation. amount_subtotal is the ex-VAT figure beside it, so the two can never be
+    // confused by whoever reads the row next. Prices are stored exclusive of VAT, so these
+    // differ by the customer's country.
     amount_total: session.amount_total ?? null,
+    amount_subtotal: session.amount_subtotal ?? null,
     currency: session.currency ?? null
   };
 
   // Only populated when the caller expanded `subscription`; harmless when it is a string.
   if (session.subscription && typeof session.subscription !== 'string') {
     intent.currentPeriodEnd = subscriptionPeriodEnd(session.subscription);
-    intent.priceId = subscriptionPriceId(session.subscription);
+    intent.priceId = readSubscriptionPriceId(session.subscription).priceId;
   }
 
   return intent;
@@ -283,7 +334,7 @@ export function purchaseSignal(event: Stripe.Event, config: IntentConfig): Purch
 
   const session = event.data.object as Stripe.Checkout.Session;
   if (session.mode !== 'subscription') return null;
-  if (!belongsToThisBrand(session.metadata, null, config)) return null;
+  if (!belongsToThisBrand(session.metadata, [], config)) return null;
   if (session.payment_status !== 'paid') return null;
   if (!session.id) return null;
 
@@ -293,12 +344,24 @@ export function purchaseSignal(event: Stripe.Event, config: IntentConfig): Purch
     return typeof value === 'string' && value.trim() ? value.trim() : null;
   };
 
+  const claimedPlan = read('plan');
+
   return {
     checkoutSessionId: session.id,
     supabaseUserId: readUserId(session.metadata),
     // Stripe's event.created is already unix seconds, which is the unit Meta wants.
     eventTimeUnix: event.created,
-    amountTotalMinor: typeof session.amount_total === 'number' ? session.amount_total : null,
+    // EX-TAX, and this is the one that matters. Prices are stored exclusive of VAT, so
+    // `amount_total` includes whatever VAT Stripe added for that customer's country: the
+    // same tier is £16.80 in the UK and £14.00 on an export sale. Reporting that as the ad
+    // conversion value would make one product worth different amounts by geography, which
+    // corrupts ROAS. The tax is carried separately so net is recoverable without a second
+    // definition of "value".
+    amountSubtotalMinor: typeof session.amount_subtotal === 'number' ? session.amount_subtotal : null,
+    taxMinor: session.total_details?.amount_tax ?? null,
+    // The tier, for content_ids. The slug is what makes a rail-test purchase filterable out
+    // of ROAS reporting instead of being counted as a real sale of whatever we hardcoded.
+    plan: isPlanSlug(claimedPlan) ? claimedPlan : null,
     currency: session.currency ?? null,
     fbclid: read('fbclid'),
     firstSeenAt: read('first_seen_at'),
@@ -312,9 +375,10 @@ function fromSubscription(event: Stripe.Event, config: IntentConfig): Entitlemen
   const subscription = event.data.object as Stripe.Subscription;
   if (!subscription?.id) return null;
 
-  const priceId = subscriptionPriceId(subscription);
-  // Another Orchestrate product on the same Stripe account. Ignored, not errored.
-  if (!belongsToThisBrand(subscription.metadata, priceId, config)) return null;
+  const { priceId, refusal } = readSubscriptionPriceId(subscription);
+  // Another Orchestrate product on the same Stripe account. Ignored, not errored. Every
+  // item's price is offered, so the answer does not depend on Stripe's item ordering.
+  if (!belongsToThisBrand(subscription.metadata, subscriptionPriceIds(subscription), config)) return null;
 
   const deleted = event.type === 'customer.subscription.deleted';
   const intent = baseIntent(event, config, config.brand);
@@ -327,19 +391,51 @@ function fromSubscription(event: Stripe.Event, config: IntentConfig): Entitlemen
   // `deleted` is terminal by definition. Trusting the event type over the payload's status
   // means a replayed or oddly-shaped delete still ends the entitlement.
   intent.planStatus = deleted ? 'canceled' : subscription.status ?? null;
-  intent.plan = deleted ?
-  FREE_PLAN :
-  planForStatus(
-    intent.planStatus,
-    readPlan(subscription.metadata, planForPrice(intent.priceId, config.prices))
-  );
+
+  const resolved = deleted ? null : planEntryForPrice(priceId, config.priceIndex);
+
+  if (deleted) {
+    intent.plan = FREE_PLAN;
+  } else {
+    const slug = resolvePlan(resolved, subscription.metadata);
+    if (slug) {
+      intent.plan = planForStatus(intent.planStatus, slug);
+    } else {
+      // NEITHER the price nor the metadata says what this is. That is not "grant Maker" and
+      // it is not "grant Free" — it is "this event says nothing about the tier". `plan` stays
+      // null, which the entitlement RPC treats as leave-alone, so the period end, the status
+      // and the cancel flag on this event still land while the tier stays whatever a previous
+      // event established. Recovery is a config deploy adding the price id, or a hand-granted
+      // plan, which is already a supported state.
+      //
+      // Safe because `active` and the allowance are orthogonal and the database requires BOTH
+      // an entitling plan and an entitling status: a subscription we cannot resolve whose
+      // status goes canceled ends up inactive without the tier ever being guessed.
+      intent.plan = null;
+      intent.billing.unrecognised_price_id = priceId;
+      intent.billing.unrecognised_price_reason = refusal;
+      console.error(
+        `[stripe-events] subscription ${subscription.id}: ` +
+        (refusal ?
+        `refused to read a price id (${refusal})` :
+        `price ${priceId ?? 'null'} is not in the price index`) +
+        ' and metadata names no entitling plan. Tier left unchanged.'
+      );
+    }
+  }
 
   intent.currentPeriodEnd = subscriptionPeriodEnd(subscription);
   intent.cancelAtPeriodEnd = deleted ? false : Boolean(subscription.cancel_at_period_end);
   intent.trialEnd = subscriptionTrialEnd(subscription);
 
   intent.billing = {
-    interval: subscriptionInterval(subscription),
+    ...intent.billing,
+    // OUR vocabulary, from the resolved price entry — the same value the checkout wrote into
+    // Stripe metadata, so the account row and the metadata cannot disagree.
+    interval: resolved?.interval ?? null,
+    // STRIPE's vocabulary, kept as a cross-check. Disagreement means the price index is
+    // wrong about an interval, which is a config bug worth being able to see.
+    stripe_interval: subscriptionInterval(subscription),
     cancel_at: toIso(subscription.cancel_at),
     canceled_at: toIso(subscription.canceled_at),
     subscription_status: intent.planStatus

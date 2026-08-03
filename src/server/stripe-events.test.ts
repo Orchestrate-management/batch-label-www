@@ -1,12 +1,16 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { HANDLED_EVENT_TYPES, intentFromEvent, readUserId, type IntentConfig } from './stripe-events';
-import { buildPriceMap } from './entitlements';
+import { HANDLED_EVENT_TYPES, intentFromEvent, purchaseSignal, readUserId, type IntentConfig } from './stripe-events';
+import { buildPriceIndex } from './plan-contract';
 import {
   CUSTOMER_ID,
   PERIOD_END_ISO,
   PRICE_ANNUAL,
+  PRICE_CONSULTANT_ANNUAL,
+  PRICE_ENV,
   PRICE_MONTHLY,
+  PRICE_RAIL_TEST,
+  PRICE_STUDIO_MONTHLY,
   SUBSCRIPTION_ID,
   USER_ID,
   checkoutSessionCompleted,
@@ -16,10 +20,7 @@ import {
 
 const config: IntentConfig = {
   brand: 'batchlabel',
-  prices: buildPriceMap({
-    STRIPE_PRICE_MAKER_MONTHLY: PRICE_MONTHLY,
-    STRIPE_PRICE_MAKER_ANNUAL: PRICE_ANNUAL
-  })
+  priceIndex: buildPriceIndex(PRICE_ENV)
 };
 
 describe('readUserId', () => {
@@ -49,10 +50,41 @@ describe('checkout.session.completed', () => {
     expect(intent?.brand).toBe('batchlabel');
   });
 
-  it('grants the plan when the payment actually succeeded', () => {
+  it('grants the plan the session was created for, not a hardcoded one', () => {
     const intent = intentFromEvent(checkoutSessionCompleted({ paymentStatus: 'paid' }), config);
     expect(intent?.plan).toBe('maker');
     expect(intent?.planStatus).toBe('active');
+
+    const studio = intentFromEvent(checkoutSessionCompleted({ plan: 'studio' }), config);
+    expect(studio?.plan).toBe('studio');
+  });
+
+  /**
+   * This path used to write MAKER for every completed subscription checkout, so a Consultant
+   * buyer was granted Maker and only corrected when the subscription event happened to land
+   * afterwards — which Stripe frequently emits out of order.
+   */
+  it('grants the top tier to somebody who bought the top tier', () => {
+    expect(intentFromEvent(checkoutSessionCompleted({ plan: 'consultant' }), config)?.plan).toBe('consultant');
+  });
+
+  it('records the ex-VAT subtotal beside the VAT-inclusive total', () => {
+    const intent = intentFromEvent(checkoutSessionCompleted(), config);
+    expect(intent?.billing).toMatchObject({ amount_total: 1680, amount_subtotal: 1400 });
+  });
+
+  /** rail_test is not an entitling plan, so it falls into the else branch by construction —
+   *  no special case, and a penny checkout never writes a tier here. */
+  it('writes no tier for a rail-test session, only the active status', () => {
+    const intent = intentFromEvent(checkoutSessionCompleted({ plan: 'rail_test' }), config);
+    expect(intent?.plan).toBeNull();
+    expect(intent?.planStatus).toBe('active');
+  });
+
+  it('writes no tier when the session names a plan we do not sell, or names none', () => {
+    expect(intentFromEvent(checkoutSessionCompleted({ plan: 'enterprise' }), config)?.plan).toBeNull();
+    expect(intentFromEvent(checkoutSessionCompleted({ plan: 'free' }), config)?.plan).toBeNull();
+    expect(intentFromEvent(checkoutSessionCompleted({ plan: null }), config)?.plan).toBeNull();
   });
 
   it('grants nothing while the payment is still unpaid', () => {
@@ -88,7 +120,8 @@ describe('customer.subscription.created / updated', () => {
     expect(intent?.planStatus).toBe('active');
     expect(intent?.currentPeriodEnd).toBe(PERIOD_END_ISO);
     expect(intent?.priceId).toBe(PRICE_MONTHLY);
-    expect(intent?.billing).toMatchObject({ interval: 'month' });
+    // OUR vocabulary from the resolved entry, STRIPE's kept beside it as a cross-check.
+    expect(intent?.billing).toMatchObject({ interval: 'monthly', stripe_interval: 'month' });
   });
 
   it('keeps a past_due customer on the plan (Stripe is still retrying their card)', () => {
@@ -114,7 +147,21 @@ describe('customer.subscription.created / updated', () => {
   it('records the annual interval when the annual price is used', () => {
     const intent = intentFromEvent(subscriptionEvent({ priceId: PRICE_ANNUAL }), config);
     expect(intent?.priceId).toBe(PRICE_ANNUAL);
-    expect(intent?.billing).toMatchObject({ interval: 'year' });
+    expect(intent?.billing).toMatchObject({ interval: 'annual', stripe_interval: 'year' });
+  });
+
+  it('grants each tier its own price sells', () => {
+    expect(intentFromEvent(subscriptionEvent({ priceId: PRICE_STUDIO_MONTHLY }), config)?.plan).toBe('studio');
+    expect(intentFromEvent(subscriptionEvent({ priceId: PRICE_CONSULTANT_ANNUAL }), config)?.plan).toBe(
+      'consultant'
+    );
+  });
+
+  /** The penny price resolves through its own contract entry to a plan that does not
+   *  entitle. It is never Maker and never a fallthrough. */
+  it('resolves the rail-test price to rail_test, which entitles nothing', () => {
+    const event = subscriptionEvent({ priceId: PRICE_RAIL_TEST, plan: null });
+    expect(intentFromEvent(event, config)?.plan).toBe('rail_test');
   });
 
   /**
@@ -129,21 +176,65 @@ describe('customer.subscription.created / updated', () => {
   });
 
   /**
-   * Orchestrate runs one Stripe account across sub-brands, and planForPrice falls back to
-   * the Maker plan for an unrecognised price. Reading the plan we wrote at checkout first
-   * means that fallback is only reached for a subscription created outside this codebase.
+   * THE PORTAL-UPGRADE REGRESSION TEST. Tier switching happens in the Customer Portal, and a
+   * portal price change does NOT rewrite subscription metadata — so after a Maker upgrades
+   * to Studio the metadata still reads `maker`. Preferring metadata here pinned every
+   * self-serve upgrade at the tier originally bought, and kept granting the higher tier after
+   * every downgrade.
    */
-  it('prefers the plan recorded at checkout over the unknown-price fallback', () => {
-    const event = subscriptionEvent({ priceId: 'price_for_a_different_product' });
-    (event.data.object as {metadata: Record<string, string>;}).metadata.plan = 'maker';
+  it('takes the tier from the PRICE when stale metadata disagrees', () => {
+    const event = subscriptionEvent({ priceId: PRICE_STUDIO_MONTHLY, plan: 'maker' });
+    expect(intentFromEvent(event, config)?.plan).toBe('studio');
+  });
+
+  it('takes the tier from the price on a downgrade too, not the higher stale claim', () => {
+    const event = subscriptionEvent({ priceId: PRICE_MONTHLY, plan: 'consultant' });
     expect(intentFromEvent(event, config)?.plan).toBe('maker');
   });
 
-  it('ignores a plan that is not one we sell', () => {
-    const event = subscriptionEvent();
-    (event.data.object as {metadata: Record<string, string>;}).metadata.plan = 'enterprise_unlimited';
-    // Falls back to the price map / Maker, never to the invented tier.
-    expect(intentFromEvent(event, config)?.plan).toBe('maker');
+  /** Metadata is the fallback only, for a subscription made by hand against a price this
+   *  deploy has no env var for. It is allow-listed, so it can only ever name a tier we sell. */
+  it('falls back to metadata only when the price does not resolve', () => {
+    const event = subscriptionEvent({ priceId: 'price_made_by_hand', plan: 'studio' });
+    expect(intentFromEvent(event, config)?.plan).toBe('studio');
+  });
+
+  it('will not let metadata name free, rail_test or an invented tier', () => {
+    for (const claim of ['free', 'rail_test', 'enterprise_unlimited']) {
+      const event = subscriptionEvent({ priceId: 'price_made_by_hand', plan: claim });
+      expect(intentFromEvent(event, config)?.plan).toBeNull();
+    }
+  });
+
+  /**
+   * NEITHER source says what this is. That is not "grant Maker" — which is what the code
+   * used to do — and it is not "grant Free". It is "this event says nothing about the tier",
+   * so the tier is left alone and the reason is recorded where it can be grepped in Supabase.
+   */
+  it('leaves the tier alone for an unresolvable price, and records why', () => {
+    const event = subscriptionEvent({ priceId: 'price_replacement_2027', plan: null });
+    const intent = intentFromEvent(event, config);
+    expect(intent).not.toBeNull();
+    expect(intent?.plan).toBeNull();
+    // The rest of the event still lands: status, period end and the cancel flag.
+    expect(intent?.planStatus).toBe('active');
+    expect(intent?.currentPeriodEnd).toBe(PERIOD_END_ISO);
+    expect(intent?.billing).toMatchObject({ unrecognised_price_id: 'price_replacement_2027' });
+  });
+
+  /** Under the no-add-ons decision a subscription we created has one item at quantity 1.
+   *  Anything else means the object means something this code does not model. */
+  it('refuses to resolve a tier from a multi-item or quantity-2 subscription', () => {
+    const multi = intentFromEvent(
+      subscriptionEvent({ priceId: PRICE_MONTHLY, extraPriceId: 'price_addon', plan: null }),
+      config
+    );
+    expect(multi?.plan).toBeNull();
+    expect(multi?.billing).toMatchObject({ unrecognised_price_reason: 'multiple_items' });
+
+    const quantity = intentFromEvent(subscriptionEvent({ quantity: 2, plan: null }), config);
+    expect(quantity?.plan).toBeNull();
+    expect(quantity?.billing).toMatchObject({ unrecognised_price_reason: 'quantity_not_one' });
   });
 });
 
@@ -227,6 +318,20 @@ describe('other products on the shared Stripe account', () => {
     expect(intentFromEvent(event, config)?.plan).toBe('maker');
   });
 
+  /**
+   * Stripe does not guarantee item order, so a first-item-only brand check makes the answer
+   * depend on something we do not control. The intent still refuses to name a TIER for a
+   * multi-item subscription — recognising it as ours and refusing to guess what it sells are
+   * two different questions.
+   */
+  it('recognises the subscription as ours when a NON-first item carries our price', () => {
+    const event = subscriptionEvent({ priceId: 'price_unknown_first', extraPriceId: PRICE_MONTHLY });
+    (event.data.object as {metadata: Record<string, string>;}).metadata = {};
+    const intent = intentFromEvent(event, config);
+    expect(intent).not.toBeNull();
+    expect(intent?.plan).toBeNull();
+  });
+
   it('ignores an invoice whose subscription metadata names another brand', () => {
     const event = invoicePaymentFailed({ brand: 'orchestrate-starter' });
     expect(intentFromEvent(event, config)).toBeNull();
@@ -241,6 +346,35 @@ describe('other products on the shared Stripe account', () => {
   it('still accepts an invoice with no metadata snapshot at all', () => {
     const event = invoicePaymentFailed();
     expect(intentFromEvent(event, config)?.subscriptionId).toBe(SUBSCRIPTION_ID);
+  });
+});
+
+/**
+ * The advertising value has to be the EX-VAT figure. Prices are stored tax-exclusive, so
+ * `amount_total` carries whatever VAT the customer's country required: the same Maker
+ * monthly is £16.80 in the UK and £14.00 on an export sale. Reporting that would make one
+ * product worth different amounts by geography and corrupt ROAS.
+ */
+describe('purchaseSignal', () => {
+  it('reads the value from the ex-tax subtotal, and carries the tax separately', () => {
+    const signal = purchaseSignal(checkoutSessionCompleted(), config);
+    expect(signal?.amountSubtotalMinor).toBe(1400);
+    expect(signal?.taxMinor).toBe(280);
+  });
+
+  it('reports the tier that was actually bought', () => {
+    expect(purchaseSignal(checkoutSessionCompleted({ plan: 'consultant' }), config)?.plan).toBe('consultant');
+    // The rail test IS reported — that is the point of it — but under its own slug, so it is
+    // filterable out of ROAS rather than counted as a real sale.
+    expect(purchaseSignal(checkoutSessionCompleted({ plan: 'rail_test' }), config)?.plan).toBe('rail_test');
+    expect(purchaseSignal(checkoutSessionCompleted({ plan: 'made_up' }), config)?.plan).toBeNull();
+  });
+
+  /** A 100%-off promotion code completes with payment_status 'no_payment_required'.
+   *  Reporting it would teach Meta to find more people who pay nothing. */
+  it('reports nothing for a session that was not actually paid', () => {
+    expect(purchaseSignal(checkoutSessionCompleted({ paymentStatus: 'no_payment_required' }), config)).toBeNull();
+    expect(purchaseSignal(checkoutSessionCompleted({ paymentStatus: 'unpaid' }), config)).toBeNull();
   });
 });
 
