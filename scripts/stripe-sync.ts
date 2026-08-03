@@ -323,25 +323,43 @@ function envBlock(): string {
   const portalKnown = portalId?.startsWith('bpc_') === true;
 
   const lines: string[] = [];
-  lines.push('cd ~/Documents/Orchestrate/batch-label');
-  lines.push('');
+
+  // On a dry run every id below is a `price_DRYRUN_*` placeholder, because nothing was
+  // created. The block is still printed so the shape can be reviewed — but it is emitted
+  // COMMENTED OUT, because it is otherwise a fully executable script that begins by
+  // deleting the real values (`vercel env rm`) and then writes fakes over them. With
+  // `--dry-run --live` that is a production outage handed to the founder by the one flag
+  // whose entire promise is that it writes nothing. Reviewable and inert beats copyable.
+  const inert = (line: string): string => (DRY_RUN ? (line === '' ? '#' : `# ${line}`) : line);
+
+  if (DRY_RUN) {
+    lines.push('# ══════════════════════════════════════════════════════════════════');
+    lines.push('# DRY RUN — every id below is a PLACEHOLDER. Nothing was created.');
+    lines.push('# This block is commented out on purpose: it starts with `vercel env rm`,');
+    lines.push('# so running it would delete real values and write fakes over them.');
+    lines.push('# Re-run without --dry-run to get a block that is safe to paste.');
+    lines.push('# ══════════════════════════════════════════════════════════════════');
+  }
+
+  lines.push(inert('cd ~/Documents/Orchestrate/batch-label'));
+  lines.push(inert(''));
   lines.push(`# ${mode.label.toUpperCase()} mode ids -> ${targets.join(' + ')}.`);
   lines.push('# printf, never echo: echo appends a newline and Stripe then reports the price');
   lines.push('# id as not found, which reads exactly like the price does not exist.');
-  lines.push('VALUES=(');
+  lines.push(inert('VALUES=('));
   for (const price of ALL_PRICES) {
-    lines.push(`  "${price.point.envVar}=${resolved.get(`${price.slug}:${price.interval}`) ?? 'MISSING'}"`);
+    lines.push(inert(`  "${price.point.envVar}=${resolved.get(`${price.slug}:${price.interval}`) ?? 'MISSING'}"`));
   }
-  if (portalKnown) lines.push(`  "${PORTAL_CONFIG_ENV}=${portalId}"`);
-  lines.push(')');
-  lines.push('for PAIR in "${VALUES[@]}"; do');
-  lines.push('  NAME="${PAIR%%=*}"; VALUE="${PAIR#*=}"');
-  lines.push(`  for ENV in ${targets.join(' ')}; do`);
-  lines.push('    vercel env rm "$NAME" "$ENV" --yes 2>/dev/null || true');
-  lines.push('    printf \'%s\' "$VALUE" | vercel env add "$NAME" "$ENV"');
-  lines.push('  done');
-  lines.push('done');
-  lines.push('');
+  if (portalKnown) lines.push(inert(`  "${PORTAL_CONFIG_ENV}=${portalId}"`));
+  lines.push(inert(')'));
+  lines.push(inert('for PAIR in "${VALUES[@]}"; do'));
+  lines.push(inert('  NAME="${PAIR%%=*}"; VALUE="${PAIR#*=}"'));
+  lines.push(inert(`  for ENV in ${targets.join(' ')}; do`));
+  lines.push(inert('    vercel env rm "$NAME" "$ENV" --yes 2>/dev/null || true'));
+  lines.push(inert('    printf \'%s\' "$VALUE" | vercel env add "$NAME" "$ENV"'));
+  lines.push(inert('  done'));
+  lines.push(inert('done'));
+  lines.push(inert(''));
   lines.push('# NOT set above, deliberately — do not add either by hand:');
   if (!portalKnown) {
     lines.push(`#   ${PORTAL_CONFIG_ENV} — no configuration id is known to this run. Run`);
@@ -351,8 +369,8 @@ function envBlock(): string {
     lines.push('#     that reports a missing portal id stays silent because the var is set.');
   }
   lines.push('#   ALLOW_RAIL_TEST_CHECKOUT — set by hand for the minutes a live rail test takes,');
-  lines.push('#     then removed. Left set it makes the £0.01 rail-test item permanently');
-  lines.push('#     purchasable, which it must never be to an ordinary customer.');
+  lines.push('#     then removed. Left set it makes the rail-test item permanently purchasable,');
+  lines.push('#     which it must never be to an ordinary customer.');
   return lines.join('\n');
 }
 
