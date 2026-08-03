@@ -17,7 +17,7 @@
  */
 
 import type Stripe from 'stripe';
-import type { PurchaseSignal } from './meta-capi';
+import type { PurchaseSignal } from './meta-capi.js';
 import {
   idOf,
   invoiceSubscriptionId,
@@ -30,7 +30,7 @@ import {
   subscriptionPriceIds,
   subscriptionTrialEnd,
   toIso } from
-'./entitlements';
+'./entitlements.js';
 import {
   FREE_PLAN,
   allowanceForPlan,
@@ -40,7 +40,7 @@ import {
   type PlanSlug,
   type PriceIndex,
   type ResolvedPrice } from
-'./plan-contract';
+'./plan-contract.js';
 
 /**
  * What we ask the database to write. Mirrors apply_stripe_entitlement()'s arguments.

@@ -16,8 +16,8 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { EntitlementIntent } from './stripe-events';
-import type { ApplyOutcome, EntitlementStore } from './webhook';
+import type { EntitlementIntent } from './stripe-events.js';
+import type { ApplyOutcome, EntitlementStore } from './webhook.js';
 
 export function createAdminClient(url: string, serviceRoleKey: string): SupabaseClient {
   return createClient(url, serviceRoleKey, {

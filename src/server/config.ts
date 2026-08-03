@@ -16,7 +16,7 @@
  * the forward and reverse maps cannot drift.
  */
 
-import { buildPriceIndex, missingPriceEnvVars, RAIL_TEST_PRICE_ENV_VAR, type PriceIndex } from './plan-contract';
+import { buildPriceIndex, missingPriceEnvVars, RAIL_TEST_PRICE_ENV_VAR, type PriceIndex } from './plan-contract.js';
 
 export type Env = Record<string, string | undefined>;
 

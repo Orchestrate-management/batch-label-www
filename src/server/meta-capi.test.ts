@@ -479,7 +479,14 @@ describe('meta-capi: the access token cannot reach the browser', () => {
     // The one permitted import is the isomorphic dedup contract, which has its own
     // purity test in src/lib/meta-events.test.ts.
     const source = readFileSync(join(root, 'src/server/meta-capi.ts'), 'utf8');
-    const libImports = Array.from(source.matchAll(/from\s+['"]\.\.\/lib\/([^'"]+)['"]/g)).map((m) => m[1]);
+    // The `.js` is stripped rather than matched, because this assertion is about WHICH
+    // module is imported, not how the specifier is spelled. Everything reachable from api/
+    // carries an explicit .js extension so Node ESM can resolve it at runtime (see
+    // esm-imports.test.ts); pinning the extension here would make this guard fail for a
+    // reason that has nothing to do with browser globals — which is exactly what happened.
+    const libImports = Array.
+    from(source.matchAll(/from\s+['"]\.\.\/lib\/([^'"]+)['"]/g)).
+    map((m) => m[1].replace(/\.js$/, ''));
     expect(libImports).toEqual(['meta-events']);
   });
 });

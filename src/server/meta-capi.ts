@@ -44,7 +44,7 @@ import {
   buildFbc,
   isoToUnixMs,
   purchaseEventId } from
-'../lib/meta-events';
+'../lib/meta-events.js';
 
 /**
  * Graph API version. Pinned rather than floating: Meta deprecates versions on a schedule,

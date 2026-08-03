@@ -29,8 +29,8 @@
  * per-entry fields, so no client can render one tier in a different currency from another.
  */
 
-import { corsHeaders, preflightResponse } from './cors';
-import { json } from './http';
+import { corsHeaders, preflightResponse } from './cors.js';
+import { json } from './http.js';
 import {
   CURRENCY,
   PLAN_CONTRACT,
@@ -38,7 +38,7 @@ import {
   TAX_BEHAVIOUR,
   UNLIMITED,
   type PlanEntry } from
-'./plan-contract';
+'./plan-contract.js';
 
 /** Five minutes. Long enough to be worth a CDN, short enough that a price change is live
  *  the same working day. The response carries no identity, so it is safe to share. */
