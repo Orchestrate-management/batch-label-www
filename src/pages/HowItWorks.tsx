@@ -25,18 +25,18 @@ const detailedSteps = [
   paragraphs: [
   'Tell us the fragrance load, for example 8 per cent, and the pack size, for example a 180 g candle or a 100 ml diffuser. Add your business name and address, since that has to appear on the label as the supplier.',
   'The classification of your finished product depends on how much fragrance is in it, not on the neat oil. That is the step most spreadsheets get wrong. Change the percentage here and the label changes with it, including which precautionary statements apply.',
-  'Save it as a recipe. Next time you make the same product in a different size, start from the recipe.'],
+  'Sell the same fragrance in a second pack size and that is a second SKU, because it is a second thing on a shelf. It gets its own label.'],
 
-  aside: 'Saved recipes are on the Maker plan. Free accounts can still make one label.'
+  aside: 'The same fragrance in three pack sizes counts as three SKUs. Your plan sets how many you can hold, and the pricing page defines the unit.'
 },
 {
   kind: 'download' as const,
-  title: 'Download your print ready label',
+  title: 'Check your label at true size',
   paragraphs: [
-  'The preview is at true size, so you see the label as it will print. Check your product name, your address and your batch code, then download.',
-  'Paid plans give you a PDF for home printing or a print shop, and an SVG if your printer asks for vector artwork. Pictograms and regulated text stay at the minimum sizes the rules require, whatever else you change.'],
+  'The preview is at true size, so you see the label as it will print. Check your product name, your address and your batch code against it.',
+  'Pictograms and regulated text stay at the minimum sizes the rules require, whatever else you change. Downloading the label as a PDF or an SVG is the piece we are building now, and it is not available on any plan yet.'],
 
-  aside: 'Free accounts get a watermarked PNG, which is enough to check the wording.'
+  aside: 'When export lands it is on every plan, including Free, and identical on all of them. Free limits how many SKUs you can hold, never what comes out.'
 }];
 
 
@@ -44,7 +44,7 @@ export function HowItWorks() {
   usePageMeta({
     title: 'How it works, safety data sheet to candle label',
     description:
-    'Three steps to a CLP label for candles, wax melts and diffusers. Upload the supplier safety data sheet, enter your recipe and pack size, download a PDF or SVG.'
+    'Three steps to a CLP label for candles, wax melts and diffusers. Upload the supplier safety data sheet, enter your recipe and pack size, check it at true size.'
   });
 
   // Built from detailedSteps above, so the markup is the page. The step anchors below

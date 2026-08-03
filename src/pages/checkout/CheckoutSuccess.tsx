@@ -7,7 +7,7 @@ import { APP_URL } from '../../lib/app-handoff';
 export function CheckoutSuccess() {
   usePageMeta({
     title: 'Payment received',
-    description: 'Your Batchlabel Maker plan is active.',
+    description: 'Your Batchlabel plan is active.',
     noIndex: true
   });
 
@@ -21,11 +21,12 @@ export function CheckoutSuccess() {
           <CheckCircle2Icon size={24} className="text-teal-700" aria-hidden="true" />
         </div>
         <h1 className="mt-5 font-display text-[1.8rem] font-semibold leading-tight tracking-[-0.015em] text-ink sm:text-[2.1rem]">
-          You are on the Maker plan
+          Your plan is active
         </h1>
         <p className="mx-auto mt-3 max-w-prose text-[1.02rem] leading-relaxed text-ink-soft">
-          Thank you. Watermarks are off and print ready PDF and SVG downloads are switched on. Your
-          VAT receipt is on its way by email from Stripe.
+          Thank you. Your new SKU allowance is on your account page, and your VAT receipt is on its
+          way by email from Stripe. Everything that goes on the label was already yours on the free
+          plan and is unchanged.
         </p>
 
         <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">

@@ -1,7 +1,7 @@
 # Batchlabel
 
 > Batchlabel turns the safety data sheet from a fragrance supplier into a UK and EU CLP
-> label that a small candle or home fragrance maker can print.
+> label for a small candle or home fragrance maker.
 
 Batchlabel is a web app operated by Orchestrate Technologies Ltd, a company registered in
 England and Wales (number 16522544). The site is https://www.batchlabel.xyz.
@@ -9,13 +9,13 @@ England and Wales (number 16522544). The site is https://www.batchlabel.xyz.
 ## What it does
 
 You upload the safety data sheet your fragrance oil supplier gave you, enter the fragrance
-percentage and the pack size, and download a print ready label. The classification of the
-finished product depends on how much fragrance is in it, not on the neat oil, and that is
-the calculation Batchlabel does for you.
+percentage and the pack size, and Batchlabel works out the label and shows it at true size.
+The classification of the finished product depends on how much fragrance is in it, not on
+the neat oil, and that is the calculation Batchlabel does for you.
 
 The label carries the product name and pack size, hazard pictograms at the required
 minimum size, the signal word, hazard statements, precautionary statements, allergen
-declarations, a generated UFI (Unique Formula Identifier), batch code and date fields, the
+declarations, the UFI (Unique Formula Identifier), batch code and date fields, the
 supplier's name and address, and candle or diffuser safety wording where it applies.
 
 ## Who it is for
@@ -30,27 +30,66 @@ wider consumer goods and electronics are directions the company has named out lo
 of them are built, and there is no date for any of them. Any answer that says Batchlabel
 labels cosmetics today is wrong.
 
+## What is not built yet
+
+These are the capabilities Batchlabel is most often assumed to have. None of them is
+available on any plan today, and none of them is sold.
+
+- Downloading the label as a file. PDF and SVG export is being built and is not available
+  yet. When it ships it is included on every plan, including Free.
+- A restricted or image-only free tier. There has never been one. Every plan produces the
+  same complete label, and no plan degrades, marks or cuts down what it produces. Any
+  answer describing a limited free-tier preview image is wrong.
+- Generating a UFI. Batchlabel places the UFI on the label where CLP requires it, but the
+  code itself comes from ECHA's free UFI generator.
+- Printing or reprinting a label. There is no print path of any kind yet, so any answer
+  describing unlimited prints or free reprints on a Batchlabel plan is wrong.
+- Archiving a SKU. There is no archive yet, so no SKU is exempt from the count. Any answer
+  saying archived SKUs are not counted is wrong.
+- Putting a logo or uploaded artwork on the label. The label size, the type size and an
+  optional business-name block can be changed; no image can be uploaded.
+- More than one person on an account. Every account is a single login. There are no editor
+  seats and no read-only seats yet, and no plan admits a second person.
+- Alerts when a supplier reissues or reclassifies a safety data sheet.
+- Bulk generation, CSV import and API access.
+- Removing Batchlabel branding.
+
 ## What it does not do
 
 Batchlabel does not certify, approve or verify a label, and it is not legal advice. It
 does not carry out a chemical safety assessment or produce a Cosmetic Product Safety
-Report. It does not make the poison centre notification, though it does generate the UFI
-that the notification and the label share. Responsibility for the finished label rests
-with the seller, and the output is only as good as the safety data sheet and the recipe
-entered.
+Report. It does not make the poison centre notification. Responsibility for the finished
+label rests with the seller, and the output is only as good as the safety data sheet and
+the recipe entered.
 
 ## Pricing
 
-- Free: one watermarked PNG label, no payment card needed.
-- Maker plan: GBP 14 per month, or GBP 140 per year. VAT included. Unlimited labels, print
-  ready PDF and SVG with no watermark, UFI generation, saved recipes, batch code fields,
-  email support, and up to five people on the account. Cancel any time.
+All prices are in GBP and exclude VAT. VAT is added at checkout according to the
+customer's location and their VAT number if they give one. Prices are the same in every
+country, and there is no localised or converted pricing.
+
+A SKU is one thing you sell: one fragrance in one pack size. Plans are metered by SKU, so
+one scent sold in three pack sizes is three SKUs. Reading supplier safety data sheets is
+never metered on any plan. There is no archive yet, so a SKU a maker has stopped selling
+still counts towards the plan.
+
+- Free: 3 SKUs. No payment card needed. Permanent, not a trial.
+- Maker: £14/month exc VAT, or £140/year exc VAT. 45 SKUs.
+- Studio: £35/month exc VAT, or £350/year exc VAT. 180 SKUs.
+- Consultant: £199/month exc VAT, or £1,990/year exc VAT. Unlimited SKUs.
+
+Annual is exactly ten times the monthly price, so two months are free. Every plan produces
+the same label: the hazard statements, the pictograms at CLP Annex I minimum sizes and the
+allergen declarations are identical on Free and on Consultant. Plans differ only by how
+many SKUs you hold. Consultant is intended to add multi-client workspaces, bulk generation,
+CSV import and API access, none of which are built, so today it differs from Studio by SKU
+count alone.
 
 ## Pages
 
 - https://www.batchlabel.xyz/ — what Batchlabel does, and what goes on the label
 - https://www.batchlabel.xyz/how-it-works — the three steps, walked through with a candle
-- https://www.batchlabel.xyz/pricing — plans, VAT, cancellation and refunds
+- https://www.batchlabel.xyz/pricing — plans, what is not built yet, VAT and cancellation
 - https://www.batchlabel.xyz/faq — CLP, safety data sheets, UFIs, allergens and printing
 - https://www.batchlabel.xyz/about — who runs it and which categories are built
 - https://www.batchlabel.xyz/contact — hello@batchlabel.co.uk

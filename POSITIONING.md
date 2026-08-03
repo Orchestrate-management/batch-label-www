@@ -5,11 +5,15 @@ Why the site is structured the way it is, and what it is allowed to claim.
 ## What Batchlabel does
 
 Turn the safety data sheet from a fragrance supplier into a UK and EU CLP label
-that a small maker can print.
+for a small maker, shown on screen at true size.
 
 ```
-supplier safety data sheet  ->  your recipe and pack size  ->  print ready label
+supplier safety data sheet  ->  fragrance percentage and pack size  ->  the label, at true size
 ```
+
+The last box used to read "print ready label". Nothing in either repo writes a
+file, so that box was the origin of a claim that reached the pricing page, the
+FAQs, the terms and the structured data. It ends where the software ends.
 
 That is the whole product. It works for candles, wax melts, reed diffusers and
 room sprays.
@@ -30,6 +34,23 @@ has written a line of code for spends that credibility for nothing.
 - Naming a direction is fine. Promising it is not.
 - Candles stays the lead everywhere: the `<h1>`, the label preview, the funnel,
   the SEO. It is the only thing that works and the only thing that pays.
+
+**Rules for any copy about capabilities:**
+
+The same discipline, for the same reason, and it is the one that keeps failing.
+Four claims with no mechanism — downloading a label, unlimited reprints, placing
+your own logo, archived SKUs not counting — shipped through a green test suite
+because the guard only knew the previous audit's exact strings.
+
+- Say what the software does today. Nothing about what it will do.
+- If a customer would reasonably expect it and it does not exist, it goes in
+  `src/content/availability.ts` and is rendered under a heading that says it is
+  not available. There is no third option.
+- A capability named without that disclaimer beside it is being sold. The general
+  register in `src/content/copy-honesty.test.ts` enforces exactly that, on every
+  copy surface, by shape rather than by wording.
+- Verify against the product app before writing, not after. Every one of the four
+  took a single grep to disprove.
 
 ## The category list
 
@@ -80,8 +101,9 @@ say a category does not exist. They will be wrong the day one does.
    before it gets any traffic?
 2. **Naming electronics at all.** It is two categories past anything real. Keep it
    on the page or cut it?
-3. **Pricing across categories.** One plan at £14 a month today. Same plan when a
-   second category arrives, or a separate line?
+3. **Pricing across categories.** A four-step ladder metered by SKU today, priced
+   from `src/lib/plans.ts`. Same ladder when a second category arrives, or a
+   separate line?
 4. **How prominent Orchestrate should be.** It appears on About only.
 5. **The name.** `batchlabel.co.uk` and a candle-heavy label preview both assume
    fragrance. Fine for now, worth revisiting if a second category ever lands.

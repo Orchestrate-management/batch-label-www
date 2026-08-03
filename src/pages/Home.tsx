@@ -1,5 +1,6 @@
 import { usePageMeta, useStructuredData } from '../lib/seo';
 import { faqPageSchema, graph } from '../lib/structured-data';
+import { PLANS } from '../lib/plans';
 import { Hero } from '../components/home/Hero';
 import { TrustStrip } from '../components/home/TrustStrip';
 import { ProblemCards } from '../components/home/ProblemCards';
@@ -14,8 +15,9 @@ import { homeFaqs } from '../content/faqs';
 export function Home() {
   usePageMeta({
     title: 'CLP labels for candle and wax melt makers',
-    description:
-    "Turn your fragrance supplier's safety data sheet into a print ready UK and EU CLP label for candles, wax melts, diffusers and room sprays. First label free."
+    // Byte-identical to the three static strings in index.html, which is what a crawler
+    // that runs no JavaScript reads. structured-data.test.ts asserts they still agree.
+    description: `Turn your fragrance supplier's safety data sheet into correct UK and EU CLP label wording for candles, wax melts, diffusers and room sprays. ${PLANS.free.skus} SKUs free, no card.`
   });
 
   // The six questions in the accordion below, and nothing else. No SoftwareApplication

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fetchEntitlement, formatPeriodEnd, summarisePlan, type Entitlement } from './entitlements';
+import { LADDER, PLANS, skuAllowance } from './plans';
 
 const mocks = vi.hoisted(() => ({
   result: { data: null as unknown, error: null as unknown },
@@ -118,11 +119,50 @@ describe('summarisePlan', () => {
     }
   });
 
+  /**
+   * Every branch used to hard-code "Maker", so a paying Studio or Consultant customer was
+   * shown a tier they had not bought. The slug is in hand at the select; use it.
+   */
+  it.each(['maker', 'studio', 'consultant'] as const)('names the %s plan it was given', (slug) => {
+    const summary = summarisePlan(entitlement({ plan: slug }));
+    expect(summary.label).toBe(`${PLANS[slug].label} plan`);
+    expect(summary.detail).toContain(skuAllowance(PLANS[slug]));
+  });
+
   it('shows the real plan rather than a hard-coded one', () => {
     expect(summarisePlan(entitlement()).label).toBe('Maker plan');
     expect(summarisePlan(entitlement({ plan: 'free', status: null, active: false })).label).toBe(
       'Free plan'
     );
+  });
+
+  /** A slug a newer deploy introduced must not render as a plan this build invented. */
+  it('falls back to wording true of every plan for an unknown slug', () => {
+    const summary = summarisePlan(entitlement({ plan: 'something_new' }));
+    expect(summary.label).toBe('Your plan');
+    expect(summary.detail).not.toMatch(/SKU/);
+  });
+
+  /**
+   * A lapsed account is a Free account, with Free's allowance. Cancelling must never leave
+   * somebody worse off than never having subscribed.
+   */
+  it('gives a lapsed account the Free allowance rather than nothing', () => {
+    const summary = summarisePlan(
+      entitlement({ plan: 'free', status: 'canceled', active: false })
+    );
+    expect(summary.detail).toContain(skuAllowance(PLANS.free));
+  });
+
+  /**
+   * No SKU limit is enforced anywhere in the product yet, so no branch may tell a customer
+   * they will be stopped at one.
+   */
+  it('never claims a limit is enforced', () => {
+    for (const slug of [...LADDER, 'consultant'] as const) {
+      const summary = summarisePlan(entitlement({ plan: slug }));
+      expect(summary.detail).not.toMatch(/cannot create|blocked|locked|at the limit/i);
+    }
   });
 
   it('offers the upgrade on the free plan', () => {
@@ -160,6 +200,21 @@ describe('summarisePlan', () => {
 
   it('marks a trial as a trial', () => {
     expect(summarisePlan(entitlement({ status: 'trialing' })).label).toBe('Maker plan (trial)');
+  });
+
+  /** Nothing on this screen may describe an artefact or a feature that does not exist. */
+  it('promises no watermark, no PNG and no file export', () => {
+    for (const overrides of [
+      {},
+      { status: 'past_due' },
+      { status: 'trialing' },
+      { plan: 'free', status: null, active: false },
+      { cancelAtPeriodEnd: true }
+    ] as Partial<Entitlement>[]) {
+      const summary = summarisePlan(entitlement(overrides));
+      const text = `${summary.label} ${summary.detail} ${summary.warning ?? ''}`;
+      expect(text).not.toMatch(/watermark|\bPNG\b|\bSVG\b|print ready|unlimited labels/i);
+    }
   });
 
   it('invites a lapsed customer back rather than pretending nothing happened', () => {

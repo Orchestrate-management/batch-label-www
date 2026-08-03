@@ -8,6 +8,11 @@
  * This is the single source of truth for anything on the site that says which
  * products we cover. The homepage categories section and the About page both
  * render from this array, so they cannot drift apart.
+ *
+ * A `description` says what the category is, never what the software can do with
+ * it. The live card used to end "and download a UK and EU CLP label", which put a
+ * file export nothing builds on the home page and on /about — the two highest
+ * traffic pages on the site — after it had been struck everywhere else.
  */
 
 /**
@@ -48,7 +53,7 @@ export const verticals: Vertical[] = [
     statusLabel: 'Available now',
     tagline: 'The category Batchlabel is built for.',
     description:
-      'Upload the safety data sheet from your fragrance supplier, enter your recipe and pack size, and download a UK and EU CLP label.',
+      'Upload the safety data sheet from your fragrance supplier, enter your fragrance percentage and pack size, and Batchlabel works out the UK and EU CLP label and shows it at true size.',
     inputName: 'fragrance supplier safety data sheet',
     regulation: 'UK CLP and EU CLP',
     examples: ['Candles', 'Wax melts', 'Reed diffusers', 'Room sprays'],
