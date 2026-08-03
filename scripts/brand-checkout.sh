@@ -26,6 +26,16 @@ ok()  { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 bad() { printf '  \033[31m✗\033[0m %s\n' "$*"; }
 die() { printf '\n  \033[31m✗ %s\033[0m\n\n' "$*" >&2; exit 1; }
 
+# Pull the first capture of a pattern out of a blob, WITHOUT killing the script when there
+# is no match.
+#
+# `set -euo pipefail` plus a grep that matches nothing aborts at the assignment itself, so
+# the "did we get an id?" check below it never runs. That is exactly how the first version
+# of this script exited at "Uploading the icon" and reported nothing: the upload failed, grep
+# found no file_ id, and the shell left before the error could be printed. Silence is the
+# worst possible output for a step that just failed.
+extract() { printf '%s' "$2" | grep -o "$1" 2>/dev/null | head -1 || true; }
+
 PRIMARY="#14514F"   # teal-700  — buttons and links
 ACCENT="#B4674A"    # clay-500  — secondary accents
 ICON_PATH="public/brand/apple-touch-icon.png"   # 180x180, clears Stripe's 128x128 minimum
@@ -49,13 +59,29 @@ esac
 say "1. Uploading the icon"
 [ -f "$ICON_PATH" ] || die "$ICON_PATH not found"
 UPLOAD=$(curl -s https://api.stripe.com/v1/files -u "$KEY:" \
-  -F "purpose=business_icon" -F "file=@${ICON_PATH}")
-ICON_ID=$(printf '%s' "$UPLOAD" | grep -o '"id": *"file_[^"]*"' | head -1 | sed 's/.*"\(file_[^"]*\)"/\1/')
-if [ -z "$ICON_ID" ]; then
-  bad "icon upload failed: $(printf '%s' "$UPLOAD" | grep -o '"message": "[^"]*"' | head -1)"
-  echo "  continuing with colours only"
-else
+  -F "purpose=business_icon" -F "file=@${ICON_PATH}" || true)
+ICON_ID=$(extract '"id": *"file_[^"]*"' "$UPLOAD" | sed 's/.*"\(file_[^"]*\)"/\1/' || true)
+
+if [ -n "$ICON_ID" ]; then
   ok "$ICON_ID"
+else
+  bad "icon upload failed — Stripe said:"
+  # Print whatever came back, in full. A truncated or filtered error is how the previous
+  # run told us nothing at all.
+  printf '%s' "$UPLOAD" | python3 -c "
+import sys, json
+raw = sys.stdin.read()
+try:
+    e = json.loads(raw).get('error', {})
+    if e:
+        for k in ('type', 'code', 'param', 'message'):
+            if e.get(k): print(f'    {k}: {e[k]}')
+    else:
+        print('    (no error field) ' + raw[:300])
+except Exception:
+    print('    ' + (raw[:300] or '(empty response)'))
+" 2>/dev/null || printf '    %s\n' "${UPLOAD:0:300}"
+  echo "  continuing with colours only"
 fi
 
 say "2. Applying branding"

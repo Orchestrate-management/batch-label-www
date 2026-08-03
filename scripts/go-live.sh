@@ -57,9 +57,11 @@ case "$STRIPE_SECRET_KEY" in
 esac
 
 say "1. Checking the key can write"
-PROBE=$(curl -s https://api.stripe.com/v1/products -u "$STRIPE_SECRET_KEY:" -d "name=__golive_probe__")
-PROBE_ID=$(printf '%s' "$PROBE" | grep -o '"id": *"prod_[^"]*"' | head -1 | sed 's/.*"\(prod_[^"]*\)"/\1/')
-[ -n "$PROBE_ID" ] || die "cannot create products with this key: $(printf '%s' "$PROBE" | grep -o '"message": "[^"]*"' | head -1)"
+PROBE=$(curl -s https://api.stripe.com/v1/products -u "$STRIPE_SECRET_KEY:" -d "name=__golive_probe__" || true)
+# `|| true` matters: under `set -euo pipefail` a grep that matches nothing aborts at the
+# assignment, so the check on the next line would never run and the failure would be silent.
+PROBE_ID=$(printf '%s' "$PROBE" | grep -o '"id": *"prod_[^"]*"' 2>/dev/null | head -1 | sed 's/.*"\(prod_[^"]*\)"/\1/' || true)
+[ -n "$PROBE_ID" ] || die "cannot create products with this key: $(printf '%s' "$PROBE" | grep -o '"message": "[^"]*"' 2>/dev/null | head -1 || true)"
 curl -s -X DELETE "https://api.stripe.com/v1/products/$PROBE_ID" -u "$STRIPE_SECRET_KEY:" -o /dev/null
 ok "write access confirmed (probe created and deleted)"
 
@@ -80,8 +82,8 @@ HOOK=$(curl -s https://api.stripe.com/v1/webhook_endpoints -u "$STRIPE_SECRET_KE
   -d "enabled_events[]=customer.subscription.updated" \
   -d "enabled_events[]=customer.subscription.deleted" \
   -d "description=Batchlabel entitlements (live)")
-WHSEC=$(printf '%s' "$HOOK" | grep -o '"secret": "[^"]*"' | head -1 | sed 's/.*: "//; s/"//')
-[ -n "$WHSEC" ] || die "could not create the webhook endpoint: $(printf '%s' "$HOOK" | grep -o '"message": "[^"]*"' | head -1)"
+WHSEC=$(printf '%s' "$HOOK" | grep -o '"secret": "[^"]*"' 2>/dev/null | head -1 | sed 's/.*: "//; s/"//' || true)
+[ -n "$WHSEC" ] || die "could not create the webhook endpoint: $(printf '%s' "$HOOK" | grep -o '"message": "[^"]*"' 2>/dev/null | head -1 || true)"
 ok "endpoint registered, signing secret captured"
 
 say "4. Writing production environment variables"
