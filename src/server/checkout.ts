@@ -19,8 +19,8 @@
  * transaction if a paid conversion is ever to be reported accurately.
  */
 
-import { isValidFbc, isValidFbp } from '../lib/meta-events';
-import { PAID_TIERS, type BillingInterval, type PaidTier, type PlanSlug } from './plan-contract';
+import { isValidFbc, isValidFbp } from '../lib/meta-events.js';
+import { PAID_TIERS, type BillingInterval, type PaidTier, type PlanSlug } from './plan-contract.js';
 
 /** Stripe's limits: 50 keys, 40 chars per key, 500 chars per value. */
 const MAX_METADATA_VALUE = 480;

@@ -27,10 +27,10 @@
  */
 
 import Stripe from 'stripe';
-import { allowedOrigins, corsHeaders, preflightResponse } from '../src/server/cors';
-import { readServerConfig, returnUrl } from '../src/server/config';
-import { fail, json } from '../src/server/http';
-import { createAdminClient, findMembership, userFromRequest } from '../src/server/supabase-admin';
+import { allowedOrigins, corsHeaders, preflightResponse } from '../src/server/cors.js';
+import { readServerConfig, returnUrl } from '../src/server/config.js';
+import { fail, json } from '../src/server/http.js';
+import { createAdminClient, findMembership, userFromRequest } from '../src/server/supabase-admin.js';
 
 export default {
   async fetch(request: Request): Promise<Response> {

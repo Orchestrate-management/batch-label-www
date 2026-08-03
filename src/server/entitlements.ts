@@ -23,7 +23,7 @@
  */
 
 import type Stripe from 'stripe';
-import { FREE_PLAN, type PlanSlug } from './plan-contract';
+import { FREE_PLAN, type PlanSlug } from './plan-contract.js';
 
 /**
  * THE SIX FIRST-ITEM AND SINGLE-VALUE READS from docs/PRICING_RESEARCH.md §4.1, re-checked

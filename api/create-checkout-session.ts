@@ -46,12 +46,12 @@
  */
 
 import Stripe from 'stripe';
-import { allowedOrigins, corsHeaders, preflightResponse } from '../src/server/cors';
-import { readServerConfig, returnUrl } from '../src/server/config';
-import { checkoutMetadata, resolveInterval, resolveRailTest, resolveTier, sanitiseMetaCookies } from '../src/server/checkout';
-import { displayNameForPlan, planEntryForPrice, priceIdForTier } from '../src/server/plan-contract';
-import { fail, json } from '../src/server/http';
-import { createAdminClient, findEntitlement, findMembership, userFromRequest } from '../src/server/supabase-admin';
+import { allowedOrigins, corsHeaders, preflightResponse } from '../src/server/cors.js';
+import { readServerConfig, returnUrl } from '../src/server/config.js';
+import { checkoutMetadata, resolveInterval, resolveRailTest, resolveTier, sanitiseMetaCookies } from '../src/server/checkout.js';
+import { displayNameForPlan, planEntryForPrice, priceIdForTier } from '../src/server/plan-contract.js';
+import { fail, json } from '../src/server/http.js';
+import { createAdminClient, findEntitlement, findMembership, userFromRequest } from '../src/server/supabase-admin.js';
 
 interface CheckoutRequestBody {
   tier?: unknown;

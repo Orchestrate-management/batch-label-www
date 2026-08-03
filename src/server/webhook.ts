@@ -25,9 +25,9 @@
  */
 
 import type Stripe from 'stripe';
-import { intentFromEvent, purchaseSignal, type EntitlementIntent, type IntentConfig } from './stripe-events';
-import type { ConversionForwarder } from './meta-capi';
-import { json } from './http';
+import { intentFromEvent, purchaseSignal, type EntitlementIntent, type IntentConfig } from './stripe-events.js';
+import type { ConversionForwarder } from './meta-capi.js';
+import { json } from './http.js';
 
 export const STRIPE_SIGNATURE_HEADER = 'stripe-signature';
 

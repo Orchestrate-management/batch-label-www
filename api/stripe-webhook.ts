@@ -19,11 +19,11 @@
  */
 
 import Stripe from 'stripe';
-import { readServerConfig } from '../src/server/config';
-import { json } from '../src/server/http';
-import { createAdminClient, createEntitlementStore, findAdvertisingConsent } from '../src/server/supabase-admin';
-import { createConversionForwarder, readMetaConfig } from '../src/server/meta-capi';
-import { handleStripeWebhook } from '../src/server/webhook';
+import { readServerConfig } from '../src/server/config.js';
+import { json } from '../src/server/http.js';
+import { createAdminClient, createEntitlementStore, findAdvertisingConsent } from '../src/server/supabase-admin.js';
+import { createConversionForwarder, readMetaConfig } from '../src/server/meta-capi.js';
+import { handleStripeWebhook } from '../src/server/webhook.js';
 
 export default {
   async fetch(request: Request): Promise<Response> {
