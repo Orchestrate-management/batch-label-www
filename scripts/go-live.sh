@@ -18,8 +18,12 @@
 #   4. Sets STRIPE_SECRET_KEY, the seven price ids and STRIPE_WEBHOOK_SECRET on production
 #   5. REMOVES STRIPE_PORTAL_CONFIGURATION_ID — the current value is a TEST-mode bpc_ and
 #      would break "Manage billing" in live mode
-#   6. Brands the Checkout page with Batchlabel's icon and palette
-#   7. Redeploys and checks the endpoints
+#   6. Redeploys and checks the endpoints
+#
+# Checkout branding is NOT here — see scripts/brand-checkout.sh. Keeping it separate means
+# branding can be re-run freely, while this script cannot: step 3 rotates the webhook signing
+# secret every time, which opens a window where Stripe signs with a secret production does
+# not have yet.
 #
 # WHAT IT DELIBERATELY DOES NOT DO. It does not create a live billing-portal configuration.
 # Live mode has none, and the FIRST one created becomes the account default for every other
@@ -128,39 +132,7 @@ vercel env rm STRIPE_PORTAL_CONFIGURATION_ID production --yes >/dev/null 2>&1 &&
 vercel env rm ALLOW_RAIL_TEST_CHECKOUT production --yes >/dev/null 2>&1 && \
   ok "ensured ALLOW_RAIL_TEST_CHECKOUT is unset" || true
 
-say "5. Branding the Checkout page"
-#
-# Stripe branding is ACCOUNT-WIDE. There is no per-product or per-session override on a
-# standard account, so this also restyles checkout for the other Orchestrate brands. Today
-# every branding field is null, so they currently get Stripe's default grey — this replaces
-# that with Batchlabel's palette under the same "Orchestrate Technologies Ltd." business
-# name. Fully reversible from Settings -> Branding.
-#
-# Only the icon is set, not a logo: Stripe wants a raster logo and the horizontal lockup is
-# SVG only, with no rasteriser on this machine. The icon is what Checkout renders anyway.
-ICON_PATH="public/brand/apple-touch-icon.png"   # 180x180, clears Stripe's 128x128 minimum
-if [ -f "$ICON_PATH" ]; then
-  ICON_ID=$(curl -s https://api.stripe.com/v1/files -u "$STRIPE_SECRET_KEY:" \
-    -F "purpose=business_icon" -F "file=@${ICON_PATH}" \
-    | grep -o '"id": *"file_[^"]*"' | head -1 | sed 's/.*"\(file_[^"]*\)"/\1/')
-  [ -n "$ICON_ID" ] && ok "uploaded icon ($ICON_ID)" || echo "  (icon upload failed — colours will still be set)"
-else
-  ICON_ID=""
-  echo "  ($ICON_PATH not found — colours only)"
-fi
-
-BRAND=$(curl -s -X POST https://api.stripe.com/v1/account -u "$STRIPE_SECRET_KEY:" \
-  -d "settings[branding][primary_color]=#14514F" \
-  -d "settings[branding][secondary_color]=#B4674A" \
-  ${ICON_ID:+-d "settings[branding][icon]=$ICON_ID"})
-if printf '%s' "$BRAND" | grep -q '"error"'; then
-  echo "  branding not applied: $(printf '%s' "$BRAND" | grep -o '"message": "[^"]*"' | head -1)"
-  echo "  (not fatal — set it by hand at Dashboard -> Settings -> Branding)"
-else
-  ok "primary #14514F (teal), accent #B4674A (clay)"
-fi
-
-say "6. Deploying"
+say "5. Deploying"
 vercel deploy --prod --yes >/dev/null 2>&1 || true
 echo "  waiting for the new deployment to serve..."
 for _ in $(seq 1 60); do
@@ -168,7 +140,7 @@ for _ in $(seq 1 60); do
   [ "$(curl -s -o /dev/null -w '%{http_code}' https://www.batchlabel.xyz/api/plans)" = "200" ] && break
 done
 
-say "7. Verifying"
+say "6. Verifying"
 printf '  %-34s HTTP %s\n' "/api/plans"                  "$(curl -s -o /dev/null -w '%{http_code}' https://www.batchlabel.xyz/api/plans)"
 printf '  %-34s HTTP %s (401 = auth required, correct)\n' "/api/create-checkout-session" "$(curl -s -o /dev/null -w '%{http_code}' -X POST https://www.batchlabel.xyz/api/create-checkout-session -H 'Content-Type: application/json' -d '{"tier":"maker","interval":"monthly"}')"
 printf '  %-34s HTTP %s (400 = signature enforced)\n'     "/api/stripe-webhook"          "$(curl -s -o /dev/null -w '%{http_code}' -X POST https://www.batchlabel.xyz/api/stripe-webhook -d '{}')"
