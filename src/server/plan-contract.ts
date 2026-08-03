@@ -173,9 +173,15 @@ export const PLAN_CONTRACT: Readonly<Record<PlanSlug, PlanEntry>> = Object.freez
     publiclyListed: true
   },
   rail_test: {
-    // £0.01 exc VAT, monthly recurring. It exists to prove the payment rail end to end with
+    // £0.30 exc VAT, monthly recurring. It exists to prove the payment rail end to end with
     // real money — a real card, real 3DS, a real signature-verified webhook, a real
     // entitlement write — without risking a £199 charge to find out.
+    //
+    // 30p, not the penny originally specified, because £0.30 IS Stripe's minimum chargeable
+    // amount in GBP. A 1p price cannot be collected at all, so it would have exercised the
+    // payment-failure path while looking like a success test — and 20% VAT on 1p rounds to
+    // 0p, so it would never have produced a VAT line either. 30p is the exact floor: the
+    // cheapest amount that proves the rail actually works rather than proving it does not.
     //
     // Monthly recurring rather than one-off, because a one-off exercises a different webhook
     // path (payment_intent.*, no customer.subscription.*) and so would not test the path a
@@ -191,7 +197,7 @@ export const PLAN_CONTRACT: Readonly<Record<PlanSlug, PlanEntry>> = Object.freez
     entitling: false,
     skuLimit: 3,
     editorSeatLimit: 1,
-    monthly: { amountPence: 1, lookupKey: 'batchlabel_rail_test_monthly_gbp', envVar: 'STRIPE_PRICE_RAIL_TEST_MONTHLY' },
+    monthly: { amountPence: 30, lookupKey: 'batchlabel_rail_test_monthly_gbp', envVar: 'STRIPE_PRICE_RAIL_TEST_MONTHLY' },
     annual: null,
     stripeProductName: 'Batchlabel Rail Test',
     publiclyListed: false

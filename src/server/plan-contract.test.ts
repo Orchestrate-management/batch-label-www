@@ -101,9 +101,21 @@ describe('the £0.01 rail test grants nothing', () => {
     expect(PAID_TIERS as readonly string[]).not.toContain('rail_test');
   });
 
-  it('has no annual price — a 10p annual would exercise nothing the monthly one does not', () => {
+  it('has no annual price — an annual rail test would exercise nothing the monthly one does not', () => {
     expect(PLAN_CONTRACT.rail_test.annual).toBeNull();
-    expect(PLAN_CONTRACT.rail_test.monthly?.amountPence).toBe(1);
+  });
+
+  /**
+   * 30p is not an arbitrary "cheap" number, it is Stripe's minimum chargeable amount in GBP,
+   * and the assertion is a floor rather than an equality for that reason. Anything below it
+   * cannot be collected at all, so a rail test priced under 30p would exercise the payment
+   * FAILURE path while reading as a success test — which is the opposite of what it is for.
+   * (It was specified as 1p originally, for exactly that reason.) A sub-30p value here is a
+   * bug even though nothing else in the codebase would complain about it.
+   */
+  it('is at or above Stripe’s GBP minimum, or it cannot be charged at all', () => {
+    const STRIPE_MIN_GBP_PENCE = 30;
+    expect(PLAN_CONTRACT.rail_test.monthly?.amountPence).toBeGreaterThanOrEqual(STRIPE_MIN_GBP_PENCE);
   });
 
   it('resolves through its own index entry rather than falling through to anything', () => {
