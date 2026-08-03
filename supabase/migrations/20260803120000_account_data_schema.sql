@@ -23,6 +23,8 @@
 --     status in ('active','suspended','removed')     default 'active'
 --     unique (account_id, user_id)
 --     READ ONLY to the browser. One row today: the owner. Invites are deferred.
+--     status here is THE PERSON. brand_memberships.status is THE BUSINESS. Access needs
+--     both to be 'active' — see section 3.
 --
 --   public.specifications      -- THE COMPOSITION. One row per recipe.
 --     id                uuid    pk
@@ -73,7 +75,14 @@
 --                                           one; NULL when none or ambiguous. It is the
 --                                           column default, so an insert may omit
 --                                           account_id entirely.
---   public.is_member_of(uuid)    -> boolean the RLS predicate, callable for UI checks.
+--   public.is_member_of(uuid)    -> boolean the RLS predicate, callable for UI checks. True
+--                                           only when the caller is an active member AND
+--                                           the account's brand membership is active — a
+--                                           suspended or departed customer reads and writes
+--                                           nothing, in the database and not merely in the
+--                                           UI (section 3). Plan and plan_status are NOT
+--                                           consulted: free, lapsed and past_due keep full
+--                                           access to what they already have.
 --
 -- =============================================================================
 -- THE account_id CONTRACT. Decided jointly with the app workstream; the same rule is
@@ -101,18 +110,39 @@
 --      in the wrong workspace and does it silently; a refusal at the insert is strictly
 --      better than that. See section 4.
 --
---   5. THE ERROR CODES, because the obvious one is wrong. A null account_id does NOT
---      produce 23502. RLS is evaluated before table constraints, so it produces 42501 and
---      the NOT NULL is never reached — measured, not assumed (section 7c). Match on the
---      HINT, never on 23502 and never on the sentence:
+--   5. THE ERROR CODES, because the obvious one is wrong and matching it is dead code.
 --
---        hint 'account_missing'    -> no membership yet. Transient. "Still being set up"
---                                     is true here and only here.
---        hint 'account_ambiguous'  -> two or more. The app must send an account_id (1).
---                                     Never tell this customer to wait; nothing is coming.
---        hint 'sku_limit_reached'  -> the allowance (section 6).
---        bare 42501, no hint       -> a policy refusal. It is deliberately uninformative
---                                     and the app must not dress it up as a diagnosis.
+--      23502 IS UNREACHABLE on specifications and products. A null account_id never
+--      reaches the NOT NULL constraint: RLS is evaluated before table constraints, so
+--      without section 7c the row dies on the policy with 42501; WITH section 7c a BEFORE
+--      INSERT trigger answers earlier still and raises P0001. Both were measured against a
+--      real server, not reasoned about. Any client branch testing for 23502 to mean "you
+--      have no account" has never once fired and never will.
+--
+--      SO: BRANCH ON error.hint FIRST, AND ONLY THEN ON error.code. Never on 23502, and
+--      never on the sentence — the sentences below are customer-facing copy and will be
+--      rewritten without notice. The hint is the stable token; the code is P0001 for every
+--      hint this schema raises, so the code alone distinguishes nothing.
+--
+--        P0001 hint 'account_missing'    -> no active membership. TRANSIENT: it resolves
+--                                           when signup completes. "Still being set up" is
+--                                           true here and only here — and the useful thing
+--                                           to offer is finishing signup, not waiting.
+--        P0001 hint 'account_ambiguous'  -> two or more. The app must send an account_id
+--                                           (rule 1). PERMANENT until it does. NEVER tell
+--                                           this customer to wait or to try again: nothing
+--                                           is coming, and a retry cannot change it.
+--        P0001 hint 'sku_limit_reached'  -> the allowance (section 6).
+--        42501, no hint                  -> a policy refusal, and there are now three ways
+--                                           to earn one: an account that is not yours, a
+--                                           null account_id on some path section 7c does
+--                                           not cover, and a suspended or departed
+--                                           membership (section 3). It is deliberately
+--                                           uninformative and the app must not dress it up
+--                                           as a diagnosis of any of the three. For the
+--                                           suspended case the app does not need it to:
+--                                           entitlements.membership_status and .active
+--                                           already say so, on a read it makes first.
 --
 -- WHY THIS WAY ROUND, rather than a brand-aware default. entitlements.account_id is
 -- already resolved per brand (section 10: the lateral matches the membership's own
@@ -311,9 +341,63 @@ create trigger account_members_set_updated_at
 --   * identity is auth.uid() and is NEVER an argument, so the function cannot be used to
 --     ask about anybody but the caller. This is why there is no is_member_of(user, acct).
 --
--- ONE STANDING HAZARD, WRITTEN DOWN BECAUSE IT IS INVISIBLE: do NOT enable
--- `alter table public.account_members force row level security`. FORCE makes RLS apply
--- to the owner too, which re-arms the recursion this function exists to defuse.
+-- TWO LEVELS OF "MAY THIS PERSON ACT HERE", AND BOTH ARE CHECKED.
+--
+-- account_members.status is THE PERSON: this individual's standing inside this account.
+-- brand_memberships.status is THE BUSINESS: whether the account itself is still in good
+-- standing on its brand. Suspending a business must stop everyone in it, not just whoever
+-- happens to have been removed individually.
+--
+-- The second half was missing, and its absence was the whole of a finding. 20260801120000
+-- and 20260802120000 both state the rule outright — "a suspended or departed member is not
+-- entitled even with a live Stripe subscription, otherwise suspending an account does
+-- nothing, which is a surprising way to find out you cannot remove abusive users" — and
+-- entitlement_is_active enforces it for the `active` flag the app reads. But `active` is a
+-- flag on a screen, and §3.3 is explicit that a client-side check is not enforcement: the
+-- browser holds an anon key against PostgREST. Before this migration there were no product
+-- tables, so there was nothing for a suspended customer to write and the gap did not exist.
+-- This file creates that surface, so this file closes it. A rule the database states in one
+-- migration and declines to apply in the next is not a rule.
+--
+-- WHAT IS AND IS NOT CONSULTED, because getting this wrong breaks §6.1 in the other
+-- direction:
+--
+--   * brand_memberships.STATUS only — the membership lifecycle (active | suspended | left).
+--   * NOT plan, NOT plan_status, NOT current_period_end. A customer on `free`, on a lapsed
+--     card, past_due, cancelled or downgraded keeps every byte of read and write access to
+--     what they already have. §6.1: "no new, keep everything old fully working" — a maker
+--     must still be able to reprint a label for stock already on a shelf, which is exactly
+--     when a recall or a Trading Standards query happens. entitlement_is_active answers
+--     the money question; this function answers the standing question, and conflating them
+--     would lock a paying customer out over an expired card on a Sunday.
+--
+-- A MISSING MEMBERSHIP ROW READS AS ACTIVE, deliberately, via coalesce — the identical
+-- expression entitlement_is_active already uses (`coalesce(p_membership_status, 'active')`),
+-- so the two definitions of "in good standing" cannot drift. It also fails in the safe
+-- direction: an account whose membership row went missing through some future path locks
+-- nobody out of their own data, and section 11 asserts at apply time that no such account
+-- exists, so the coalesce covers a set that is provably empty today. Fail-closed here would
+-- be the same catastrophe ruling (a) of section 6 exists to prevent, arriving silently.
+--
+-- ACCESS IS WITHDRAWN, NOT DESTROYED. Nothing is deleted and no row is rewritten; flipping
+-- status back to 'active' restores everything atomically, and the service role reads
+-- straight through for support and for a GDPR export.
+--
+-- THIS IS NOT SAID IN AN ERROR MESSAGE, and that is the decision rather than an oversight.
+-- A suspended caller's write dies on the policy with a bare 42501 — the same uninformative
+-- answer as a genuine cross-account attempt, which is what a policy refusal should be
+-- (section 6 makes the argument for the SKU meter, section 7c for the null account). The
+-- app does not need the database to tell it: `membership_status` and `active` are both
+-- columns on public.entitlements, which the app reads before it renders anything, so it
+-- already holds the true sentence. That is the test for whether the database should speak —
+-- 7c exists because the app CANNOT distinguish "no account" from "not your account", and
+-- here it can.
+--
+-- TWO STANDING HAZARDS, WRITTEN DOWN BECAUSE THEY ARE INVISIBLE. Do NOT enable
+-- `force row level security` on public.account_members, and — new with the join below —
+-- do NOT enable it on public.accounts either. FORCE makes RLS apply to the owner too, and
+-- the SELECT policy on accounts is itself is_member_of(id), so forcing either table
+-- re-arms the recursion this function exists to defuse.
 -- ---------------------------------------------------------------------------
 create or replace function public.is_member_of(p_account_id uuid)
 returns boolean
@@ -325,14 +409,22 @@ as $$
   select exists (
     select 1
       from public.account_members am
+      join public.accounts a
+        on a.id = am.account_id
+      -- LEFT, with the coalesce below: absent means unknown, and unknown must not lock a
+      -- customer out of their own data. Only an explicit 'suspended' or 'left' does.
+      left join public.brand_memberships bm
+        on bm.user_id    = a.owner_user_id
+       and bm.brand_slug = a.brand_slug
      where am.account_id = p_account_id
        and am.user_id    = auth.uid()
        and am.status     = 'active'
+       and coalesce(bm.status, 'active') = 'active'
   );
 $$;
 
 comment on function public.is_member_of(uuid) is
-  'True when the CALLER is an active member of this account. SECURITY DEFINER so that a policy on account_members does not recurse into itself; identity is auth.uid() and is never an argument, so it cannot be used to probe anybody else''s membership.';
+  'True when the CALLER is an active member of this account AND the account itself is in good standing on its brand (brand_memberships.status = active — the person and the business are two separate gates and both are checked). Consults status ONLY: plan, plan_status and period end are deliberately not read, so a free, lapsed, past_due or downgraded customer keeps full read and write access to what they already have (§6.1). A missing membership row reads as active, the same coalesce entitlement_is_active uses. SECURITY DEFINER so that a policy on account_members or accounts does not recurse into itself; identity is auth.uid() and is never an argument, so it cannot be used to probe anybody else''s membership.';
 
 -- Supabase's default privileges grant EXECUTE on new public-schema functions to anon
 -- and authenticated as separate ACL entries, so `revoke ... from public` does not remove
@@ -370,6 +462,16 @@ grant  execute on function public.is_member_of(uuid) to authenticated, service_r
 -- no arguments) and would otherwise need a per-request account or brand claim, which
 -- Supabase will not put in the JWT here without an access-token hook — a design worth
 -- having the day one login spans two brands, and not something to half-build now.
+--
+-- IT DOES NOT CONSULT SUSPENSION, AND MUST NOT BE "MADE CONSISTENT" WITH is_member_of.
+-- Section 3 now refuses a suspended or departed member; this function still hands that
+-- caller their account id, so the default fills the column and the policy then refuses it.
+-- That asymmetry is correct and it is load-bearing. The two functions answer different
+-- questions — "which account is yours" and "may you act in it" — and if this one returned
+-- NULL for a suspended member, section 7c's trigger would fire instead and tell them
+-- "There is no account to save this into yet. An account is created when signup is
+-- completed", which is false: they have an account and it is suspended. Trading a bare,
+-- honest policy refusal for a fluent lie is the exact failure the house rule names.
 --
 -- The service role has no auth.uid(), so a server-side insert gets NULL here and MUST
 -- pass account_id explicitly. That is deliberate: nothing running as service_role should
@@ -644,6 +746,13 @@ grant  execute on function public.sku_within_limit(integer, integer) to authenti
 
 -- Account -> allowance. THE ONE PLACE that knows entitlement still lives on the owner's
 -- membership; when billing moves onto the account, this function is the change.
+--
+-- It does NOT filter on the membership's status, and that is not an oversight. This answers
+-- "how many", not "may you" — is_member_of has already refused a suspended or departed
+-- caller by the time the trigger below reaches this line, so a status filter here would
+-- change no behaviour and would cost something real: it would make "no membership found"
+-- and "membership found and not in good standing" the same NULL, which is precisely the
+-- conflation ruling (a) turns into a lockout.
 create or replace function public.account_sku_limit(p_account_id uuid)
 returns integer
 language sql
@@ -1400,6 +1509,21 @@ grant  execute on function public.complete_oauth_signup(text, text, boolean, boo
 --
 -- Two plain inserts rather than a loop over ensure_account: same result, one statement
 -- each, and re-runnable by construction.
+--
+-- DELIBERATELY UNFILTERED BY STATUS, and the alternative was considered and rejected. A
+-- suspended or departed membership gets an account and an account_members row exactly like
+-- anybody else, and account_members.status is hardcoded 'active' here (as it is in
+-- ensure_account). That reads like the bug it is not: EXISTENCE AND ACCESS ARE SEPARATE
+-- QUESTIONS, and section 3 answers the second one in a single place. Filtering here — or
+-- writing 'suspended' into account_members to mirror the brand membership — would put the
+-- same fact in two tables with nothing keeping them in step, so an un-suspension would
+-- restore the customer's entitlement and leave their data unreachable, and the operator
+-- would have no way to tell. Provisioning does not know about suspension and should not
+-- learn: it runs at signup, and the state it would have to mirror is one an operator sets
+-- years later.
+--
+-- With one gate, un-suspension is `update brand_memberships set status = 'active'` and
+-- everything comes back at once. With two, it is a data-repair job discovered in support.
 -- ---------------------------------------------------------------------------
 insert into public.accounts (brand_slug, owner_user_id, name)
 select m.brand_slug, m.user_id, nullif(btrim(coalesce(m.business_name, '')), '')
@@ -1617,6 +1741,30 @@ begin
       using errcode = '22023';
   end if;
 
+  -- THE CONVERSE, and it is new with section 3's second gate. is_member_of now resolves an
+  -- account's brand membership to decide access, so an account whose owner has no
+  -- membership row for its brand falls through to the coalesce. That coalesce fails open on
+  -- purpose — locking a customer out of their own data must never be the consequence of a
+  -- missing row — but "fails open" is a safety net, not a design, and a net nobody checks
+  -- is how a silent authorisation hole gets shipped. Asserting the set is empty is what
+  -- makes the coalesce provably unreachable rather than merely unlikely.
+  --
+  -- If this ever fires, the fix is to restore the membership, not to relax the check: the
+  -- account has an owner who is paying for nothing the billing tables know about.
+  select count(*) into v_orphans
+    from public.accounts a
+   where not exists (
+     select 1 from public.brand_memberships m
+      where m.user_id    = a.owner_user_id
+        and m.brand_slug = a.brand_slug
+   );
+
+  if v_orphans > 0 then
+    raise exception
+      'account(s) with no brand membership: %. is_member_of resolves access through the owner''s membership, so these accounts rely on the fail-open coalesce rather than on a real answer.', v_orphans
+      using errcode = '22023';
+  end if;
+
   -- The created_by pin (section 7b). STRUCTURAL, not behavioural, and that is a decision
   -- rather than an omission: proving the behaviour needs a session carrying an auth.uid()
   -- and a specification row to write, and section 8's guarantee — that no code path in
@@ -1671,7 +1819,7 @@ begin
       using errcode = '22023';
   end if;
 
-  raise notice 'account_data_schema: SKU rule verified (fails open on unknown, strict at the limit); every membership has an account; created_by is pinned on both tables; a null account_id answers with a hint rather than a bare policy refusal.';
+  raise notice 'account_data_schema: SKU rule verified (fails open on unknown, strict at the limit); every membership has an account and every account has a membership; created_by is pinned on both tables; a null account_id answers with a hint rather than a bare policy refusal.';
 end
 $$;
 
