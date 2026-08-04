@@ -749,7 +749,10 @@ grant  execute on function public.get_entitlement(text) to authenticated;
 -- cancellation that landed mid-run gets silently put back. What it cannot prevent it reports,
 -- as far as the row can be asked: the read-back after the write compares stripe_status_at,
 -- which only a customer.subscription.* event moves and this repair never does, so a downgrade
--- or a cancellation landing inside the write window is always named and always exits non-zero.
+-- or a cancellation landing inside the write window is named and exits non-zero. That compare
+-- is an inequality, not an ordering, so the one case it misses is a subscription event stamped
+-- with an event.created bit-identical to the value already in the column — two events on one
+-- subscription inside the same second, since Stripe stamps at one-second resolution.
 -- A plan change arriving on something that is NOT a subscription event —
 -- checkout.session.completed is the one that exists — leaves that column alone and so cannot be
 -- seen from the row at all; the script says so in confirmWrite rather than implying a coverage

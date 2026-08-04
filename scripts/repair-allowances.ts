@@ -842,9 +842,18 @@ interface Refusal {
   readonly landing: Landing;
 }
 
-/** A row that is already correct — nobody has to do anything about it. */
+/**
+ * A row that is already correct — nobody has to do anything about it.
+ *
+ * `byRepair` carries WHICH write is the one standing, because the summary at the end of the run
+ * has to agree with the detail printed against the row. "Another run of this script got here
+ * first" is true only when the row's stripe_event_id is this repair's id; when some later
+ * non-repair write is the one that stands, saying it anyway makes the run's last line contradict
+ * its own explanation eight lines above.
+ */
 interface Settled {
   readonly sentence: string;
+  readonly byRepair: boolean;
 }
 
 type RowOutcome = null | Refusal | Settled;
@@ -891,11 +900,20 @@ function isRefusal(outcome: RowOutcome): outcome is Refusal {
  *
  * What that costs, and what it does not: the two failures this whole shape was rewritten for —
  * a mid-window DOWNGRADE and a mid-window CANCELLATION — are both customer.subscription.*
- * events, so both are still caught here in full, named, and exited non-zero. The residual is
- * narrower than the original bug, not a return to it. Closing it needs the write itself to be
- * conditional on the row not having moved — a compare-and-set inside apply_stripe_entitlement,
- * which is a migration and not this script's to make. Until then `--only` is the mitigation:
- * one reviewed membership and a window a round trip long.
+ * events, so both are caught here, named, and exited non-zero. The residual is narrower than the
+ * original bug, not a return to it.
+ *
+ * With one exception, stated because the test below is an inequality and not an ordering: the
+ * check is `after.stripe_status_at !== before.stripe_status_at`, so a subscription event whose
+ * event.created is BIT-IDENTICAL to the value already in the column moves nothing and is
+ * therefore invisible here too. Stripe stamps event.created at one-second resolution, so this is
+ * two events on one subscription inside the same second — rare, not impossible, and it is a tie
+ * this script cannot break from the row alone. Do not read the paragraph above as "always".
+ *
+ * Closing either gap needs the write itself to be conditional on the row not having moved — a
+ * compare-and-set inside apply_stripe_entitlement, which is a migration and not this script's to
+ * make. Until then `--only` is the mitigation: one reviewed membership and a window a round trip
+ * long.
  */
 function confirmWrite(repair: Repair, before: Candidate, after: Candidate): Refusal | null {
   const ours = after.stripe_event_id === repair.eventId;
@@ -1170,6 +1188,7 @@ async function explainDuplicate(admin: Admin, repair: Repair): Promise<RowOutcom
   if (correctNow) {
     const byUs = now.stripe_event_id === repair.eventId;
     return {
+      byRepair: byUs,
       sentence:
       `already repaired — outcome "duplicate": ${repair.eventId} was already in the ledger, and ` +
       `the row now holds plan "${now.plan}", sku_limit ${now.sku_limit}, editor_seat_limit ` +
@@ -1262,6 +1281,9 @@ async function main(): Promise<void> {
   let repaired = 0;
   let planned = 0;
   let alreadyCorrect = 0;
+  // Of those, the ones where THIS script's repair id is the write that stands. The remainder were
+  // put right by something else, and the summary must not credit another operator for them.
+  let alreadyCorrectByRepair = 0;
 
   // FAILURES ARE COUNTED BY WHAT THEY LEFT ON THE ROW, not just counted. The last line of this
   // run is the last thing an operator reads at 2am, and "N repair(s) did not land. Nothing was
@@ -1272,11 +1294,16 @@ async function main(): Promise<void> {
 
   for (const row of rows) {
     if (!(await entitledAccordingToDatabase(admin, row))) {
-      console.log(
-        `\n  --  not entitled  ${label(row)}` +
-        `\n      public.entitlement_is_active() says no for plan_status ${JSON.stringify(row.plan_status)}, ` +
-        `current_period_end ${JSON.stringify(row.current_period_end)}. Left alone.`
-      );
+      const why =
+      `public.entitlement_is_active() says no for plan_status ${JSON.stringify(row.plan_status)}, ` +
+      `current_period_end ${JSON.stringify(row.current_period_end)}. Left alone.`;
+      console.log(`\n  --  not entitled  ${label(row)}\n      ${why}`);
+      // Also collected, not only printed inline. Every other reason a row is left alone reaches
+      // "needs a human", and the summary points the operator at that section — so a run whose
+      // ONLY refusals were these used to end by naming a section it had not printed. It is worth
+      // listing on its own merits too: section 10's count query still counts this row as pending,
+      // so an operator who does not see it here will re-run and find the same number.
+      notes.push(`${label(row)} — not entitled: ${why}`);
       continue;
     }
     entitled += 1;
@@ -1301,6 +1328,7 @@ async function main(): Promise<void> {
       // be made to look like one — but it is not silent either, because two operators on one
       // population is worth knowing about.
       alreadyCorrect += 1;
+      if (outcome.byRepair) alreadyCorrectByRepair += 1;
       console.log(`      ✓ ${headline}`);
       console.log(wrap(detail.join(' — '), '        '));
       continue;
@@ -1394,9 +1422,19 @@ async function main(): Promise<void> {
     // candidate at all. Those rows may well need repairing; this script is simply not the thing
     // that repairs them. Only the genuinely empty case gets the all-clear now.
     if (alreadyCorrect > 0) {
+      // Which write is standing decides the sentence. Crediting "another run of this script" for
+      // a row some later Stripe event put right would contradict the detail printed against that
+      // row, and would tell an operator to go looking for a second operator who does not exist.
+      const other = alreadyCorrect - alreadyCorrectByRepair;
+      const cause =
+      other === 0 ?
+      'another run of this script got there first' :
+      alreadyCorrectByRepair === 0 ?
+      'a later write outside this script put them right' :
+      `${alreadyCorrectByRepair} by another run of this script, ${other} by a later write outside it`;
       console.log(
-        `\n${alreadyCorrect} membership(s) were already correct — another run got there first — and ` +
-        'nothing\nwas written by this one.\n'
+        `\n${alreadyCorrect} membership(s) were already correct — ${cause} — and nothing` +
+        '\nwas written by this one.\n'
       );
       return;
     }
