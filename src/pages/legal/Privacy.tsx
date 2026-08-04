@@ -15,7 +15,7 @@ export function Privacy() {
   return (
     <LegalLayout
       title="Privacy policy"
-      updated="July 2026"
+      updated="August 2026"
       intro="What we collect, why, and how to make us stop. Written to be read, not to be skipped.">
       
       <LegalSection title="Who is the controller">
@@ -38,6 +38,7 @@ export function Privacy() {
           'Billing data: your Stripe customer reference, plan, invoices and VAT number if you give one. Card details are handled by Stripe and never reach us. Lawful basis: contract and our legal obligation to keep records.',
           'Marketing attribution data: the campaign values in the link you arrived on, that is utm_source, utm_medium, utm_campaign, utm_term and utm_content, plus advertising click identifiers gclid, gbraid, wbraid and fbclid, the site that referred you, the first page you landed on, and the time of your first visit. These are stored in your browser and, if you create an account, saved against your account record so we know which advert paid for itself. Lawful basis: our legitimate interest in understanding how our advertising performs, and your consent where cookies or similar technologies are not strictly necessary.',
           'Analytics and advertising data: how you move through the site, collected through Google Analytics 4 and the Meta Pixel via Google Tag Manager. Lawful basis: your consent. Nothing optional loads until you agree.',
+          'Diagnostic data: when something in the signed-in app fails we record the error name and message, the technical stack, which part of the app reported it, a short reference code you can quote to us, and the time. That report is scrubbed in your browser before it is sent: the free-text parts that could carry a product name, a supplier name or a formulation value are removed or replaced. It reduces what we can see. It does not make the report anonymous. Lawful basis: our legitimate interest in finding and fixing faults.',
           'Support data: the emails you send us and our replies. Lawful basis: legitimate interest in helping you.']
           } />
         
@@ -63,6 +64,7 @@ export function Privacy() {
           items={[
           'Supabase, for authentication and the database.',
           'Stripe, for payments, tax and invoices.',
+          'Sentry, for the diagnostic error reports described above, so we can find and fix faults in the app.',
           'Google, for Google Tag Manager, Google Analytics 4 and Google Ads measurement, where you have consented.',
           'Meta, for advertising measurement, where you have consented.',
           'Our email provider, for account and support email.']
@@ -72,6 +74,13 @@ export function Privacy() {
           Some of these providers are outside the UK. Where data leaves the UK or EEA we rely on the
           UK International Data Transfer Addendum or the European Commission standard contractual
           clauses.
+        </p>
+        <p>
+          Sentry is set to its European region, so the error reports are held in Frankfurt, and the
+          UK treats the EEA as adequate. The company behind Sentry, Functional Software, Inc., is
+          American, and says its staff and suppliers may work with the data from the United States.
+          For that it is certified under the UK Extension to the EU-US Data Privacy Framework, with
+          the clauses above as the fallback.
         </p>
       </LegalSection>
 
