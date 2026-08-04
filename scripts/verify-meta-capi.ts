@@ -40,7 +40,7 @@
 
 import { createServer } from 'node:http';
 import Stripe from 'stripe';
-import { buildPriceMap } from '../src/server/entitlements';
+import { buildPriceIndex } from '../src/server/plan-contract';
 import {
   createConversionForwarder,
   readMetaConfig,
@@ -133,7 +133,7 @@ const server = createServer(async (req, res) => {
     },
     config: {
       brand: process.env.VITE_ORCHESTRATE_BRAND ?? 'batchlabel',
-      prices: buildPriceMap({
+      priceIndex: buildPriceIndex({
         STRIPE_PRICE_MAKER_MONTHLY: process.env.STRIPE_PRICE_MAKER_MONTHLY ?? 'price_maker_monthly',
         STRIPE_PRICE_MAKER_ANNUAL: process.env.STRIPE_PRICE_MAKER_ANNUAL ?? 'price_maker_annual'
       })
