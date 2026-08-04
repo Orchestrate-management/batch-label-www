@@ -60,16 +60,32 @@
  *
  * A read and an RPC are still two round trips, so a window remains, and nothing short of doing
  * this inside the database could close it — the write path is deliberately one function that
- * this script does not get to extend. What the window can be is VISIBLE. The read-back after
- * the write compares stripe_status_at against the value read just before it: that column moves
- * only for a customer.subscription.* event, and this repair is deliberately not one, so any
- * genuine subscription event that landed inside the window shows up there whether it landed
- * before this repair's write or after it. Both of the ways a customer's billing state can be
- * reverted — a downgrade and a cancellation — are subscription events. Neither can pass
- * silently.
+ * this script does not get to extend. What the window is, is PART visible and part not, and
+ * which part is which is the single most important thing to know before running this:
  *
- * `--only` is the other half of the answer: with live webhook traffic, repairing reviewed rows
- * one at a time is the safe way to run this at all, and a shorter run is a smaller window.
+ *   * A customer.subscription.* event that lands inside the window is seen. Applying one sets
+ *     stripe_status_at to its own event.created, this repair deliberately never touches that
+ *     column, and the read-back compares it against the value read immediately before the
+ *     write — so the event shows up whether it landed before this repair's write or after it.
+ *     That covers both of the ways a customer's billing state gets reverted, a DOWNGRADE and a
+ *     CANCELLATION, which are the two blockers this shape was rewritten for. Both are named,
+ *     both exit 1, neither is silent. (The one subscription event that could move nothing to
+ *     compare is one whose event.created is bit-identical to the value already in the column.
+ *     It is the same instant, so there is no reordering to detect — but it is the edge of this
+ *     guarantee and not the middle of it.)
+ *   * A plan change that arrives on a NON-subscription event is not visible from the row at
+ *     all. checkout.session.completed is the real one: it sets the plan, the price and the
+ *     allowance, and it leaves stripe_status_at exactly where it was — most conspicuously on a
+ *     membership that has never had a subscription event, where that column is still null. A
+ *     repair that overwrites one of those sees an unmoved clock, its own event id and its own
+ *     two numbers on the row, and prints "applied and verified" in good faith.
+ *
+ * That second bullet is a real hole and it is not papered over here. Closing it means making
+ * the write conditional on the row not having moved — a compare-and-set inside
+ * apply_stripe_entitlement, i.e. a new migration, which is not this change. Until then `--only`
+ * is the mitigation and it is a real one rather than a consolation: a reviewed row, a run that
+ * is over in a round trip or two, and a window measured against one membership instead of the
+ * whole population. With live webhook traffic that is the safe way to run this at all.
  *
  * THE SYNTHETIC EVENT ID: `repair_allowance_v1_<brand_memberships.id>`
  *
@@ -284,18 +300,33 @@ function projectRefFromUrl(url: string): string | null {
  *
  * Returns null for the newer `sb_secret_…` format, which is not a JWT and carries no claims.
  * That is not fatal, but it is not free either: see WHEN THE ROLE CANNOT BE PROVEN below.
+ *
+ * A three-part key whose payload has no usable `role` is NOT the same as a non-JWT, and it used
+ * to be treated as better than one: `claims` came back non-null, the "could not be proven"
+ * warning was skipped because that warning only fired for a null, and `claims.role !== …` was
+ * skipped too because the role was null. The least trustworthy shape of all — a well-formed
+ * token that will not say what it is — got the least warning of all. Both shapes now reach the
+ * same place, and `shape` is what lets the warning say which one it is looking at.
  */
-function claimsFromServiceKey(key: string): {ref: string | null;role: string | null;} | null {
+interface KeyClaims {
+  readonly shape: 'jwt' | 'opaque';
+  readonly ref: string | null;
+  readonly role: string | null;
+}
+
+function claimsFromServiceKey(key: string): KeyClaims {
   const parts = key.split('.');
-  if (parts.length !== 3) return null;
+  if (parts.length !== 3) return { shape: 'opaque', ref: null, role: null };
   try {
     const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as Record<string, unknown>;
     return {
+      shape: 'jwt',
       ref: typeof payload.ref === 'string' ? payload.ref : null,
       role: typeof payload.role === 'string' ? payload.role : null
     };
   } catch {
-    return null;
+    // Three dot-separated parts whose middle is not JSON is not a JWT, whatever else it is.
+    return { shape: 'opaque', ref: null, role: null };
   }
 }
 
@@ -381,38 +412,57 @@ function openSupabase(args: Args): Connection {
   }
 
   const claims = claimsFromServiceKey(serviceRoleKey);
-  let roleProven = false;
 
-  if (!claims) {
+  // What the key DID say is checked first, because a key that names the wrong role or the
+  // wrong project is a refusal, not a warning.
+  if (claims.role && claims.role !== 'service_role') {
+    fail(
+      `SUPABASE_SERVICE_ROLE_KEY holds a "${claims.role}" key, not the service_role key.\n` +
+      '  Row level security would hide every membership from it, and this script would then\n' +
+      '  report that nothing needs repairing — which is the one wrong answer it must not give.'
+    );
+  }
+  if (claims.ref && claims.ref !== args.project) {
+    fail(
+      `SUPABASE_SERVICE_ROLE_KEY belongs to project ${claims.ref}, not ${args.project}.\n` +
+      '  The URL and the key are from different projects. Refusing.'
+    );
+  }
+
+  const roleProven = claims.role === 'service_role';
+
+  if (!roleProven) {
     // WHEN THE ROLE CANNOT BE PROVEN. Printed HERE, before any result, and not filed away as
     // a footnote under the all-clear where it reads as reassurance. The consequence is
     // carried into the run itself: see requireVisibleMemberships().
-    console.warn(
-      '\n[repair] ⚠ SUPABASE_SERVICE_ROLE_KEY is not a JWT, so neither its project nor its ROLE\n' +
-      '[repair]   could be checked. A key without the service role sees nothing through RLS and\n' +
-      '[repair]   an empty result would be indistinguishable from a clean database. This run\n' +
-      '[repair]   will refuse to report "nothing to repair" unless it can prove it can read\n' +
-      '[repair]   brand_memberships at all.'
-    );
+    //
+    // Reached by BOTH keys that cannot prove a role: the `sb_secret_…` format, which is not a
+    // JWT and never carried claims, and a three-part JWT whose payload has no string `role`.
+    // The second is the worse of the two and used to be the only one that got no warning.
+    const shape =
+    claims.shape === 'opaque' ?
+    ['⚠ SUPABASE_SERVICE_ROLE_KEY is not a JWT, so neither its project nor its ROLE could',
+    '  be checked.'] :
+    ['⚠ SUPABASE_SERVICE_ROLE_KEY IS a JWT, but its payload carries no `role` claim (or it',
+    `  is not a string), so its role could not be checked${claims.ref ? '.' : ', and it names no project'}`,
+    claims.ref ? '  A well-formed token that will not say what it is deserves MORE suspicion' : '  either. A well-formed token that will not say what it is deserves MORE suspicion',
+    '  than an opaque key, not less.'];
+
+    const body = [
+    '  A key without the service role sees nothing through RLS and an empty result would',
+    '  be indistinguishable from a clean database. This run will refuse to report "nothing',
+    '  to repair" unless it can prove it can read brand_memberships at all.'];
+
+    console.warn(`\n${[...shape, ...body].map((line) => `[repair] ${line}`).join('\n')}`);
     notes.push(
-      'the service key could not be checked (not a JWT), so its project and role were taken on ' +
-      'trust. Prefer the legacy service_role JWT for this job, or read the SQL below yourself.'
+      'the service key could not prove its role ' +
+      (claims.shape === 'opaque' ? '(it is not a JWT)' : '(it is a JWT carrying no `role` claim)') +
+      ', so the role was taken on trust' +
+      (claims.ref ?
+      `, though the key did name project ${claims.ref} and that was checked` :
+      ' — and it names no project either, so that was taken on trust too') +
+      '. Prefer the legacy service_role JWT for this job, or read the SQL below yourself.'
     );
-  } else {
-    if (claims.role && claims.role !== 'service_role') {
-      fail(
-        `SUPABASE_SERVICE_ROLE_KEY holds a "${claims.role}" key, not the service_role key.\n` +
-        '  Row level security would hide every membership from it, and this script would then\n' +
-        '  report that nothing needs repairing — which is the one wrong answer it must not give.'
-      );
-    }
-    if (claims.ref && claims.ref !== args.project) {
-      fail(
-        `SUPABASE_SERVICE_ROLE_KEY belongs to project ${claims.ref}, not ${args.project}.\n` +
-        '  The URL and the key are from different projects. Refusing.'
-      );
-    }
-    roleProven = claims.role === 'service_role';
   }
 
   console.log(
@@ -426,6 +476,24 @@ function openSupabase(args: Args): Connection {
 
   return { url, serviceRoleKey, project: args.project, roleProven };
 }
+
+/**
+ * THE TWO QUERIES THIS RUN CAN BE CHECKED AGAINST, held as a value rather than as a series of
+ * console.log calls at the bottom of main().
+ *
+ * Because a refusal that says "read the SQL below" has to be able to PRINT it. The UNPROVEN
+ * refusal in requireVisibleMemberships said exactly that and then exited through fail(), which
+ * never reaches the bottom of main() — so the one output that told an operator to go and check
+ * by hand was the one output that did not show them how.
+ */
+const VERIFY_SQL =
+`  -- the same count the plan_limits migration raises a NOTICE for
+  select id, user_id, brand_slug, business_name, plan, sku_limit, editor_seat_limit
+    from public.brand_memberships m
+   where public.entitlement_is_active(m.status, m.plan, m.plan_status, m.current_period_end)
+     and m.sku_limit = ${FAIL_CLOSED_SKU_LIMIT};
+  -- what this script recorded
+  select * from public.stripe_webhook_events where event_id like '${REPAIR_EVENT_PREFIX}%';`;
 
 /** The columns section 10's count query reads, plus the ones the repair reports and guards on. */
 interface Candidate {
@@ -491,11 +559,18 @@ function assertFloorMatchesContract(): void {
  * The rows to consider, narrowed by conditions the migration proves rather than by a copy of
  * its predicate.
  *
- * Both narrowings are asserted at apply time by section 4 of that migration: a membership
- * whose `status` is not active is never entitled, and `free` grants nothing. So neither can
- * drop a row entitlement_is_active() would have returned true for. Everything else — the
- * plan allow-list, the plan_status set, the period-end grace — is left to the function
- * itself, which is called per candidate below.
+ * Neither narrowing can drop a row entitlement_is_active() would have returned true for, and
+ * it is worth being exact about what carries that, because the two halves are carried by
+ * different things:
+ *
+ *   * `free` grants nothing — asserted at apply time by section 4 of that migration, which
+ *     fails the migration if entitlement_is_active('active','free','active',…) is true;
+ *   * a membership that is not active is not entitled — NOT asserted in general by section 4,
+ *     which only pins the `suspended` case. The general claim is the first conjunct of
+ *     entitlement_is_active's body, `coalesce(p_membership_status, 'active') = 'active'`.
+ *
+ * Everything else — the plan allow-list, the plan_status set, the period-end grace — is left
+ * to the function itself, which is called per candidate below.
  *
  * `created_at` alone is not a total order: rows written in one transaction share it exactly,
  * and the report then shuffles between runs of a job whose whole output is meant to be
@@ -571,11 +646,12 @@ async function requireVisibleMemberships(admin: Admin, connection: Connection): 
   if (!connection.roleProven) {
     fail(
       'UNPROVEN, not clean. This run found no candidates AND cannot see a single row of\n' +
-      '  public.brand_memberships — and the service key could not be checked, so it may simply\n' +
-      '  lack the service role and be looking at an empty view of a full table. Refusing to\n' +
-      '  report "nothing to repair".\n' +
+      '  public.brand_memberships — and the service key could not prove its role, so it may\n' +
+      '  simply lack the service role and be looking at an empty view of a full table. Refusing\n' +
+      '  to report "nothing to repair".\n' +
       '  Re-run with the legacy service_role JWT (Project Settings -> API), whose claims this\n' +
-      '  script can verify, or run the SQL at the end of this output as an admin.'
+      '  script can verify, or run this as an admin — the answer this run could not get:\n\n' +
+      VERIFY_SQL
     );
   }
   notes.push(
@@ -746,6 +822,42 @@ function movedBetween(before: Candidate, after: Candidate): string[] {
 }
 
 /**
+ * WHAT THIS RUN LEFT ON THE ROW — a different question from "did the repair succeed", and the
+ * one the last line of the output has to answer.
+ *
+ *   * `nothing-written` — this repair's plan and allowance are NOT what the membership holds.
+ *     Either the call never happened, or apply_stripe_entitlement withdrew its opinion, or
+ *     somebody else's write is the one that stands. The row is not this run's doing.
+ *   * `stands-on-top` — this repair's write LANDED, over a genuine concurrent event, and is
+ *     still there. Nothing in this script can undo it. It is the one outcome where a failure
+ *     also means a change.
+ *   * `unconfirmed` — the RPC did something and this run could not read back what. Not the same
+ *     as either of the others and not to be rounded into one of them.
+ */
+type Landing = 'nothing-written' | 'stands-on-top' | 'unconfirmed';
+
+/** A row this run did not repair: the sentence for the operator, and what it left behind. */
+interface Refusal {
+  readonly sentence: string;
+  readonly landing: Landing;
+}
+
+/** A row that is already correct — nobody has to do anything about it. */
+interface Settled {
+  readonly sentence: string;
+}
+
+type RowOutcome = null | Refusal | Settled;
+
+function refused(landing: Landing, sentence: string): Refusal {
+  return { sentence, landing };
+}
+
+function isRefusal(outcome: RowOutcome): outcome is Refusal {
+  return outcome !== null && 'landing' in outcome;
+}
+
+/**
  * DID THE WRITE DO WHAT IT SAID, AND WAS IT THE RIGHT WRITE TO MAKE?
  *
  * Three questions, not one. Checking only the two allowance columns is what let a silent
@@ -756,14 +868,36 @@ function movedBetween(before: Candidate, after: Candidate): string[] {
  *     deliberately not one — so if it moved at all, a genuine subscription event landed inside
  *     the window between the pre-write read and the write. That is the irreducible window: no
  *     amount of re-reading closes it, because the read and the RPC are two round trips. It is
- *     completely DETECTABLE, though, which is the point of comparing it.
+ *     DETECTABLE, which is the point of comparing it.
  *   * `stripe_event_id` is stamped by every successful apply. If it is not this repair's id,
  *     somebody else's write is the one that stands — which is usually fine, and always worth
  *     saying out loud rather than reporting as a success.
  *   * only then are the allowance columns worth reading, because only then is this repair the
  *     write they came from.
+ *
+ * WHAT stripe_status_at CANNOT SEE, stated here because this is where the guarantee is made
+ * and an operator reading it deserves its edges as well as its middle.
+ *
+ * It sees SUBSCRIPTION events. It cannot see a plan change that arrives on anything else,
+ * because the migration moves that column only for `customer.subscription.%` — and
+ * checkout.session.completed is a real, sixteen-argument, plan-and-allowance-setting event
+ * that is not one. A checkout landing inside this window is applied, and then overwritten by
+ * this repair, and every test below passes: the clock did not move, the event id IS this
+ * repair's, and the two allowance columns hold exactly what the intent asked for. The run
+ * prints "applied and verified" and there is nothing dishonest about it — the row simply
+ * cannot be asked the question. The shape is at its most likely on a membership whose
+ * stripe_status_at is null, i.e. one that has never had a subscription event: a comped or
+ * grandfathered account, or one whose only Stripe history is a checkout.
+ *
+ * What that costs, and what it does not: the two failures this whole shape was rewritten for —
+ * a mid-window DOWNGRADE and a mid-window CANCELLATION — are both customer.subscription.*
+ * events, so both are still caught here in full, named, and exited non-zero. The residual is
+ * narrower than the original bug, not a return to it. Closing it needs the write itself to be
+ * conditional on the row not having moved — a compare-and-set inside apply_stripe_entitlement,
+ * which is a migration and not this script's to make. Until then `--only` is the mitigation:
+ * one reviewed membership and a window a round trip long.
  */
-function confirmWrite(repair: Repair, before: Candidate, after: Candidate): string | null {
+function confirmWrite(repair: Repair, before: Candidate, after: Candidate): Refusal | null {
   const ours = after.stripe_event_id === repair.eventId;
   const clockMoved = after.stripe_status_at !== before.stripe_status_at;
 
@@ -781,7 +915,8 @@ function confirmWrite(repair: Repair, before: Candidate, after: Candidate): stri
     // run's, and both are real: an event Stripe created before the run began can still be
     // delivered during it.
     if (!landedOnTop) {
-      return (
+      return refused(
+        'nothing-written',
         `${preamble}. Because this run is stamped earlier than that event, ` +
         "apply_stripe_entitlement withdrew this repair's opinion about the plan and the allowance " +
         `with it, so nothing was reverted — the row is that event's and holds plan ` +
@@ -789,7 +924,8 @@ function confirmWrite(repair: Repair, before: Candidate, after: Candidate): stri
         'run again once the subscription has settled'
       );
     }
-    return (
+    return refused(
+      'stands-on-top',
       `${preamble} — and THIS REPAIR WROTE ON TOP OF IT, re-asserting plan "${repair.plan}" and ` +
       `${repair.skuLimit} SKUs over whatever that event said. If it was a downgrade or a ` +
       'cancellation, the row now claims a plan the customer no longer pays for. Read the ' +
@@ -798,7 +934,8 @@ function confirmWrite(repair: Repair, before: Candidate, after: Candidate): stri
   }
 
   if (!ours) {
-    return (
+    return refused(
+      'nothing-written',
       `the repair applied, but the row's stripe_event_id is now ${after.stripe_event_id ?? 'null'} ` +
       `and not ${repair.eventId}: something wrote this membership immediately afterwards and ITS ` +
       `write is the one that stands${clockMoved ? ' (a customer.subscription.* event — the ordering clock moved with it)' : ''}. ` +
@@ -809,10 +946,11 @@ function confirmWrite(repair: Repair, before: Candidate, after: Candidate): stri
   }
 
   if (after.sku_limit !== repair.skuLimit || after.editor_seat_limit !== repair.editorSeatLimit) {
-    return (
+    return refused(
+      'nothing-written',
       `the RPC reported success but the row holds sku_limit ${after.sku_limit}, ` +
-      `editor_seat_limit ${after.editor_seat_limit}`);
-
+      `editor_seat_limit ${after.editor_seat_limit}`
+    );
   }
   return null;
 }
@@ -834,6 +972,19 @@ function confirmWrite(repair: Repair, before: Candidate, after: Candidate): stri
  * that column on every apply, including one that wrote nothing else. It is a text column and
  * not a foreign key, and a dangling name there is much cheaper than a second write to a row
  * this run has just concluded it should not be touching.
+ *
+ * WHEN IT IS CALLED, AND WHEN IT MUST NOT BE. Only on `nothing-written`: this repair's plan and
+ * allowance are not what the row holds, so the ledger row claims a repair that is not there,
+ * and withdrawing it frees v1 for a real attempt later.
+ *
+ * On `stands-on-top` the ledger row is KEPT, and that is the whole point of the distinction.
+ * There the repair DID write, over a genuine downgrade or cancellation, and it is still on the
+ * row; `repair_allowance_v1_<id>` in stripe_webhook_events, with its event_at, is the only
+ * durable record anywhere that this run is what put that plan back. The membership's own
+ * stripe_event_id names it, so deleting the ledger row does not even hide the repair — it just
+ * removes the thing the name points at, leaving whoever investigates tomorrow with a dangling
+ * id and no timestamp. An incident record is not litter. Buying a retry of v1 by erasing the
+ * evidence of a write that needs investigating is the worst trade in this file.
  */
 async function retractLedgerRow(admin: Admin, eventId: string): Promise<string | null> {
   const { error } = await admin.
@@ -854,23 +1005,25 @@ async function retractLedgerRow(admin: Admin, eventId: string): Promise<string |
 type Store = ReturnType<typeof createEntitlementStore>;
 
 /**
- * Confirm, write, prove. Returns null when the membership is repaired, or the sentence that
- * goes both on screen and under "needs a human".
+ * Confirm, write, prove. Returns null when the membership is repaired, a Settled when somebody
+ * else has already repaired it, or the Refusal that goes both on screen and under "needs a
+ * human" — carrying, with the sentence, what this run left on the row.
  */
 async function applyOne(
 admin: Admin,
 store: Store,
 repair: Repair,
 eventAt: string)
-: Promise<string | null> {
+: Promise<RowOutcome> {
   // THE ROW AGAIN, IMMEDIATELY BEFORE THE WRITE. Everything above happened against a read that
   // is now some milliseconds old, and this job runs while Stripe is still delivering.
   const before = await readRow(admin, repair.row.id);
-  if (typeof before === 'string') return `NOT repaired — ${before}`;
+  if (typeof before === 'string') return refused('nothing-written', `NOT repaired — ${before}`);
 
   const drifted = movedBetween(repair.row, before);
   if (drifted.length > 0) {
-    return (
+    return refused(
+      'nothing-written',
       `NOT repaired — the row changed while this run was in flight (${drifted.join(', ')}). ` +
       'Something else wrote this membership, and a Stripe webhook is the usual answer. This ' +
       'repair re-asserts the plan it read, so applying it now would write that plan back over ' +
@@ -895,7 +1048,8 @@ eventAt: string)
   // is not chronological order.)
   const rowClock = repair.row.stripe_status_at === null ? null : Date.parse(repair.row.stripe_status_at);
   if (rowClock !== null && (Number.isNaN(rowClock) || rowClock >= Date.parse(eventAt))) {
-    return (
+    return refused(
+      'nothing-written',
       'NOT repaired — its ordering clock is at or ahead of this run (stripe_status_at ' +
       `${repair.row.stripe_status_at}, this run's event_at ${eventAt}). apply_stripe_entitlement ` +
       "would have withdrawn this repair's opinion about the plan, dropped the allowance with " +
@@ -908,50 +1062,145 @@ eventAt: string)
   try {
     outcome = await store.apply(intentFor(repair, eventAt));
   } catch (error) {
+    // 'unconfirmed', not 'nothing-written'. A throw is a transport that stopped answering, and
+    // the call it was carrying may well have committed on the far side. Guessing "nothing was
+    // written" here is exactly the kind of comforting sentence this script must not print.
     const message = error instanceof Error ? error.message : String(error);
-    return `NOT repaired — apply_stripe_entitlement threw: ${message}`;
+    return refused(
+      'unconfirmed',
+      'NOT repaired — apply_stripe_entitlement threw, so whether it wrote is UNKNOWN: ' +
+      `${message}. Read the row and the ledger row for ${repair.eventId} before assuming either way`
+    );
   }
 
   if (outcome === 'duplicate') {
-    // The membership is a candidate, so it holds the fail-closed default, AND its v1 repair id
-    // is already in the ledger. Two readings, and they want different answers:
-    //
-    //   * the row's stripe_event_id IS this repair's id — the repair did write, and something
-    //     that did not go through apply_stripe_entitlement has since put the default back;
-    //   * it is anything else — either a later event overwrote the repair, or an earlier run
-    //     ledgered this id without writing (the case retractLedgerRow exists for).
-    //
-    // Naming the id the row actually carries is what lets a human tell them apart from the
-    // ledger. It is NOT safe to conclude "the webhook is broken" from the outcome alone.
-    return (
-      `NOT repaired — outcome "duplicate": ${repair.eventId} is already in the ledger while the ` +
-      `row still holds the fail-closed default. The row's stripe_event_id is ` +
-      `${repair.row.stripe_event_id ?? 'null'}. If that is the repair id, the repair landed and ` +
-      'something outside apply_stripe_entitlement has since reset the allowance; if it is not, ' +
-      'either a later event overwrote it or an earlier run claimed the id without writing. ' +
-      'Read the ledger row before blaming the webhook — and note that v1 is spent for this ' +
-      'membership either way'
-    );
+    // This run's own view of the row is now the OLDEST fact it has, and 'duplicate' is exactly
+    // the outcome that says somebody else has been here. Reporting the scan-time row back as if
+    // it were current is how two operators repairing the same population produce two false
+    // statements about a membership that is, by then, perfectly correct: this branch used to
+    // say "the row still holds the fail-closed default" and name a stripe_event_id read before
+    // the other run wrote. So the row is read AGAIN and the answer describes what it holds NOW.
+    return await explainDuplicate(admin, repair);
   }
 
   if (outcome !== 'applied') {
     // Every remaining outcome is the function declining, and each is worth reading in full in
     // 20260802120000 section 6.
-    return `NOT repaired — outcome "${outcome}", nothing written`;
+    return refused('nothing-written', `NOT repaired — outcome "${outcome}", nothing written`);
   }
 
   const after = await readRow(admin, repair.row.id);
-  if (typeof after === 'string') return `NOT repaired — the RPC reported success but ${after}`;
+  if (typeof after === 'string') {
+    // The RPC said 'applied', so a write DID happen; what it left is what could not be read.
+    // 'unconfirmed', never 'nothing-written'.
+    return refused(
+      'unconfirmed',
+      `NOT repaired — apply_stripe_entitlement reported "applied", so this repair HAS written, ` +
+      `but the row could not be read back to say what it wrote over: ${after}. The ledger row ` +
+      `for ${repair.eventId} has been left in place, because withdrawing the record of a write ` +
+      'that may well stand is worse than a spent id. Read the row'
+    );
+  }
 
   const problem = confirmWrite(repair, before, after);
   if (!problem) return null;
 
+  // THE LEDGER ROW IS KEPT WHEN THE WRITE STANDS. See retractLedgerRow: withdrawing the id is
+  // right when this repair's numbers are not on the row, and is destroying the incident record
+  // when they are.
+  if (problem.landing === 'stands-on-top') {
+    return refused(
+      problem.landing,
+      `NOT repaired — ${problem.sentence}. The ledger row for ${repair.eventId} has deliberately ` +
+      'been KEPT: this repair wrote and its write is still on the row, so that row — with its ' +
+      'event_at — is the only durable record of what happened here, and brand_memberships.' +
+      'stripe_event_id names it. v1 is spent for this membership, which is correct; a further ' +
+      'attempt is a human deciding what the plan should be, not another run of this script'
+    );
+  }
+
   const retraction = await retractLedgerRow(admin, repair.eventId);
-  if (retraction) return `NOT repaired — ${problem}, ${retraction}`;
-  return (
-    `NOT repaired — ${problem}. The ledger row for ${repair.eventId} has been retracted, so v1 ` +
-    'is not spent on this outcome and this membership can be attempted again once the reason ' +
-    'is understood'
+  if (retraction) return refused(problem.landing, `NOT repaired — ${problem.sentence}, ${retraction}`);
+  return refused(
+    problem.landing,
+    `NOT repaired — ${problem.sentence}. This repair's allowance is not what the row holds, so ` +
+    `the ledger row for ${repair.eventId} has been retracted: v1 is not spent on this outcome ` +
+    'and this membership can be attempted again once the reason is understood'
+  );
+}
+
+/**
+ * WHAT THE ROW HOLDS NOW, after apply_stripe_entitlement answered 'duplicate'.
+ *
+ * The candidate scan said this membership was on the fail-closed default. 'duplicate' says the
+ * v1 id for it is already in the ledger. Between those two facts sits the ordinary case that
+ * produces both: ANOTHER OPERATOR running this same script against the same population, a
+ * moment ahead of this one. The id is stable per membership precisely so that the second run
+ * cannot apply twice — and the row it is now describing is one the first run has already put
+ * right.
+ *
+ * So the row is re-read and the sentence is written from that, not from the scan. Two answers,
+ * and they are genuinely different news:
+ *
+ *   * the row now holds the contract allowance for its plan — there is nothing to do. Said as
+ *     such, and NOT counted as a failure, because a membership that is correct is the outcome
+ *     this script exists for regardless of which run got there first.
+ *   * it does not — then 'duplicate' is the real problem it always was: the id is spent while
+ *     the allowance is still wrong, and the two readings below are what a human needs.
+ */
+async function explainDuplicate(admin: Admin, repair: Repair): Promise<RowOutcome> {
+  const now = await readRow(admin, repair.row.id);
+
+  if (typeof now === 'string') {
+    return refused(
+      'nothing-written',
+      `NOT repaired — outcome "duplicate": ${repair.eventId} is already in the ledger, and this ` +
+      `run then could not re-read the membership to see what it holds now (${now}). At the ` +
+      `candidate scan it held plan "${repair.row.plan}", sku_limit ${repair.row.sku_limit}, ` +
+      `stripe_event_id ${repair.row.stripe_event_id ?? 'null'} — those are SCAN-TIME facts and ` +
+      'may already be out of date. Read the row and the ledger row before concluding anything'
+    );
+  }
+
+  const correctNow =
+  now.plan === repair.plan &&
+  now.sku_limit === repair.skuLimit &&
+  now.editor_seat_limit === repair.editorSeatLimit;
+
+  if (correctNow) {
+    const byUs = now.stripe_event_id === repair.eventId;
+    return {
+      sentence:
+      `already repaired — outcome "duplicate": ${repair.eventId} was already in the ledger, and ` +
+      `the row now holds plan "${now.plan}", sku_limit ${now.sku_limit}, editor_seat_limit ` +
+      `${now.editor_seat_limit}, which is exactly what this run would have written. ` + (
+      byUs ?
+      'Its stripe_event_id is that same repair id, so another run of this script got here ' +
+      'first — two operators, one population. Nothing to do' :
+      `Its stripe_event_id is ${now.stripe_event_id ?? 'null'}, so a later write is the one that ` +
+      'stands, and it agrees with the contract. The v1 id is spent for this membership, which ' +
+      'costs nothing while the allowance is right. Nothing to do')
+    };
+  }
+
+  // The re-read answers the question this branch used to leave to the reader as an if/else.
+  // The row's own stripe_event_id is right here; there is no reason to make somebody at 2am
+  // compare two ids in their head.
+  const reading =
+  now.stripe_event_id === repair.eventId ?
+  'That IS the repair id, so the repair did land and something outside ' +
+  'apply_stripe_entitlement has since put the default back — which is the interesting bug here, ' +
+  'and it is not in the webhook' :
+  'That is NOT the repair id, so either a later event overwrote the repair or an earlier run ' +
+  'claimed the id without writing. Read the ledger row for it before blaming the webhook';
+
+  return refused(
+    'nothing-written',
+    `NOT repaired — outcome "duplicate": ${repair.eventId} is already in the ledger, and a ` +
+    `re-read shows the row still does NOT hold this plan's allowance: it has plan "${now.plan}", ` +
+    `sku_limit ${now.sku_limit}, editor_seat_limit ${now.editor_seat_limit}, stripe_event_id ` +
+    `${now.stripe_event_id ?? 'null'}. ${reading}. Note that v1 is spent for this membership ` +
+    'either way: nothing was retracted here, because this run is not what claimed the id'
   );
 }
 
@@ -961,6 +1210,26 @@ async function main(): Promise<void> {
   assertFloorMatchesContract();
 
   const admin = createAdminClient(connection.url, connection.serviceRoleKey);
+
+  // ONE TIMESTAMP FOR THE WHOLE RUN, TAKEN BEFORE THE FIRST READ — literally here, before the
+  // brands preflight and before the candidate scan, which is what that sentence has to mean if
+  // it is going to be written down. It used to be stamped further down, after the scan and
+  // after the --only explain reads, while claiming this; taking it here costs nothing and makes
+  // it true. Earlier is also the safe direction: every millisecond earlier can only make the
+  // ordering rule below MORE likely to take the repair's side of a race away from it.
+  //
+  // It is a safety property rather than a tidiness one. Stamped per row at write time — which
+  // is what this script used to do — the repair is always NEWER than any event it is racing, so
+  // apply_stripe_entitlement's ordering branch lets it through and `plan = coalesce(v_plan,
+  // m.plan)` writes the scanned plan back over a downgrade or a cancellation that landed seconds
+  // earlier. Stamped once up front it is OLDER than anything that arrives during the run, so for
+  // those events the database's own rule — withdraw a non-subscription event's opinion when
+  // p_event_at <= stripe_status_at — takes the repair's side of the race away from it. The guard
+  // in applyOne then keeps that from turning into a burnt event id, and the read-back reports
+  // whatever is left.
+  //
+  // It also makes one invocation greppable in the ledger as one operation.
+  const eventAt = new Date().toISOString();
 
   // Preflight. apply_stripe_entitlement returns 'unknown_brand' for a brand this database
   // does not run, which would otherwise show up as every repair quietly doing nothing.
@@ -987,26 +1256,19 @@ async function main(): Promise<void> {
     if (!rows.some((row) => row.id.toLowerCase() === id)) await explainMissing(admin, id);
   }
 
-  // ONE TIMESTAMP FOR THE WHOLE RUN, TAKEN BEFORE THE FIRST READ, and it is a safety property
-  // rather than a tidiness one.
-  //
-  // Stamped per row at write time — which is what this script used to do — the repair is always
-  // NEWER than any event it is racing, so apply_stripe_entitlement's ordering branch lets it
-  // through and `plan = coalesce(v_plan, m.plan)` writes the scanned plan back over a downgrade
-  // or a cancellation that landed seconds earlier. Stamped once up front it is OLDER than
-  // anything that arrives during the run, so for those events the database's own rule —
-  // withdraw a non-subscription event's opinion when p_event_at <= stripe_status_at — takes the
-  // repair's side of the race away from it. The guard in applyOne then keeps that from turning
-  // into a burnt event id, and the read-back reports whatever is left.
-  //
-  // It also makes one invocation greppable in the ledger as one operation.
-  const eventAt = new Date().toISOString();
   const store = args.write ? createEntitlementStore(admin) : null;
 
   let entitled = 0;
   let repaired = 0;
   let planned = 0;
-  const failures: string[] = [];
+  let alreadyCorrect = 0;
+
+  // FAILURES ARE COUNTED BY WHAT THEY LEFT ON THE ROW, not just counted. The last line of this
+  // run is the last thing an operator reads at 2am, and "N repair(s) did not land. Nothing was
+  // written for those rows." is false in exactly the case that matters most: a repair that
+  // landed on top of a genuine downgrade DID write, the detail above says so in capitals, and
+  // the summary used to contradict it.
+  const failures: Refusal[] = [];
 
   for (const row of rows) {
     if (!(await entitledAccordingToDatabase(admin, row))) {
@@ -1026,26 +1288,40 @@ async function main(): Promise<void> {
 
     if (!args.write || !store) continue;
 
-    const problem = await applyOne(admin, store, repair, eventAt);
-    if (problem) {
-      failures.push(`${label(row)} — ${problem}`);
-      const [headline, ...detail] = problem.split(' — ');
-      console.log(`      ✗ ${headline}`);
+    const outcome = await applyOne(admin, store, repair, eventAt);
+    if (outcome === null) {
+      repaired += 1;
+      console.log(`      ✓ applied and verified: sku_limit ${repair.skuLimit}, editor_seat_limit ${repair.editorSeatLimit}`);
+      continue;
+    }
+
+    const [headline, ...detail] = outcome.sentence.split(' — ');
+    if (!isRefusal(outcome)) {
+      // Somebody else's run got here first and the row is right. Not a failure, and it must not
+      // be made to look like one — but it is not silent either, because two operators on one
+      // population is worth knowing about.
+      alreadyCorrect += 1;
+      console.log(`      ✓ ${headline}`);
       console.log(wrap(detail.join(' — '), '        '));
       continue;
     }
-    repaired += 1;
-    console.log(`      ✓ applied and verified: sku_limit ${repair.skuLimit}, editor_seat_limit ${repair.editorSeatLimit}`);
+
+    failures.push({ landing: outcome.landing, sentence: `${label(row)} — ${outcome.sentence}` });
+    console.log(`      ✗ ${headline}`);
+    console.log(wrap(detail.join(' — '), '        '));
   }
 
   if (rows.length === 0) await requireVisibleMemberships(admin, connection);
 
   console.log(
     `\n${rows.length} candidate(s); ${entitled} entitled according to public.entitlement_is_active(); ` +
-    `${planned} repairable` + (args.write ? `; ${repaired} repaired and verified` : '')
+    `${planned} repairable` + (
+    args.write ?
+    `; ${repaired} repaired and verified` + (alreadyCorrect > 0 ? `; ${alreadyCorrect} already correct` : '') :
+    '')
   );
 
-  for (const failure of failures) notes.push(failure);
+  for (const failure of failures) notes.push(failure.sentence);
 
   if (notes.length > 0) {
     console.log('\n─── needs a human ─────────────────────────────────────────────');
@@ -1053,16 +1329,40 @@ async function main(): Promise<void> {
   }
 
   console.log('\n─── verify from SQL ───────────────────────────────────────────');
-  console.log('  -- the same count the plan_limits migration raises a NOTICE for');
-  console.log('  select id, user_id, brand_slug, business_name, plan, sku_limit, editor_seat_limit');
-  console.log('    from public.brand_memberships m');
-  console.log('   where public.entitlement_is_active(m.status, m.plan, m.plan_status, m.current_period_end)');
-  console.log(`     and m.sku_limit = ${FAIL_CLOSED_SKU_LIMIT};`);
-  console.log('  -- what this script recorded');
-  console.log(`  select * from public.stripe_webhook_events where event_id like '${REPAIR_EVENT_PREFIX}%';`);
+  console.log(VERIFY_SQL);
 
   if (failures.length > 0) {
-    console.error(`\n✗ ${failures.length} of ${planned} repair(s) did not land. Nothing was written for those rows.\n`);
+    // THE LAST THING ON THE SCREEN. One count per kind of ending, because they need different
+    // things from the person reading: the first needs a re-run, the second needs a human in
+    // Stripe tonight, the third needs somebody to go and look before assuming either.
+    const wroteNothing = failures.filter((entry) => entry.landing === 'nothing-written').length;
+    const wroteOnTop = failures.filter((entry) => entry.landing === 'stands-on-top').length;
+    const unconfirmed = failures.filter((entry) => entry.landing === 'unconfirmed').length;
+
+    console.error(`\n✗ ${failures.length} of ${planned} repair(s) did not land.`);
+    if (wroteNothing > 0) {
+      // Deliberately does NOT promise that the repair id was withdrawn. It is on the branches
+      // that retracted, and it is untrue on the ones that did not — a 'duplicate' leaves the
+      // id spent, because the run that spent it was not this one.
+      console.error(
+        `  ${wroteNothing} changed nothing — this run's plan and allowance are not on those rows.` +
+        '\n    What to do about each, and whether its repair id is still available, is above.'
+      );
+    }
+    if (wroteOnTop > 0) {
+      console.error(
+        `  ${wroteOnTop} WROTE ON TOP of a genuine Stripe event and the write is still there.` +
+        '\n    Those rows were CHANGED by this run, nothing here can undo it, and the ledger row' +
+        '\n    for each has been kept as the record. Read them in Stripe now — see above.'
+      );
+    }
+    if (unconfirmed > 0) {
+      console.error(
+        `  ${unconfirmed} could not be confirmed either way. Read the row and the ledger before` +
+        '\n    assuming anything was or was not written.'
+      );
+    }
+    console.error('');
     process.exit(1);
   }
 
@@ -1088,6 +1388,32 @@ async function main(): Promise<void> {
   }
 
   if (repaired === 0) {
+    // "Nothing needed repairing" is a claim about the POPULATION, and it used to be printed
+    // after a run in which every row named with --only had been examined and refused — a row
+    // belonging to another brand, a plan the contract does not know, a membership that is not a
+    // candidate at all. Those rows may well need repairing; this script is simply not the thing
+    // that repairs them. Only the genuinely empty case gets the all-clear now.
+    if (alreadyCorrect > 0) {
+      console.log(
+        `\n${alreadyCorrect} membership(s) were already correct — another run got there first — and ` +
+        'nothing\nwas written by this one.\n'
+      );
+      return;
+    }
+    if (planned === 0 && (rows.length > 0 || args.only.length > 0)) {
+      const considered =
+      args.only.length > 0 ?
+      `${args.only.length} membership(s) named with --only` :
+      `${rows.length} candidate(s)`;
+      console.log(
+        '\nNothing was written, and this run repaired nothing:' +
+        `\nthe ${considered} were considered and every one was left alone.` +
+        '\nThe reason against each is under "needs a human" above. A row listed' +
+        '\nthere may still need repairing — by somebody, or by something that is' +
+        '\nnot this script.\n'
+      );
+      return;
+    }
     console.log('\nNothing needed repairing, and nothing was written.\n');
     return;
   }

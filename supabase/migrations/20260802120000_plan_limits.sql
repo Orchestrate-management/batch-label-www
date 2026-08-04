@@ -725,9 +725,13 @@ grant  execute on function public.get_entitlement(text) to authenticated;
 -- src/server/webhook.ts:54, which groups precisely those two as UNACTIONABLE). Those
 -- exceptions are the proof of the rule: once an event id is recorded, Resend is inert.
 --
--- WHAT THE SCRIPT DOES INSTEAD. It selects the rows this NOTICE counts — narrowed by the two
--- conditions section 4 asserts at apply time (a membership that is not active is not entitled;
--- `free` grants nothing), then confirmed row by row by THIS database's own
+-- WHAT THE SCRIPT DOES INSTEAD. It selects the rows this NOTICE counts — narrowed by two
+-- conditions, neither of which can drop a row entitlement_is_active() would say yes to, and
+-- which are carried by different things: `free` grants nothing, asserted at apply time by
+-- section 4 above, which fails the migration over it; and a membership that is not active is
+-- not entitled, which section 4 pins ONLY for the `suspended` case and which rests in general
+-- on the first conjunct of the function's own body, `coalesce(p_membership_status, 'active') =
+-- 'active'`; each candidate is then confirmed row by row by THIS database's own
 -- entitlement_is_active(), never by a second copy of the predicate in TypeScript — resolves
 -- the allowance by importing allowanceForPlan from src/server/plan-contract.ts, and calls
 -- apply_stripe_entitlement through the same sixteen-argument call site the webhook uses, with
@@ -742,10 +746,15 @@ grant  execute on function public.get_entitlement(text) to authenticated;
 -- afterwards. Each row is confirmed, re-read and written in one pass, and a row that changed
 -- in between is refused and named rather than repaired on facts that are already stale: the
 -- repair re-asserts the plan it read, so writing on a stale read is how a downgrade or a
--- cancellation that landed mid-run gets silently put back. What it cannot prevent it reports —
--- the read-back after the write compares stripe_status_at, which only a customer.subscription.*
--- event moves and this repair never does. Repairing a few reviewed rows at a time with --only
--- is both how a row that must not be touched is excluded and how that window is kept short.
+-- cancellation that landed mid-run gets silently put back. What it cannot prevent it reports,
+-- as far as the row can be asked: the read-back after the write compares stripe_status_at,
+-- which only a customer.subscription.* event moves and this repair never does, so a downgrade
+-- or a cancellation landing inside the write window is always named and always exits non-zero.
+-- A plan change arriving on something that is NOT a subscription event —
+-- checkout.session.completed is the one that exists — leaves that column alone and so cannot be
+-- seen from the row at all; the script says so in confirmWrite rather than implying a coverage
+-- it does not have. Repairing a few reviewed rows at a time with --only is both how a row that
+-- must not be touched is excluded and how that window is kept short.
 --
 -- Until that repair such a row keeps the fail-closed default from section 1 — least
 -- allowance, never most — so the intermediate state is safe in the sense that nothing is
