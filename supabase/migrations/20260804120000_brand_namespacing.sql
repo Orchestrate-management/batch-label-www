@@ -617,10 +617,19 @@ begin
 
   -- Seven policies: 4 on products (select/insert/update/delete), 3 on specifications
   -- (select/insert/update — there is deliberately no DELETE grant).
+  --
+  -- NARROWED TO THE TWO MOVED TABLES, which is what the message below has always claimed
+  -- it counted. It counted every policy in the `batchlabel` schema, and that was wrong in
+  -- both directions: it broke the moment a later migration added a table here (it did —
+  -- 20260804130000 adds sixteen), and until then it would equally have passed if products
+  -- had LOST a policy while specifications gained two. Narrowing it is a strengthening,
+  -- not a relaxation: the number is unchanged and it is now attached to the tables it is
+  -- about.
   select count(*) into v_n
     from pg_policy p
     join pg_class c on c.oid = p.polrelid
-   where c.relnamespace = 'batchlabel'::regnamespace;
+   where c.relnamespace = 'batchlabel'::regnamespace
+     and c.relname in ('products', 'specifications');
   if v_n <> 7 then
     raise exception
       'brand_namespacing: expected 7 policies on the moved tables, found %. A policy lost in the move is an open table.', v_n
