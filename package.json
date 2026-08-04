@@ -12,6 +12,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:sql": "vitest run supabase/tests",
     "preview": "npx vite preview",
     "bundle:api": "node scripts/bundle-api.mjs",
     "pretypecheck": "npm run bundle:api",
@@ -30,6 +31,7 @@
     "tailwind-merge": "latest"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

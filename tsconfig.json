@@ -20,6 +20,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "api", "scripts"],
+  "include": ["src", "api", "scripts", "supabase/tests"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
