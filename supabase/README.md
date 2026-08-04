@@ -13,12 +13,29 @@ Batchlabel is the first sub-brand; others reuse the same project and the same lo
 | `public.brand_memberships` | Which brand(s) a user belongs to. **Filter by `brand_slug`.**           |
 | `public.accounts`          | The business. What product data belongs to. Read-only to the browser.  |
 | `public.account_members`   | Who may act in an account. One row today: the owner. Read-only.        |
-| `public.specifications`    | The composition — one row per recipe. Keyed on `account_id`.           |
-| `public.products`          | The SKU — recipe x pack size x packaging. Keyed on `account_id`.       |
+| `batchlabel.specifications`| The composition — one row per recipe. Keyed on `account_id`.           |
+| `batchlabel.products`      | The SKU — recipe x pack size x packaging. Keyed on `account_id`.       |
 
 The last four arrive in `migrations/20260803120000_account_data_schema.sql`; see
 [Accounts and product data](#accounts-and-product-data-migrations20260803120000_account_data_schemasql)
 below. **Nothing is keyed on `user_id`.**
+
+**The last two live in the `batchlabel` schema, not `public`**, since
+`migrations/20260804120000_brand_namespacing.sql`. `public` is the *shared* namespace —
+identity, consent, billing and accounts — and a sibling Orchestrate brand will want its
+own table called `products` meaning something else entirely. Each brand's domain data
+gets its own schema, and its rows are pinned to that brand's accounts by a foreign key.
+The contract for adding a brand is [`../docs/MULTI_BRAND_SCHEMA.md`](../docs/MULTI_BRAND_SCHEMA.md);
+read it before creating any table.
+
+Two consequences for anything that talks to these two tables:
+
+- PostgREST only exposes schemas it is configured for. `batchlabel` must be added under
+  **Project Settings → API → Exposed schemas** or every request to them 404s.
+- supabase-js reaches them with `client.schema('batchlabel').from('products')`. Do **not**
+  set `db: { schema: 'batchlabel' }` on the client — the same client reads
+  `public.entitlements` and calls `public.get_entitlement`, and a client-wide override
+  breaks both.
 
 **Extending later:** if a field is common to most offerings, add a typed column to
 `brand_memberships`; if it is specific to one offering, put it in the `data` jsonb. That
@@ -182,8 +199,8 @@ customer data later.
 | --- | --- |
 | `public.accounts` | The business. `brand_slug`, `owner_user_id`, `name`. Created only by the provisioning path — the browser has no INSERT. |
 | `public.account_members` | The person's standing *inside* an account (`owner`/`admin`/`editor`/`viewer`, `active`/`suspended`/`removed`). |
-| `public.specifications` | The composition. Owns the four derivation inputs and **the UFI** — one UFI per recipe, not per pack size. |
-| `public.products` | The SKU: recipe x pack size x packaging. What the SKU meter counts. |
+| `batchlabel.specifications` | The composition. Owns the four derivation inputs and **the UFI** — one UFI per recipe, not per pack size. Moved out of `public` by `20260804120000`. |
+| `batchlabel.products` | The SKU: recipe x pack size x packaging. What the SKU meter counts. Moved out of `public` by `20260804120000`. |
 | `public.is_member_of(uuid)` | The RLS predicate, callable for UI checks. |
 | `public.current_account_id()` | The column default for `account_id` on both data tables. |
 
@@ -238,3 +255,46 @@ on an unknown allowance and is strict at the limit, every membership has an acco
 account has a membership, `created_by` is pinned on both tables, and the null-account guard is
 attached in the trigger order it depends on. A failure there aborts the migration, which is
 the intent.
+
+## Brand namespacing (`migrations/20260804120000_brand_namespacing.sql`)
+
+Moves `specifications` and `products` into a `batchlabel` schema and turns brand
+isolation from an emergent property into an enforced one.
+
+**What was actually true before it.** An exploit against a real PostgreSQL — two brands,
+three users, every verb, every SECURITY DEFINER helper called with the other brand's ids,
+every view and RPC, the anon key — found nothing crossing. But **none of what held was a
+brand rule.** Every refusal came from `is_member_of(account_id)`, which has never heard of
+a brand. Three measured facts made that concrete:
+
+- a sibling brand's account **could** write into `public.products` and
+  `public.specifications`, because its user is a member of its own account and the policy
+  was satisfied;
+- `account_sku_limit()` — the Batchlabel meter — resolved for a sibling brand's account,
+  because it never asks which brand it is metering;
+- not one policy expression on either table mentioned a brand at all.
+
+So isolation rested on nobody being a member of two brands' accounts at once, which
+`account_members` and the deferred invite flow are built to make false.
+
+**The fix.** Each table gains `brand_slug` pinned to `'batchlabel'` by a `CHECK`, plus a
+composite foreign key `(account_id, brand_slug) → public.accounts (id, brand_slug)`. A
+sibling brand's `account_id` is now a `23503` at the storage layer — for `authenticated`,
+for the owner, and for `service_role`, which is why it is a foreign key and not a policy
+or a trigger.
+
+**Two things it cannot do itself:** expose the schema in the dashboard, and change the
+app client's `.from('products')` calls to `.schema('batchlabel').from('products')`.
+Order: expose → apply → deploy.
+
+The one object whose reference did **not** follow the move is `enforce_sku_limit()` — a
+function body is text, resolved at call time, so it kept saying `public.products` and is
+rewritten in section 5. `public.entitlements` did follow it, because a view's dependency
+is on the table's OID; it is restated anyway so the migration also repairs the case where
+an earlier migration is re-applied and recreates empty decoys in `public`.
+
+`allowances jsonb` was proposed as a way to de-Batchlabel the shared allowance columns,
+and rejected: a missing key is `NULL`, `count >= NULL` is `NULL` which is not `TRUE`,
+so the meter **fails open** at the point that knows least — the exact failure the
+`NOT NULL` columns exist to make unreachable. The reasoning and the measurements are in
+the migration header and in [`../docs/MULTI_BRAND_SCHEMA.md`](../docs/MULTI_BRAND_SCHEMA.md).
