@@ -33,6 +33,20 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      # Runs before the main suite, and separately from it, for two reasons.
+      #
+      # A broken migration is the most expensive thing to find late — it is the
+      # only failure here that can take the live database with it — so it gets
+      # the earliest signal it can have.
+      #
+      # And a red step called "SQL" says something different from a red step
+      # called "Test": one means the schema moved, the other means a component
+      # did. `npm run test:coverage` below runs these again as part of the whole
+      # suite, which costs about 25 seconds and is worth it for a failure you can
+      # read without opening the log.
+      - name: SQL (migrations replay, brand isolation, billing invariants)
+        run: npm run test:sql
+
       - name: Test (with coverage)
         run: npm run test:coverage
 

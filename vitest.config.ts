@@ -14,7 +14,15 @@ export default defineConfig({
       jsdom: { url: 'https://batchlabel.co.uk/' },
     },
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // supabase/tests holds the SQL suite: real migrations replayed into a real
+    // Postgres (PGlite). Those files declare `@vitest-environment node` in a
+    // docblock, because jsdom buys them nothing and the harness is pure Node.
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'supabase/tests/**/*.test.ts'],
+    // Booting Postgres and replaying the whole chain is seconds, not milliseconds,
+    // and several suites do it more than once. The default 5s kills them on a
+    // busy machine — which is a flaky gate, not a signal.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
     css: false,
     coverage: {
       provider: 'v8',
