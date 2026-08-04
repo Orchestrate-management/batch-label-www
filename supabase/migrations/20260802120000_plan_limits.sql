@@ -679,15 +679,55 @@ grant  execute on function public.get_entitlement(text) to authenticated;
 --
 -- There is deliberately no UPDATE in this file. Writing tier allowances into SQL would put
 -- them in a second place, and this database stores the RESULT of resolution, never the rule.
--- Any membership already carrying an entitling plan is re-resolved by replaying its
--- subscription through the webhook ("Resend" in the Stripe dashboard, or a one-shot script
--- that imports allowanceForPlan from the plan contract), which writes the allowance on the
--- normal path and leaves a ledger row proving it happened.
+-- A membership already carrying an entitling plan is re-resolved by calling this same write
+-- path again with an allowance resolved from the plan contract, which writes the number on
+-- the normal path and leaves a ledger row proving it happened.
 --
--- Until that replay such a row keeps the fail-closed default from section 1 — least
--- allowance, never most — so the intermediate state is safe. It should not be SILENT,
--- though, so this raises a NOTICE naming how many need replaying. A NOTICE cannot fail a
--- migration and is re-runnable by construction.
+-- THE PROCEDURE:
+--
+--   npx vite-node scripts/repair-allowances.ts --project <ref>            # dry run, writes nothing
+--   npx vite-node scripts/repair-allowances.ts --project <ref> --write    # applies
+--
+-- "RESEND" IN THE STRIPE DASHBOARD DOES NOT DO THIS, AND AN EARLIER VERSION OF THIS COMMENT
+-- SAID IT DID. Resend re-delivers the SAME event id. This function claims that id in
+-- public.stripe_webhook_events with `on conflict (event_id) do nothing` and returns
+-- 'duplicate' the moment the insert finds nothing to do — lines 424-430 above, which is
+-- BEFORE the resolution ladder ever reaches the UPDATE that writes sku_limit. The endpoint
+-- then answers HTTP 200 with {"received":true,"outcome":"duplicate"}, so an operator reading
+-- the response concludes the row was already correct. Nothing changed, and nothing said so.
+--
+-- It is not a race a second attempt wins, and there is no sub-population it works for. The
+-- ledger is never pruned, so a recorded event id stays a duplicate for ever; and section 1
+-- revokes insert/update/delete on brand_memberships from anon and authenticated while this
+-- function is service-role only, so the ONLY path that can ever have set an entitling plan is
+-- the one that ledgered its event id first. Every row the NOTICE below counts therefore has
+-- its entitling event already claimed.
+--
+-- The 'no_membership' return above is the single case where Resend does help, which is
+-- exactly why that case is deliberately NOT ledgered (see 20260801120000:368-371 and
+-- src/server/webhook.ts:187-188). That exception is the proof of the rule: once an event id
+-- is recorded, Resend is inert.
+--
+-- WHAT THE SCRIPT DOES INSTEAD. It selects the rows this NOTICE counts — narrowed by the two
+-- conditions section 4 asserts at apply time (a membership that is not active is not entitled;
+-- `free` grants nothing), then confirmed row by row by THIS database's own
+-- entitlement_is_active(), never by a second copy of the predicate in TypeScript — resolves
+-- the allowance by importing allowanceForPlan from src/server/plan-contract.ts, and calls
+-- apply_stripe_entitlement through the same sixteen-argument call site the webhook uses, with
+-- a SYNTHETIC event id of the form `repair_allowance_v1_<brand_memberships.id>`. That id
+-- cannot collide with a Stripe `evt_…` id, it records in the ledger that the repair happened,
+-- and because it is stable per membership a second run returns 'duplicate' and changes
+-- nothing rather than applying twice. Its event_type is `repair.allowance`, which does not
+-- match `customer.subscription.%`, so the repair does not advance stripe_status_at and cannot
+-- make a genuine later Stripe event look stale.
+--
+-- Until that repair such a row keeps the fail-closed default from section 1 — least
+-- allowance, never most — so the intermediate state is safe in the sense that nothing is
+-- over-granted. It is not harmless either: the SKU trigger in
+-- 20260803120000_account_data_schema.sql enforces sku_limit, so a paying customer left on the
+-- default is one who cannot create products. So it must not be SILENT, and this raises a
+-- NOTICE naming how many need repairing. A NOTICE cannot fail a migration and is re-runnable
+-- by construction.
 --
 -- The literal 3 below is the column default declared in section 1 of this same file, not a
 -- copy of any tier's allowance.
@@ -703,7 +743,7 @@ begin
 
   if v_pending > 0 then
     raise notice
-      'plan_limits: % membership(s) are entitled but still hold the fail-closed default allowance. Replay their subscriptions through the Stripe webhook to resolve the real allowance. Find them with:  select user_id, brand_slug, plan, stripe_subscription_id from public.brand_memberships m where public.entitlement_is_active(m.status, m.plan, m.plan_status, m.current_period_end) and m.sku_limit = 3;',
+      'plan_limits: % membership(s) are entitled but still hold the fail-closed default allowance. Repair them with:  npx vite-node scripts/repair-allowances.ts --project <ref>  (dry run; add --write to apply). NOT with "Resend" in the Stripe dashboard: it re-delivers the same event id, apply_stripe_entitlement has already ledgered that id, so it returns duplicate before it reaches the allowance write and changes nothing while answering 200. Find them with:  select user_id, brand_slug, plan, stripe_subscription_id from public.brand_memberships m where public.entitlement_is_active(m.status, m.plan, m.plan_status, m.current_period_end) and m.sku_limit = 3;',
       v_pending;
   else
     raise notice 'plan_limits: no memberships awaiting allowance resolution.';
