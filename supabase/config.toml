@@ -9,6 +9,24 @@
 project_id = "batchlabel"
 
 [db]
-# Postgres major version of the linked Supabase project. Check it under
-# Project Settings -> Database in the dashboard and adjust if different.
-major_version = 15
+# Postgres major version of the linked Supabase project.
+#
+# WAS 15, AND THAT WAS WRONG. The Management API reports the linked project as
+# 17.6.1.147, postgres_engine 17. Nothing depended on the declared value at
+# runtime, so it sat wrong quietly — but supabase/tests/migrations.test.ts reads
+# it to report how far the test harness (PGlite, PostgreSQL 18) is from the
+# database that actually runs, and against a wrong number that report was
+# describing a three-major gap that does not exist. It is one major.
+major_version = 17
+
+[api]
+# The schemas PostgREST will serve.
+#
+# `batchlabel` holds the Batchlabel domain tables — products, specifications —
+# which moved out of `public` in 20260804120000 so that a second brand can have
+# its own `products` meaning something else entirely. PostgREST serves only what
+# is listed here, so the app client's reads 404 until this is pushed.
+#
+# `public` stays: identity, consent, billing and the entitlements view are shared
+# across every brand and are not moving.
+schemas = ["public", "graphql_public", "batchlabel"]
