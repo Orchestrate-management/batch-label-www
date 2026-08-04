@@ -96,7 +96,7 @@ export function Privacy() {
           'Billing records: six years, because tax law requires it.',
           'Attribution data: 24 months from first visit.',
           'Analytics data: 14 months in Google Analytics 4.',
-          'Diagnostic data: no retention period of our own — the error reports expire on the schedule Sentry applies to the plan we are on, and are deleted by them when they do. Ask us if you need the figure that currently applies.',
+          'Diagnostic data: 30 days, which is the period Sentry applies to the plan we are on. If we move to a larger plan that becomes 90 days for new reports, and reports already collected keep the period they were collected under. We keep no copy of our own.',
           'Support email: three years.']
           } />
         
