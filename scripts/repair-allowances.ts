@@ -2,8 +2,10 @@
  * Repairs memberships that carry an entitling plan but still hold the fail-closed default
  * allowance — exactly the rows 20260802120000_plan_limits.sql's section-10 NOTICE counts.
  *
+ *   export SUPABASE_URL=…  SUPABASE_SERVICE_ROLE_KEY=…            # Project Settings -> API
  *   npx vite-node scripts/repair-allowances.ts --project <ref>            # DRY RUN, writes nothing
  *   npx vite-node scripts/repair-allowances.ts --project <ref> --write    # applies
+ *   npx vite-node scripts/repair-allowances.ts --project <ref> --only <membership id> --write
  *
  * The dry run is the default and there is no way to write by accident: --write is the only
  * flag that changes anything, --project is mandatory, and an argument this script does not
@@ -18,15 +20,14 @@
  * {"received":true,"outcome":"duplicate"} and the row is untouched, which reads to an
  * operator exactly like "it was already correct".
  *
- * Nor is there a population it works for: brand_memberships revokes insert/update/delete from
- * anon and authenticated, and apply_stripe_entitlement is service-role only, so the only path
- * that can ever have set an entitling plan is the one that ledgered its event id first. Every
- * affected row already has its entitling event claimed. The ledger is never pruned, so it
- * stays claimed.
+ * Nor is there a population it works for. No path in this repo can set an entitling plan
+ * without ledgering an event id first: brand_memberships revokes insert/update/delete from
+ * anon and authenticated, and apply_stripe_entitlement is service-role only. So every row
+ * this script finds already has its entitling event claimed, and the ledger is never pruned.
  *
- * The 'no_membership' return is the one case Resend does help, and it is deliberately NOT
- * ledgered for that reason (20260801120000:368-371, src/server/webhook.ts:187-188). That
- * exception is the proof of the rule: once an event id is recorded, Resend is inert.
+ * The 'no_membership' and 'unknown_brand' returns are the two Resend can still help with, and
+ * neither is ledgered for that reason (20260801120000:368-371, src/server/webhook.ts:54).
+ * That exception is the proof of the rule: once an event id is recorded, Resend is inert.
  *
  * SO THIS SCRIPT REPLAYS THE WRITE PATH ITSELF, WITH AN EVENT ID OF ITS OWN.
  *
@@ -42,6 +43,34 @@
  *     own call site, with all sixteen arguments — so the argument list cannot drift from
  *     production. Nothing new is granted a path to the entitlement columns.
  *
+ * ONE PASS PER ROW, AND WHY THE SHAPE MATTERS MORE THAN THE STEPS
+ *
+ * This job runs against a live database while Stripe is still delivering webhooks. An earlier
+ * shape scanned every row first and wrote afterwards, and that window was long enough to lose
+ * a real customer's downgrade: the intent re-asserts the plan the SCAN saw, and
+ * apply_stripe_entitlement writes `plan = coalesce(v_plan, m.plan)`, so a subscription that
+ * moved Studio -> Maker (or was cancelled outright) between the scan and the write was
+ * silently put back. Nothing said so; the run printed "applied … verified" and exited 0,
+ * because the read-back only checked the two allowance columns.
+ *
+ * So there is no scan phase. Each row is confirmed, planned, RE-READ and written in one pass,
+ * and the re-read immediately before the write compares every column the intent depends on
+ * against what this run saw a moment earlier. Any difference and the row is refused, named
+ * under "needs a human", and the run exits non-zero. It is never repaired on stale facts.
+ *
+ * A read and an RPC are still two round trips, so a window remains, and nothing short of doing
+ * this inside the database could close it — the write path is deliberately one function that
+ * this script does not get to extend. What the window can be is VISIBLE. The read-back after
+ * the write compares stripe_status_at against the value read just before it: that column moves
+ * only for a customer.subscription.* event, and this repair is deliberately not one, so any
+ * genuine subscription event that landed inside the window shows up there whether it landed
+ * before this repair's write or after it. Both of the ways a customer's billing state can be
+ * reverted — a downgrade and a cancellation — are subscription events. Neither can pass
+ * silently.
+ *
+ * `--only` is the other half of the answer: with live webhook traffic, repairing reviewed rows
+ * one at a time is the safe way to run this at all, and a shorter run is a smaller window.
+ *
  * THE SYNTHETIC EVENT ID: `repair_allowance_v1_<brand_memberships.id>`
  *
  *   * `repair_allowance_` cannot collide with a Stripe id (they are `evt_…`), so nobody
@@ -51,8 +80,7 @@
  *     returns 'duplicate' and changes nothing — re-running is safe rather than doubly applied;
  *   * `v1` is the escape hatch. A future repair that must legitimately touch the same
  *     memberships again bumps it to v2 rather than being blocked by, or silently reusing,
- *     this one's ledger rows. Needing a second repair at v1 means the webhook is broken
- *     again, which is a human's problem and not something to paper over.
+ *     this one's ledger rows.
  *
  * The event TYPE is `repair.allowance`. It must not begin with `customer.subscription.`:
  * apply_stripe_entitlement advances its ordering clock (stripe_status_at) only for those, and
@@ -61,8 +89,9 @@
  * WHAT IT DOES NOT DO. It does not read Stripe at all — no key, no network call, no
  * dependency on scripts/stripe-catalogue.ts, whose openStripe() would demand a
  * STRIPE_SECRET_KEY this job has no use for. It does not INSERT or UPDATE anything directly:
- * every write goes through the one RPC. And it never invents an allowance for a plan slug the
- * contract does not know — it reports that row and leaves it alone.
+ * every membership write goes through the one RPC. It never invents an allowance for a plan
+ * slug the contract does not know — it reports that row and leaves it alone. And it does not
+ * take a --brand: see THE BRAND IS NOT AN ARGUMENT below.
  */
 
 import { createAdminClient, createEntitlementStore } from '../src/server/supabase-admin';
@@ -91,11 +120,34 @@ const FAIL_CLOSED_SKU_LIMIT = 3;
 const REPAIR_EVENT_PREFIX = 'repair_allowance_v1_';
 const REPAIR_EVENT_TYPE = 'repair.allowance';
 
-const VALUE_FLAGS = ['--project', '--brand'] as const;
+/**
+ * THE BRAND IS NOT AN ARGUMENT.
+ *
+ * It was one, briefly, and it inverted the guard it was supposed to serve. `--brand otherbrand`
+ * did not narrow the run to another brand's rows, because the allowance still came from THIS
+ * repo's plan contract: it skipped every Batchlabel row as "foreign" and wrote Batchlabel's
+ * Studio numbers onto another brand's membership. brand_memberships.plan has no CHECK
+ * constraint and entitlement_is_active's allow-list is project-wide, so another Orchestrate
+ * brand's rows genuinely can carry `maker`, `studio` or `consultant` and mean something else
+ * by them — this project is shared with Starter at £480/mo and Scale at £1,800/mo.
+ *
+ * A brand is not a runtime choice for this script. It is a property of the repository the
+ * script is in: src/server/plan-contract.ts holds Batchlabel's tiers, Batchlabel's lookup
+ * keys and Batchlabel's numbers, and no flag or environment variable changes that. So the
+ * brand is read the way the rest of the server reads it and then checked, and the run refuses
+ * outright if it has been pointed anywhere else.
+ */
+const REPO_BRAND = DEFAULT_BRAND;
+const BRAND_ENV_VAR = 'VITE_ORCHESTRATE_BRAND';
+
+const VALUE_FLAGS = ['--project', '--only'] as const;
 const BOOLEAN_FLAGS = ['--write', '--dry-run'] as const;
 
 const USAGE =
-'Usage: npx vite-node scripts/repair-allowances.ts --project <ref> [--brand <slug>] [--write]';
+'Usage: npx vite-node scripts/repair-allowances.ts --project <ref> [--only <membership id>]… [--write]';
+
+/** brand_memberships.id is a uuid primary key; anything else is a typo, not a row. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Not imported from ./stripe-catalogue. That module pulls in the Stripe SDK and exists to
@@ -107,16 +159,35 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+/** Everything a human has to look at afterwards, in the order it was discovered. */
 const notes: string[] = [];
+
+/** Soft-wrap a long sentence under a fixed indent, so a refusal is readable in a terminal. */
+function wrap(text: string, indent: string, width = 96): string {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    if (line && `${line} ${word}`.length + indent.length > width) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.map((entry) => `${indent}${entry}`).join('\n');
+}
 
 interface Args {
   readonly write: boolean;
   readonly project: string;
-  readonly brand: string;
+  /** Empty means the whole population. See `--only` in readArgs. */
+  readonly only: readonly string[];
 }
 
 function readArgs(argv: readonly string[]): Args {
   const values = new Map<string, string>();
+  const only: string[] = [];
   const flags = new Set<string>();
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -125,10 +196,36 @@ function readArgs(argv: readonly string[]): Args {
     const name = split === -1 ? token : token.slice(0, split);
     const inline = split === -1 ? null : token.slice(split + 1);
 
+    if (name === '--brand') {
+      // Not "unrecognised". Somebody typing this has a specific idea in mind and deserves to
+      // be told why it is not on offer, rather than to go looking for the right spelling.
+      fail(
+        'there is no --brand. This repo carries the Batchlabel plan contract and nothing else,\n' +
+        `  so it can only resolve allowances for ${REPO_BRAND} memberships. Naming another brand\n` +
+        "  would not read that brand's tiers; it would write Batchlabel's numbers onto that\n" +
+        "  brand's rows and skip every row this script is for. Repair another brand from its\n" +
+        `  own repo.\n  ${USAGE}`
+      );
+    }
+
     if ((VALUE_FLAGS as readonly string[]).includes(name)) {
       const value = (inline ?? argv[index + 1] ?? '').trim();
       if (!value || value.startsWith('--')) fail(`${name} needs a value.\n  ${USAGE}`);
       if (inline === null) index += 1;
+
+      if (name === '--only') {
+        if (!UUID.test(value)) {
+          fail(
+            `--only ${value} is not a brand_memberships.id.\n` +
+            '  It takes the membership uuid printed by a dry run, not a user id, an email or a\n' +
+            `  plan slug.\n  ${USAGE}`
+          );
+        }
+        if (!only.includes(value.toLowerCase())) only.push(value.toLowerCase());
+        continue;
+      }
+
+      if (values.has(name)) fail(`${name} was given twice.\n  ${USAGE}`);
       values.set(name, value);
       continue;
     }
@@ -160,13 +257,7 @@ function readArgs(argv: readonly string[]): Args {
     );
   }
 
-  return {
-    write: flags.has('--write'),
-    project,
-    // The brand this repo sells for. Read the same way src/server/config.ts reads it, so a
-    // deployment that overrides the brand does not have to be remembered here.
-    brand: values.get('--brand') ?? process.env.VITE_ORCHESTRATE_BRAND?.trim() ?? DEFAULT_BRAND
-  };
+  return { write: flags.has('--write'), project, only };
 }
 
 /** `https://<ref>.supabase.co` -> `<ref>`. Null when the URL is not a Supabase project URL. */
@@ -192,7 +283,7 @@ function projectRefFromUrl(url: string): string | null {
  * fail much later as an empty result set or an RLS error, i.e. as "nothing needs repairing".
  *
  * Returns null for the newer `sb_secret_…` format, which is not a JWT and carries no claims.
- * That is reported and not fatal: the URL guard and the brands preflight still apply.
+ * That is not fatal, but it is not free either: see WHEN THE ROLE CANNOT BE PROVEN below.
  */
 function claimsFromServiceKey(key: string): {ref: string | null;role: string | null;} | null {
   const parts = key.split('.');
@@ -212,6 +303,12 @@ interface Connection {
   readonly url: string;
   readonly serviceRoleKey: string;
   readonly project: string;
+  /**
+   * True only when the key ITSELF said `role: service_role`. False for the `sb_secret_…`
+   * format, which carries no claims — in which case an empty result set is not evidence of
+   * anything and this run must not report one as an all-clear.
+   */
+  readonly roleProven: boolean;
 }
 
 /**
@@ -245,6 +342,18 @@ function openSupabase(args: Args): Connection {
     );
   }
 
+  // The brand is a property of this repository, not of the shell it is run from. An override
+  // pointing anywhere else is refused rather than honoured, because the numbers this script
+  // would write are Batchlabel's either way.
+  const brandOverride = process.env[BRAND_ENV_VAR]?.trim();
+  if (brandOverride && brandOverride !== REPO_BRAND) {
+    fail(
+      `${BRAND_ENV_VAR} is set to "${brandOverride}", but src/server/plan-contract.ts holds the\n` +
+      `  ${REPO_BRAND} tiers and only those. Running would resolve ${REPO_BRAND}'s allowances and write\n` +
+      `  them onto ${brandOverride} memberships. Unset it, or repair that brand from its own repo.`
+    );
+  }
+
   const urlRef = projectRefFromUrl(url);
   if (!urlRef) {
     fail(
@@ -259,11 +368,35 @@ function openSupabase(args: Args): Connection {
     );
   }
 
+  // The anon-equivalent of the new key format. It is one character class away from
+  // `sb_secret_…`, carries no claims to catch it by, and under RLS it can see nothing at all —
+  // which arrives looking exactly like an empty result set. Refuse it by name.
+  if (serviceRoleKey.startsWith('sb_publishable_')) {
+    fail(
+      'SUPABASE_SERVICE_ROLE_KEY holds an sb_publishable_… key. That is the PUBLISHABLE key —\n' +
+      '  the new format\'s anon key — and row level security would hide every membership from\n' +
+      '  it, so this script would report that nothing needs repairing. The one it wants is the\n' +
+      '  secret key: Project Settings -> API -> sb_secret_… (or the legacy service_role JWT).'
+    );
+  }
+
   const claims = claimsFromServiceKey(serviceRoleKey);
+  let roleProven = false;
+
   if (!claims) {
+    // WHEN THE ROLE CANNOT BE PROVEN. Printed HERE, before any result, and not filed away as
+    // a footnote under the all-clear where it reads as reassurance. The consequence is
+    // carried into the run itself: see requireVisibleMemberships().
+    console.warn(
+      '\n[repair] ⚠ SUPABASE_SERVICE_ROLE_KEY is not a JWT, so neither its project nor its ROLE\n' +
+      '[repair]   could be checked. A key without the service role sees nothing through RLS and\n' +
+      '[repair]   an empty result would be indistinguishable from a clean database. This run\n' +
+      '[repair]   will refuse to report "nothing to repair" unless it can prove it can read\n' +
+      '[repair]   brand_memberships at all.'
+    );
     notes.push(
-      'SUPABASE_SERVICE_ROLE_KEY is not a JWT (the newer sb_secret_… format carries no claims), ' +
-      'so its project and role could not be cross-checked against SUPABASE_URL.'
+      'the service key could not be checked (not a JWT), so its project and role were taken on ' +
+      'trust. Prefer the legacy service_role JWT for this job, or read the SQL below yourself.'
     );
   } else {
     if (claims.role && claims.role !== 'service_role') {
@@ -279,22 +412,27 @@ function openSupabase(args: Args): Connection {
         '  The URL and the key are from different projects. Refusing.'
       );
     }
+    roleProven = claims.role === 'service_role';
   }
 
   console.log(
-    `\n[repair] project = ${args.project}  brand = ${args.brand}  mode = ${args.write ? 'WRITE' : 'DRY RUN'}`
+    `\n[repair] project = ${args.project}  brand = ${REPO_BRAND}  mode = ${args.write ? 'WRITE' : 'DRY RUN'}`
   );
+  if (args.only.length > 0) {
+    console.log(`[repair] --only: ${args.only.length} membership(s) named; every other row is out of scope`);
+  }
   if (!args.write) console.log('[repair] DRY RUN — nothing will be written\n');
   else console.log('');
 
-  return { url, serviceRoleKey, project: args.project };
+  return { url, serviceRoleKey, project: args.project, roleProven };
 }
 
-/** The columns section 10's count query reads, plus the two the repair reports on. */
+/** The columns section 10's count query reads, plus the ones the repair reports and guards on. */
 interface Candidate {
   id: string;
   user_id: string;
   brand_slug: string;
+  business_name: string | null;
   status: string;
   plan: string;
   plan_status: string | null;
@@ -302,10 +440,33 @@ interface Candidate {
   sku_limit: number;
   editor_seat_limit: number;
   stripe_subscription_id: string | null;
+  stripe_event_id: string | null;
+  stripe_status_at: string | null;
 }
 
+// One string literal on one line, deliberately: supabase-js types the result from the column
+// list, and it can only do that when the argument is a literal type. Concatenating two shorter
+// lines infers `string`, the row type collapses, and every read here becomes an `unknown` cast.
 const CANDIDATE_COLUMNS =
-'id, user_id, brand_slug, status, plan, plan_status, current_period_end, sku_limit, editor_seat_limit, stripe_subscription_id';
+'id, user_id, brand_slug, business_name, status, plan, plan_status, current_period_end, sku_limit, editor_seat_limit, stripe_subscription_id, stripe_event_id, stripe_status_at';
+
+/**
+ * The columns the intent is built from, or that decide whether the write is safe. If any of
+ * them moved between this run reading the row and this run writing it, somebody else wrote
+ * the membership and this run's facts are stale.
+ *
+ * stripe_event_id is the catch-all: apply_stripe_entitlement stamps it on every successful
+ * apply, so any write through the one write path shows up here even when it changed a column
+ * this script does not otherwise read.
+ */
+const GUARDED_COLUMNS = [
+'status',
+'plan',
+'plan_status',
+'sku_limit',
+'editor_seat_limit',
+'stripe_event_id',
+'stripe_status_at'] as const satisfies readonly (keyof Candidate)[];
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -335,18 +496,93 @@ function assertFloorMatchesContract(): void {
  * drop a row entitlement_is_active() would have returned true for. Everything else — the
  * plan allow-list, the plan_status set, the period-end grace — is left to the function
  * itself, which is called per candidate below.
+ *
+ * `created_at` alone is not a total order: rows written in one transaction share it exactly,
+ * and the report then shuffles between runs of a job whose whole output is meant to be
+ * compared against the previous run. `id` breaks the tie.
  */
-async function candidates(admin: Admin): Promise<Candidate[]> {
-  const { data, error } = await admin.
+async function candidates(admin: Admin, only: readonly string[]): Promise<Candidate[]> {
+  let query = admin.
   from('brand_memberships').
   select(CANDIDATE_COLUMNS).
   eq('sku_limit', FAIL_CLOSED_SKU_LIMIT).
   eq('status', 'active').
-  neq('plan', FREE_PLAN).
-  order('created_at', { ascending: true });
+  neq('plan', FREE_PLAN);
+
+  if (only.length > 0) query = query.in('id', only as string[]);
+
+  const { data, error } = await query.
+  order('created_at', { ascending: true }).
+  order('id', { ascending: true });
 
   if (error) fail(`could not read brand_memberships: ${error.message}`);
   return (data as Candidate[] | null) ?? [];
+}
+
+/**
+ * Why a named row is not in the candidate set.
+ *
+ * `--only` is how an operator excludes rows, so a name that matches nothing is either a typo
+ * or a row somebody else has already dealt with, and both are worth one line each rather than
+ * a silent shorter list.
+ */
+async function explainMissing(admin: Admin, id: string): Promise<void> {
+  const { data, error } = await admin.
+  from('brand_memberships').
+  select(CANDIDATE_COLUMNS).
+  eq('id', id).
+  maybeSingle();
+
+  if (error) {
+    notes.push(`--only ${id} could not be read back: ${error.message}`);
+    return;
+  }
+  const row = data as Candidate | null;
+  if (!row) {
+    notes.push(`--only ${id} matches no membership in project. Check the id.`);
+    return;
+  }
+  notes.push(
+    `--only ${id} is not a candidate and was not touched: it holds status "${row.status}", ` +
+    `plan "${row.plan}", sku_limit ${row.sku_limit}. A candidate is active, off ${FREE_PLAN}, and ` +
+    `sitting on the fail-closed default ${FAIL_CLOSED_SKU_LIMIT}.`
+  );
+}
+
+/**
+ * PROOF THAT AN EMPTY ANSWER MEANS SOMETHING.
+ *
+ * "candidates: 0 … nothing to repair" is the one wrong answer this script must never give,
+ * and a key without the service role produces it for free: RLS hides every row and the
+ * result set is empty for a reason that has nothing to do with allowances. When the key could
+ * not be checked, an empty candidate set is therefore UNPROVEN until this run can show it can
+ * see a membership at all.
+ */
+async function requireVisibleMemberships(admin: Admin, connection: Connection): Promise<void> {
+  const { data, error } = await admin.
+  from('brand_memberships').
+  select('id').
+  limit(1);
+
+  if (error) fail(`could not read brand_memberships: ${error.message}`);
+  const visible = ((data as {id: string;}[] | null) ?? []).length > 0;
+  if (visible) return;
+
+  if (!connection.roleProven) {
+    fail(
+      'UNPROVEN, not clean. This run found no candidates AND cannot see a single row of\n' +
+      '  public.brand_memberships — and the service key could not be checked, so it may simply\n' +
+      '  lack the service role and be looking at an empty view of a full table. Refusing to\n' +
+      '  report "nothing to repair".\n' +
+      '  Re-run with the legacy service_role JWT (Project Settings -> API), whose claims this\n' +
+      '  script can verify, or run the SQL at the end of this output as an admin.'
+    );
+  }
+  notes.push(
+    'public.brand_memberships is empty in this project. The key IS the service role, so that ' +
+    'is a fact rather than an RLS artefact — but a billing project with no memberships is ' +
+    'worth a second look at --project.'
+  );
 }
 
 /** THE predicate, asked of the database rather than restated. */
@@ -372,6 +608,11 @@ interface Repair {
   readonly eventId: string;
 }
 
+/** `Studio Ltd · batchlabel · 7f3e…` — how a row is named everywhere it is mentioned. */
+function label(row: Candidate): string {
+  return `${row.business_name?.trim() || '(no business name)'} · ${row.brand_slug} · ${row.id}`;
+}
+
 /**
  * Everything a repair needs, or a reason it is not this script's to make.
  *
@@ -380,19 +621,20 @@ interface Repair {
  * deploy has never heard of, would burn the synthetic event id on a change that is not one —
  * and the ledger row would then say a repair happened.
  */
-function planRepair(row: Candidate, brand: string): Repair | null {
-  if (row.brand_slug !== brand) {
+function planRepair(row: Candidate): Repair | null {
+  if (row.brand_slug !== REPO_BRAND) {
     notes.push(
-      `${row.id} (${row.user_id}) is a ${row.brand_slug} membership on plan "${row.plan}", not a ${brand} one. ` +
-      'This Supabase project is shared across Orchestrate brands and this repo carries only ' +
-      `the ${brand} plan contract, so its allowance is not ours to resolve. Repair it from that brand's repo.`
+      `${label(row)} is on plan "${row.plan}", but it belongs to ${row.brand_slug} and this repo ` +
+      `carries only the ${REPO_BRAND} plan contract. This Supabase project is shared across ` +
+      'Orchestrate brands, and another brand may mean something entirely different by the same ' +
+      "plan slug, so its allowance is not ours to resolve. Repair it from that brand's repo."
     );
     return null;
   }
 
   if (!isPlanSlug(row.plan)) {
     notes.push(
-      `${row.id} (${row.user_id}) is on plan "${row.plan}", which src/server/plan-contract.ts does not ` +
+      `${label(row)} is on plan "${row.plan}", which src/server/plan-contract.ts does not ` +
       'know. This deploy has no allowance for it and will not invent one.'
     );
     return null;
@@ -400,7 +642,7 @@ function planRepair(row: Candidate, brand: string): Repair | null {
 
   if (!isEntitlingPlan(row.plan)) {
     notes.push(
-      `${row.id} (${row.user_id}) is on plan "${row.plan}", which the database counts as entitled but the ` +
+      `${label(row)} is on plan "${row.plan}", which the database counts as entitled but the ` +
       'plan contract marks as NOT entitling. The SQL allow-list in entitlement_is_active and ' +
       'ENTITLING_PLANS have drifted; that is the bug to fix, not this row.'
     );
@@ -410,7 +652,7 @@ function planRepair(row: Candidate, brand: string): Repair | null {
   const allowance = allowanceForPlan(row.plan);
   if (allowance.skuLimit === row.sku_limit && allowance.editorSeatLimit === row.editor_seat_limit) {
     notes.push(
-      `${row.id} (${row.user_id}) is on plan "${row.plan}", whose contract allowance is already exactly ` +
+      `${label(row)} is on plan "${row.plan}", whose contract allowance is already exactly ` +
       `what the row holds (${row.sku_limit} SKUs, ${row.editor_seat_limit} editor seat(s)). Nothing to repair, ` +
       'but it will keep appearing in the migration NOTICE, which counts the number and not the plan.'
     );
@@ -438,15 +680,18 @@ function planRepair(row: Candidate, brand: string): Repair | null {
  *     := null` — so an intent with a null plan would be accepted, ledgered and would write
  *     nothing.
  *
+ * That second one is why the row is re-read immediately before this is sent: re-asserting a
+ * plan is only harmless while the plan is still the one on the row.
+ *
  * planStatus, priceId, currentPeriodEnd, cancelAtPeriodEnd and trialEnd stay null so the
  * function's leave-alone semantics apply: this repair knows the allowance and nothing else,
  * and must not restate billing facts it has not been told.
  */
-function intentFor(repair: Repair): EntitlementIntent {
+function intentFor(repair: Repair, eventAt: string): EntitlementIntent {
   return {
     eventId: repair.eventId,
     eventType: REPAIR_EVENT_TYPE,
-    eventAt: new Date().toISOString(),
+    eventAt,
     brand: repair.row.brand_slug,
     userId: repair.row.user_id,
     customerId: null,
@@ -464,33 +709,105 @@ function intentFor(repair: Repair): EntitlementIntent {
   };
 }
 
-function describe(repair: Repair): string {
+/** The dry-run listing IS the safety review, so it names the row a human can recognise. */
+function printRepair(repair: Repair, index: number, write: boolean): void {
   const row = repair.row;
-  return (
-    `${row.user_id}  ${row.plan.padEnd(11)} sku ${String(row.sku_limit).padStart(4)} -> ${String(repair.skuLimit).padEnd(11)}` +
-    `seats ${row.editor_seat_limit} -> ${repair.editorSeatLimit}`);
+  console.log(`\n  [${index}] ${write ? 'REPAIR' : 'would repair'}  ${row.business_name?.trim() || '(no business name)'}`);
+  console.log(`      membership   ${row.id}          (brand_memberships.id — the value --only takes)`);
+  console.log(`      user         ${row.user_id}          (auth.users.id)`);
+  console.log(`      brand        ${row.brand_slug}`);
+  console.log(
+    `      plan         ${repair.plan.padEnd(11)}sku_limit ${String(row.sku_limit)} -> ${repair.skuLimit}` +
+    `     editor_seat_limit ${row.editor_seat_limit} -> ${repair.editorSeatLimit}`
+  );
+  console.log(`      event_id     ${repair.eventId}`);
+}
 
+/** One membership by id, or the sentence explaining why it could not be read. */
+async function readRow(admin: Admin, id: string): Promise<Candidate | string> {
+  const { data, error } = await admin.
+  from('brand_memberships').
+  select(CANDIDATE_COLUMNS).
+  eq('id', id).
+  maybeSingle();
+
+  if (error) return `the row could not be read: ${error.message}`;
+  return (data as Candidate | null) ?? 'the row has disappeared';
 }
 
 /**
- * What the row holds now, read back after the write.
- *
- * The RPC's 'applied' is not proof on its own. It reports that the function ran to the end,
- * and there is one path — an event timestamp at or before the membership's stripe_status_at —
- * on which it nulls the plan, writes no allowance and still returns 'applied'. Clock skew is
- * the only way this script can reach it, which is exactly the sort of thing a success count
- * hides. So the row is re-read and the numbers compared.
+ * Every guarded column that moved between two reads of the same row. Empty means nobody else
+ * has written this membership in between.
  */
-async function verify(admin: Admin, repair: Repair): Promise<string | null> {
-  const { data, error } = await admin.
-  from('brand_memberships').
-  select('sku_limit, editor_seat_limit').
-  eq('id', repair.row.id).
-  maybeSingle();
+function movedBetween(before: Candidate, after: Candidate): string[] {
+  return GUARDED_COLUMNS.
+  filter((column) => after[column] !== before[column]).
+  map((column) => `${column} ${JSON.stringify(before[column])} -> ${JSON.stringify(after[column])}`);
+}
 
-  if (error) return `could not re-read the row: ${error.message}`;
-  const after = data as {sku_limit: number;editor_seat_limit: number;} | null;
-  if (!after) return 'the row disappeared between the write and the read';
+/**
+ * DID THE WRITE DO WHAT IT SAID, AND WAS IT THE RIGHT WRITE TO MAKE?
+ *
+ * Three questions, not one. Checking only the two allowance columns is what let a silent
+ * revert print "applied … verified": the numbers were right and the plan underneath them was
+ * a year out of date.
+ *
+ *   * `stripe_status_at` moves only for a customer.subscription.* event, and this repair is
+ *     deliberately not one — so if it moved at all, a genuine subscription event landed inside
+ *     the window between the pre-write read and the write. That is the irreducible window: no
+ *     amount of re-reading closes it, because the read and the RPC are two round trips. It is
+ *     completely DETECTABLE, though, which is the point of comparing it.
+ *   * `stripe_event_id` is stamped by every successful apply. If it is not this repair's id,
+ *     somebody else's write is the one that stands — which is usually fine, and always worth
+ *     saying out loud rather than reporting as a success.
+ *   * only then are the allowance columns worth reading, because only then is this repair the
+ *     write they came from.
+ */
+function confirmWrite(repair: Repair, before: Candidate, after: Candidate): string | null {
+  const ours = after.stripe_event_id === repair.eventId;
+  const clockMoved = after.stripe_status_at !== before.stripe_status_at;
+
+  if (clockMoved && ours) {
+    const landedOnTop =
+    after.plan === repair.plan &&
+    after.sku_limit === repair.skuLimit &&
+    after.editor_seat_limit === repair.editorSeatLimit;
+
+    const preamble =
+    'a customer.subscription.* event landed while this repair was in flight — stripe_status_at ' +
+    `moved ${before.stripe_status_at} -> ${after.stripe_status_at}`;
+
+    // Which of the two happened depends on that event's own Stripe timestamp against this
+    // run's, and both are real: an event Stripe created before the run began can still be
+    // delivered during it.
+    if (!landedOnTop) {
+      return (
+        `${preamble}. Because this run is stamped earlier than that event, ` +
+        "apply_stripe_entitlement withdrew this repair's opinion about the plan and the allowance " +
+        `with it, so nothing was reverted — the row is that event's and holds plan ` +
+        `"${after.plan}", sku_limit ${after.sku_limit}. This membership was simply not repaired; ` +
+        'run again once the subscription has settled'
+      );
+    }
+    return (
+      `${preamble} — and THIS REPAIR WROTE ON TOP OF IT, re-asserting plan "${repair.plan}" and ` +
+      `${repair.skuLimit} SKUs over whatever that event said. If it was a downgrade or a ` +
+      'cancellation, the row now claims a plan the customer no longer pays for. Read the ' +
+      'subscription in Stripe and correct the membership by hand: nothing here can undo it'
+    );
+  }
+
+  if (!ours) {
+    return (
+      `the repair applied, but the row's stripe_event_id is now ${after.stripe_event_id ?? 'null'} ` +
+      `and not ${repair.eventId}: something wrote this membership immediately afterwards and ITS ` +
+      `write is the one that stands${clockMoved ? ' (a customer.subscription.* event — the ordering clock moved with it)' : ''}. ` +
+      `The row holds sku_limit ${after.sku_limit}, editor_seat_limit ${after.editor_seat_limit}. If ` +
+      'that is what Stripe now says then nothing is wrong except that this membership was not ' +
+      'repaired'
+    );
+  }
+
   if (after.sku_limit !== repair.skuLimit || after.editor_seat_limit !== repair.editorSeatLimit) {
     return (
       `the RPC reported success but the row holds sku_limit ${after.sku_limit}, ` +
@@ -498,6 +815,144 @@ async function verify(admin: Admin, repair: Repair): Promise<string | null> {
 
   }
   return null;
+}
+
+/**
+ * Un-claim a synthetic event id whose write did not land.
+ *
+ * apply_stripe_entitlement inserts the ledger row BEFORE the resolution ladder, so a call that
+ * returns 'applied' having written nothing still leaves `repair_allowance_v1_<id>` in
+ * public.stripe_webhook_events with outcome 'applied'. Left there, that row is wrong twice: it
+ * records a write that did not happen, and it makes every later run of THIS script return
+ * 'duplicate' for that membership — the id is spent, and only a v2 could try again.
+ *
+ * Deleting it is the narrowest correction available: one row, matched on an id this script
+ * minted itself, which no Stripe delivery can ever carry. No Stripe event id is touched and
+ * the ledger's exactly-once guarantee for real webhook traffic is untouched with it.
+ *
+ * The membership's own stripe_event_id can be left naming the retracted id — the RPC stamps
+ * that column on every apply, including one that wrote nothing else. It is a text column and
+ * not a foreign key, and a dangling name there is much cheaper than a second write to a row
+ * this run has just concluded it should not be touching.
+ */
+async function retractLedgerRow(admin: Admin, eventId: string): Promise<string | null> {
+  const { error } = await admin.
+  from('stripe_webhook_events').
+  delete().
+  eq('event_id', eventId);
+
+  if (!error) return null;
+  return (
+    `and the ledger row for ${eventId} could NOT be retracted (${error.message}), so that id is ` +
+    'burned: re-running this script will return "duplicate" for this membership for ever. A ' +
+    `retry needs REPAIR_EVENT_PREFIX bumped to repair_allowance_v2_, or that one row deleted ` +
+    'by hand from public.stripe_webhook_events'
+  );
+}
+
+/** The store, as the webhook sees it. Only built in --write mode. */
+type Store = ReturnType<typeof createEntitlementStore>;
+
+/**
+ * Confirm, write, prove. Returns null when the membership is repaired, or the sentence that
+ * goes both on screen and under "needs a human".
+ */
+async function applyOne(
+admin: Admin,
+store: Store,
+repair: Repair,
+eventAt: string)
+: Promise<string | null> {
+  // THE ROW AGAIN, IMMEDIATELY BEFORE THE WRITE. Everything above happened against a read that
+  // is now some milliseconds old, and this job runs while Stripe is still delivering.
+  const before = await readRow(admin, repair.row.id);
+  if (typeof before === 'string') return `NOT repaired — ${before}`;
+
+  const drifted = movedBetween(repair.row, before);
+  if (drifted.length > 0) {
+    return (
+      `NOT repaired — the row changed while this run was in flight (${drifted.join(', ')}). ` +
+      'Something else wrote this membership, and a Stripe webhook is the usual answer. This ' +
+      'repair re-asserts the plan it read, so applying it now would write that plan back over ' +
+      'whatever landed — a downgrade or a cancellation would be silently undone and the customer ' +
+      'would keep an allowance they no longer pay for. Read the row, then re-run with ' +
+      `--only ${repair.row.id} if it still needs repairing`
+    );
+  }
+
+  // THE ORDERING CLOCK. apply_stripe_entitlement withdraws a non-subscription event's opinion
+  // about the plan when p_event_at <= stripe_status_at, and the allowance travels with the
+  // plan — so the call would ledger this id, write nothing, and return 'applied'. Checked here
+  // rather than left to the read-back because refusing costs nothing and the read-back costs
+  // the event id.
+  //
+  // Compared against the ROW's own clock rather than against a timestamp taken from the
+  // database, and that is the stronger test rather than the lazier one: stripe_status_at is
+  // Stripe's `event.created`, not Postgres's now(), so it can sit in the future of a database
+  // whose clock is perfectly correct. Sourcing now() from the database would not see that;
+  // this does. (PostgREST renders timestamptz as `…+00:00` and this run stamps `…Z`, so the
+  // two are parsed before they are compared — lexicographic order across those two spellings
+  // is not chronological order.)
+  const rowClock = repair.row.stripe_status_at === null ? null : Date.parse(repair.row.stripe_status_at);
+  if (rowClock !== null && (Number.isNaN(rowClock) || rowClock >= Date.parse(eventAt))) {
+    return (
+      'NOT repaired — its ordering clock is at or ahead of this run (stripe_status_at ' +
+      `${repair.row.stripe_status_at}, this run's event_at ${eventAt}). apply_stripe_entitlement ` +
+      "would have withdrawn this repair's opinion about the plan, dropped the allowance with " +
+      `it, written nothing and still returned "applied" — burning ${repair.eventId}. Check the ` +
+      "clock on this host against the database's, then run again"
+    );
+  }
+
+  let outcome: ApplyOutcome;
+  try {
+    outcome = await store.apply(intentFor(repair, eventAt));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return `NOT repaired — apply_stripe_entitlement threw: ${message}`;
+  }
+
+  if (outcome === 'duplicate') {
+    // The membership is a candidate, so it holds the fail-closed default, AND its v1 repair id
+    // is already in the ledger. Two readings, and they want different answers:
+    //
+    //   * the row's stripe_event_id IS this repair's id — the repair did write, and something
+    //     that did not go through apply_stripe_entitlement has since put the default back;
+    //   * it is anything else — either a later event overwrote the repair, or an earlier run
+    //     ledgered this id without writing (the case retractLedgerRow exists for).
+    //
+    // Naming the id the row actually carries is what lets a human tell them apart from the
+    // ledger. It is NOT safe to conclude "the webhook is broken" from the outcome alone.
+    return (
+      `NOT repaired — outcome "duplicate": ${repair.eventId} is already in the ledger while the ` +
+      `row still holds the fail-closed default. The row's stripe_event_id is ` +
+      `${repair.row.stripe_event_id ?? 'null'}. If that is the repair id, the repair landed and ` +
+      'something outside apply_stripe_entitlement has since reset the allowance; if it is not, ' +
+      'either a later event overwrote it or an earlier run claimed the id without writing. ' +
+      'Read the ledger row before blaming the webhook — and note that v1 is spent for this ' +
+      'membership either way'
+    );
+  }
+
+  if (outcome !== 'applied') {
+    // Every remaining outcome is the function declining, and each is worth reading in full in
+    // 20260802120000 section 6.
+    return `NOT repaired — outcome "${outcome}", nothing written`;
+  }
+
+  const after = await readRow(admin, repair.row.id);
+  if (typeof after === 'string') return `NOT repaired — the RPC reported success but ${after}`;
+
+  const problem = confirmWrite(repair, before, after);
+  if (!problem) return null;
+
+  const retraction = await retractLedgerRow(admin, repair.eventId);
+  if (retraction) return `NOT repaired — ${problem}, ${retraction}`;
+  return (
+    `NOT repaired — ${problem}. The ledger row for ${repair.eventId} has been retracted, so v1 ` +
+    'is not spent on this outcome and this membership can be attempted again once the reason ' +
+    'is understood'
+  );
 }
 
 async function main(): Promise<void> {
@@ -512,86 +967,94 @@ async function main(): Promise<void> {
   const { data: brandRow, error: brandError } = await admin.
   from('brands').
   select('slug').
-  eq('slug', args.brand).
+  eq('slug', REPO_BRAND).
   maybeSingle();
   if (brandError) fail(`could not read public.brands: ${brandError.message}`);
   if (!brandRow) {
     fail(
-      `project ${args.project} has no brand "${args.brand}". Either this is the wrong project or\n` +
-      '  --brand names something this database has never heard of.'
+      `project ${args.project} has no brand "${REPO_BRAND}". This is the wrong project: the\n` +
+      '  Batchlabel memberships this script repairs live wherever that brand row does.'
     );
   }
 
-  const rows = await candidates(admin);
-  console.log(`candidates (sku_limit = ${FAIL_CLOSED_SKU_LIMIT}, membership active, plan <> ${FREE_PLAN}): ${rows.length}`);
+  const rows = await candidates(admin, args.only);
+  console.log(
+    `candidates (sku_limit = ${FAIL_CLOSED_SKU_LIMIT}, membership active, plan <> ${FREE_PLAN}` +
+    (args.only.length > 0 ? ', --only' : '') + `): ${rows.length}`
+  );
 
-  const affected: Candidate[] = [];
-  for (const row of rows) {
-    if (await entitledAccordingToDatabase(admin, row)) affected.push(row);
-  }
-  console.log(`entitled according to public.entitlement_is_active():                   ${affected.length}`);
-
-  const repairs = affected.
-  map((row) => planRepair(row, args.brand)).
-  filter((repair): repair is Repair => repair !== null);
-
-  if (repairs.length === 0) {
-    console.log('\nnothing to repair.');
-  } else {
-    console.log('\nrepairs');
-    for (const repair of repairs) {
-      console.log(`  ${args.write ? 'did  ' : 'would'} ${'repair'.padEnd(10)} ${describe(repair)}`);
-      console.log(`  ${' '.repeat(16)} event_id ${repair.eventId}`);
-    }
+  for (const id of args.only) {
+    if (!rows.some((row) => row.id.toLowerCase() === id)) await explainMissing(admin, id);
   }
 
+  // ONE TIMESTAMP FOR THE WHOLE RUN, TAKEN BEFORE THE FIRST READ, and it is a safety property
+  // rather than a tidiness one.
+  //
+  // Stamped per row at write time — which is what this script used to do — the repair is always
+  // NEWER than any event it is racing, so apply_stripe_entitlement's ordering branch lets it
+  // through and `plan = coalesce(v_plan, m.plan)` writes the scanned plan back over a downgrade
+  // or a cancellation that landed seconds earlier. Stamped once up front it is OLDER than
+  // anything that arrives during the run, so for those events the database's own rule —
+  // withdraw a non-subscription event's opinion when p_event_at <= stripe_status_at — takes the
+  // repair's side of the race away from it. The guard in applyOne then keeps that from turning
+  // into a burnt event id, and the read-back reports whatever is left.
+  //
+  // It also makes one invocation greppable in the ledger as one operation.
+  const eventAt = new Date().toISOString();
+  const store = args.write ? createEntitlementStore(admin) : null;
+
+  let entitled = 0;
+  let repaired = 0;
+  let planned = 0;
   const failures: string[] = [];
 
-  if (args.write && repairs.length > 0) {
-    const store = createEntitlementStore(admin);
-    console.log('\noutcomes');
-    for (const repair of repairs) {
-      let outcome: ApplyOutcome;
-      try {
-        outcome = await store.apply(intentFor(repair));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        failures.push(`${repair.row.user_id} (${repair.plan}) — apply_stripe_entitlement threw: ${message}`);
-        console.log(`  ${'threw'.padEnd(13)} ${repair.row.user_id}  ${message}`);
-        continue;
-      }
-
-      if (outcome !== 'applied') {
-        // 'duplicate' here means this membership's v1 repair id is already in the ledger: it
-        // was repaired before and has fallen back, which is a webhook problem rather than a
-        // row to write again. Every other outcome is the function declining, and each of them
-        // is worth reading in full in 20260802120000 section 6.
-        failures.push(`${repair.row.user_id} (${repair.plan}) — outcome "${outcome}", nothing written`);
-        console.log(`  ${outcome.padEnd(13)} ${repair.row.user_id}  ${repair.eventId}`);
-        continue;
-      }
-
-      const problem = await verify(admin, repair);
-      if (problem) {
-        failures.push(`${repair.row.user_id} (${repair.plan}) — ${problem}`);
-        console.log(`  ${'unverified'.padEnd(13)} ${repair.row.user_id}  ${problem}`);
-        continue;
-      }
+  for (const row of rows) {
+    if (!(await entitledAccordingToDatabase(admin, row))) {
       console.log(
-        `  ${'applied'.padEnd(13)} ${repair.row.user_id}  sku_limit ${repair.skuLimit}, ` +
-        `editor_seat_limit ${repair.editorSeatLimit} — verified`
+        `\n  --  not entitled  ${label(row)}` +
+        `\n      public.entitlement_is_active() says no for plan_status ${JSON.stringify(row.plan_status)}, ` +
+        `current_period_end ${JSON.stringify(row.current_period_end)}. Left alone.`
       );
+      continue;
     }
+    entitled += 1;
+
+    const repair = planRepair(row);
+    if (!repair) continue;
+    planned += 1;
+    printRepair(repair, planned, args.write);
+
+    if (!args.write || !store) continue;
+
+    const problem = await applyOne(admin, store, repair, eventAt);
+    if (problem) {
+      failures.push(`${label(row)} — ${problem}`);
+      const [headline, ...detail] = problem.split(' — ');
+      console.log(`      ✗ ${headline}`);
+      console.log(wrap(detail.join(' — '), '        '));
+      continue;
+    }
+    repaired += 1;
+    console.log(`      ✓ applied and verified: sku_limit ${repair.skuLimit}, editor_seat_limit ${repair.editorSeatLimit}`);
   }
+
+  if (rows.length === 0) await requireVisibleMemberships(admin, connection);
+
+  console.log(
+    `\n${rows.length} candidate(s); ${entitled} entitled according to public.entitlement_is_active(); ` +
+    `${planned} repairable` + (args.write ? `; ${repaired} repaired and verified` : '')
+  );
+
+  for (const failure of failures) notes.push(failure);
 
   if (notes.length > 0) {
     console.log('\n─── needs a human ─────────────────────────────────────────────');
-    for (const note of notes) console.log(`  ! ${note}`);
+    for (const note of notes) console.log(`  ! ${wrap(note, '    ').trimStart()}`);
   }
 
   console.log('\n─── verify from SQL ───────────────────────────────────────────');
   console.log('  -- the same count the plan_limits migration raises a NOTICE for');
-  console.log('  select user_id, brand_slug, plan, sku_limit, editor_seat_limit');
+  console.log('  select id, user_id, brand_slug, business_name, plan, sku_limit, editor_seat_limit');
   console.log('    from public.brand_memberships m');
   console.log('   where public.entitlement_is_active(m.status, m.plan, m.plan_status, m.current_period_end)');
   console.log(`     and m.sku_limit = ${FAIL_CLOSED_SKU_LIMIT};`);
@@ -599,21 +1062,36 @@ async function main(): Promise<void> {
   console.log(`  select * from public.stripe_webhook_events where event_id like '${REPAIR_EVENT_PREFIX}%';`);
 
   if (failures.length > 0) {
-    console.error(`\n✗ ${failures.length} of ${repairs.length} repair(s) did not land:\n`);
-    for (const failure of failures) console.error(`  · ${failure}`);
-    console.error('');
+    console.error(`\n✗ ${failures.length} of ${planned} repair(s) did not land. Nothing was written for those rows.\n`);
     process.exit(1);
   }
 
   if (!args.write) {
+    if (planned === 0) {
+      console.log('\nNothing to repair, and nothing was written.\n');
+      return;
+    }
     console.log(
-      `\n${repairs.length} membership(s) would be repaired. Nothing was written.` +
-      `\nRe-run with --write to apply:  npx vite-node scripts/repair-allowances.ts --project ${args.project} --write\n`
+      `\n${planned} membership(s) would be repaired. Nothing was written.` +
+      '\n\nREAD THE LIST FIRST. A membership whose allowance was set BY HAND — a grandfathered or' +
+      '\ncomped account, which 20260802120000 section 1 says is an UPDATE rather than an invented' +
+      '\nStripe price — looks identical here to one the webhook never resolved: both sit on an' +
+      '\nentitling plan at the fail-closed default. This script cannot tell them apart, and it' +
+      '\nwill raise a hand-set 3 to the full tier allowance. Name the rows that SHOULD be' +
+      '\nrepaired, rather than repairing the population, whenever there is any doubt:' +
+      `\n\n  npx vite-node scripts/repair-allowances.ts --project ${args.project} --only <membership id> --write` +
+      '\n\nRepairing one reviewed row at a time is also the safe way to run this against live' +
+      '\nwebhook traffic: a subscription that changes mid-run is refused rather than reverted,' +
+      '\nbut a shorter run is a smaller window.\n'
     );
     return;
   }
 
-  console.log(`\n✓ ${repairs.length} membership(s) repaired and verified in project ${args.project}.\n`);
+  if (repaired === 0) {
+    console.log('\nNothing needed repairing, and nothing was written.\n');
+    return;
+  }
+  console.log(`\n✓ ${repaired} membership(s) repaired and verified in project ${args.project}.\n`);
 }
 
 main().catch((error) => fail(error instanceof Error ? error.message : String(error)));

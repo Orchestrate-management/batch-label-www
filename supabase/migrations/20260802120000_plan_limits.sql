@@ -683,7 +683,13 @@ grant  execute on function public.get_entitlement(text) to authenticated;
 -- path again with an allowance resolved from the plan contract, which writes the number on
 -- the normal path and leaves a ledger row proving it happened.
 --
--- THE PROCEDURE:
+-- THE PROCEDURE. Both variables are required and the run stops on the first one that is
+-- missing, so export them before the first attempt rather than after it. Both are in the
+-- Supabase dashboard under Project Settings -> API; <ref> is the project ref in that page's
+-- URL, and the script refuses to run unless it matches the ref in SUPABASE_URL.
+--
+--   export SUPABASE_URL=https://<ref>.supabase.co
+--   export SUPABASE_SERVICE_ROLE_KEY=<the service_role key>
 --
 --   npx vite-node scripts/repair-allowances.ts --project <ref>            # dry run, writes nothing
 --   npx vite-node scripts/repair-allowances.ts --project <ref> --write    # applies
@@ -699,14 +705,25 @@ grant  execute on function public.get_entitlement(text) to authenticated;
 -- It is not a race a second attempt wins, and there is no sub-population it works for. The
 -- ledger is never pruned, so a recorded event id stays a duplicate for ever; and section 1
 -- revokes insert/update/delete on brand_memberships from anon and authenticated while this
--- function is service-role only, so the ONLY path that can ever have set an entitling plan is
--- the one that ledgered its event id first. Every row the NOTICE below counts therefore has
--- its entitling event already claimed.
+-- function is service-role only, so NO PATH IN THIS REPO can set an entitling plan without
+-- ledgering its event id first. Every row the NOTICE below counts therefore has its entitling
+-- event already claimed.
 --
--- The 'no_membership' return above is the single case where Resend does help, which is
--- exactly why that case is deliberately NOT ledgered (see 20260801120000:368-371 and
--- src/server/webhook.ts:187-188). That exception is the proof of the rule: once an event id
--- is recorded, Resend is inert.
+-- "In this repo" is the honest limit of that argument. The service role is project-wide and
+-- this project is shared across Orchestrate brands, so a row written by another brand's
+-- service-role code, or by hand in the SQL editor, can carry an entitling plan with no ledger
+-- row at all — and Resend has nothing to re-deliver for one of those either. The script is a
+-- step more careful than this paragraph: another brand's row it refuses outright and reports
+-- under "needs a human", because it holds the Batchlabel plan contract and no other, and it
+-- will not resolve an allowance that is not its to resolve. A hand-written BATCHLABEL row it
+-- cannot tell from a stuck one — a comped or grandfathered allowance sitting at the default
+-- looks identical — which is why its dry run says so in as many words, and why it takes a
+-- repeatable --only <brand_memberships.id> for naming the rows that should actually change.
+--
+-- The two returns above — 'no_membership' and 'unknown_brand' — are the ones Resend can still
+-- help with, which is exactly why neither is ledgered (see 20260801120000:368-371, and
+-- src/server/webhook.ts:54, which groups precisely those two as UNACTIONABLE). Those
+-- exceptions are the proof of the rule: once an event id is recorded, Resend is inert.
 --
 -- WHAT THE SCRIPT DOES INSTEAD. It selects the rows this NOTICE counts — narrowed by the two
 -- conditions section 4 asserts at apply time (a membership that is not active is not entitled;
@@ -720,6 +737,15 @@ grant  execute on function public.get_entitlement(text) to authenticated;
 -- nothing rather than applying twice. Its event_type is `repair.allowance`, which does not
 -- match `customer.subscription.%`, so the repair does not advance stripe_status_at and cannot
 -- make a genuine later Stripe event look stale.
+--
+-- IT RUNS WHILE STRIPE IS STILL DELIVERING, so it does not scan the population first and write
+-- afterwards. Each row is confirmed, re-read and written in one pass, and a row that changed
+-- in between is refused and named rather than repaired on facts that are already stale: the
+-- repair re-asserts the plan it read, so writing on a stale read is how a downgrade or a
+-- cancellation that landed mid-run gets silently put back. What it cannot prevent it reports —
+-- the read-back after the write compares stripe_status_at, which only a customer.subscription.*
+-- event moves and this repair never does. Repairing a few reviewed rows at a time with --only
+-- is both how a row that must not be touched is excluded and how that window is kept short.
 --
 -- Until that repair such a row keeps the fail-closed default from section 1 — least
 -- allowance, never most — so the intermediate state is safe in the sense that nothing is
