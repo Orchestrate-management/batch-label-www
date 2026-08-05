@@ -38,7 +38,7 @@ export const homeFaqs: FaqEntry[] = [
 {
   question: 'Which products does it cover?',
   answer:
-  'Candles, wax melts, reed diffusers and room sprays, built against UK and EU CLP. That is the lot. We would like to cover cosmetics and other categories one day, but none of that is built and we are not promising a date. If you make something unusual, send us the safety data sheet and we will tell you honestly whether we can handle it.'
+  'Candles, wax melts, reed diffusers and room sprays, built against UK and EU CLP. That is the lot. If you make something unusual, send us the safety data sheet and we will tell you honestly whether we can handle it.'
 },
 {
   question: 'What if I change my recipe?',
@@ -60,17 +60,12 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   {
     question: 'Which product categories can I label today?',
     answer:
-    'Candles, wax melts, reed diffusers and room sprays, all built against UK CLP and EU CLP. Nothing else, yet.'
+    'Candles, wax melts, reed diffusers and room sprays, all built against UK CLP and EU CLP.'
   },
   {
-    question: 'Do you do cosmetics labelling?',
+    question: 'What if I make something unusual?',
     answer:
-    'No. It is the category makers ask us for most and the one we would most like to add, but we have not started building it and there is no date. Email hello@batchlabel.co.uk if you want it and we will let you know if that changes. Whenever it arrives it would cover the label only, so it would still not replace a Cosmetic Product Safety Report.'
-  },
-  {
-    question: 'Will Batchlabel work for other products, like wider consumer goods or electronics?',
-    answer:
-    'One day, we hope. The hard part of any label is turning safety data into the exact words the rules require, and that is not specific to candles. But nothing beyond candles and home fragrance exists, and we would rather say so than sell you a roadmap.'
+    'Send us the safety data sheet at hello@batchlabel.co.uk and we will tell you honestly whether Batchlabel can handle it. If it is beyond what we do we will say so rather than take your money.'
   }]
 
 },
@@ -106,11 +101,6 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
     question: 'Does Batchlabel confirm that my label is compliant?',
     answer:
     'No, and you should be wary of any tool that says it does. We build the label against published CLP requirements from the details you enter. If the safety data sheet or the percentage you give us is wrong, the label will be wrong too. Responsibility for the final label rests with you as the seller.'
-  },
-  {
-    question: 'Do I also need a CPSR for cosmetics?',
-    answer:
-    'If you sell cosmetics, yes. A CPSR is a Cosmetic Product Safety Report and it is separate from labelling. Batchlabel does not produce one, and we do not label cosmetics at all today.'
   },
   {
     question: 'What about poison centre notification?',

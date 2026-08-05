@@ -7,7 +7,6 @@ import { verticals, type Vertical } from '../content/verticals';
 
 const statusStyles: Record<Vertical['status'], string> = {
   'live': 'border-teal-600/25 bg-teal-50 text-teal-800',
-  'interest': 'border-clay-500/25 bg-clay-100 text-clay-600',
   'idea': 'border-paper-edge bg-paper text-ink-muted'
 };
 
@@ -43,14 +42,13 @@ export function About() {
           <p>
             Somewhere along the way we noticed the hard part was never the candle. It was turning the
             data behind a product into the exact words a regulation demands, then setting them at the
-            right size on a label. A soap maker or a skincare brand runs into a version of the same
-            problem.
+            right size on a label. A wax melt maker and a room spray maker run into a version of the
+            same problem.
           </p>
           <p>
-            Batchlabel is the first product from Orchestrate. We would like to take on more
-            categories one day, and cosmetics is the one makers ask us for most. We have not started
-            it. We are not going to give you a date, and you will not find a countdown anywhere on
-            this site. Candles is what works, and it stays the priority.
+            Batchlabel is the first product from Orchestrate. Home fragrance is what it does, it is
+            what works, and it stays the priority. You will not find a roadmap countdown anywhere on
+            this site.
           </p>
           <p>
             We are based in the UK and we work with UK CLP and EU CLP, the rules on Classification,

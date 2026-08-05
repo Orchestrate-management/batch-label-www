@@ -69,7 +69,7 @@ export function Terms() {
         <LegalList
           items={[
           'We do not certify, approve, verify or confirm that any label meets your legal obligations, and we do not represent that it does.',
-          'We do not carry out a chemical safety assessment, a classification review by a qualified toxicologist, or a Cosmetic Product Safety Report.',
+          'We do not carry out a chemical safety assessment or a classification review by a qualified toxicologist.',
           'Our output depends entirely on the accuracy and currency of the information you enter, including the safety data sheet you upload and the percentages you type. We cannot detect an out of date safety data sheet or an incorrect recipe.',
           'You remain the supplier of your product for the purposes of labelling law. Responsibility for the final label, for checking it against your own product and circumstances, and for any other obligation such as poison centre notification, packaging, weights and measures or product safety, rests with you.',
           'Regulations, guidance and their interpretation change. We update the service as we become aware of changes, but we do not warrant that the service reflects every change at any given moment.',
