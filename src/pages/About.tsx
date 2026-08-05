@@ -3,12 +3,7 @@ import { breadcrumbSchema, graph } from '../lib/structured-data';
 import { PageHero } from '../components/PageHero';
 import { Section, Heading, Eyebrow, Lead } from '../components/ui/Section';
 import { CtaBand } from '../components/CtaBand';
-import { verticals, type Vertical } from '../content/verticals';
-
-const statusStyles: Record<Vertical['status'], string> = {
-  'live': 'border-teal-600/25 bg-teal-50 text-teal-800',
-  'idea': 'border-paper-edge bg-paper text-ink-muted'
-};
+import { productForms } from '../content/product-forms';
 
 export function About() {
   usePageMeta({
@@ -62,33 +57,24 @@ export function About() {
         </div>
       </Section>
 
-      <Section className="bg-white" ariaLabelledBy="ladder-heading">
-        <Eyebrow>Categories</Eyebrow>
-        <Heading id="ladder-heading">Where things actually stand</Heading>
+      <Section className="bg-white" ariaLabelledBy="scope-heading">
+        <Eyebrow>What we cover</Eyebrow>
+        <Heading id="scope-heading">Four things, done properly</Heading>
         <Lead className="mt-3">
-          We would rather do one category properly than ten badly.
+          We would rather do one category properly than ten badly. This is the whole of it.
         </Lead>
 
-        <ol className="mt-8 space-y-3">
-          {verticals.map((vertical) =>
+        <ul className="mt-8 grid gap-3 sm:grid-cols-2">
+          {productForms.map((form) =>
           <li
-            key={vertical.id}
-            className="flex flex-col gap-2 rounded-2xl border border-paper-edge bg-paper p-5 sm:flex-row sm:items-start sm:gap-5">
+            key={form.id}
+            className="rounded-2xl border border-paper-edge bg-paper p-5">
 
-              <span
-              className={`inline-flex w-fit shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-              statusStyles[vertical.status]}`
-              }>
-
-                {vertical.statusLabel}
-              </span>
-              <div>
-                <h3 className="font-display text-[1.05rem] font-semibold text-ink">{vertical.name}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-ink-soft">{vertical.description}</p>
-              </div>
+              <h3 className="font-display text-[1.05rem] font-semibold text-ink">{form.name}</h3>
+              <p className="mt-1 text-sm leading-relaxed text-ink-soft">{form.what}</p>
             </li>
           )}
-        </ol>
+        </ul>
       </Section>
 
       <Section ariaLabelledBy="values-heading">

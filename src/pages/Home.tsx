@@ -6,7 +6,7 @@ import { TrustStrip } from '../components/home/TrustStrip';
 import { ProblemCards } from '../components/home/ProblemCards';
 import { HowItWorksSteps } from '../components/home/HowItWorksSteps';
 import { WhatsIncluded } from '../components/home/WhatsIncluded';
-import { Verticals } from '../components/home/Verticals';
+import { ProductForms } from '../components/home/ProductForms';
 import { Testimonials } from '../components/home/Testimonials';
 import { FaqSection } from '../components/home/FaqSection';
 import { CtaBand } from '../components/CtaBand';
@@ -31,7 +31,7 @@ export function Home() {
       <ProblemCards />
       <HowItWorksSteps />
       <WhatsIncluded />
-      <Verticals />
+      <ProductForms />
       <Testimonials />
       <FaqSection items={homeFaqs} />
       <CtaBand location="home_final" />
