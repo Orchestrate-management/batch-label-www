@@ -17,8 +17,23 @@ npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
 npm run test:run     # Vitest (once)
 npm run test:coverage # Vitest + coverage
-npm run build        # production build
+npm run build        # production build, including the prerender pass
 ```
 
 See [TESTING.md](./TESTING.md) for the full stack, coverage thresholds, CI, and how deployments are
 gated.
+
+## Prerendering
+
+`npm run build` ends by rendering the ten public marketing pages into static HTML, so a
+crawler that does not execute JavaScript gets the actual page rather than an empty shell.
+To see exactly what one receives:
+
+```
+npm run build
+npm run audit:static    # every public route, fetched over HTTP with no JS, as Vercel routes it
+npm run serve:dist      # or serve dist/ through vercel.json yourself, on :4180
+```
+
+[docs/ROUTING.md](./docs/ROUTING.md) explains the `vercel.json` that makes those files
+reachable, which is the half that is easy to get wrong without noticing.

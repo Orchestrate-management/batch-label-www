@@ -47,11 +47,19 @@ jobs:
       - name: SQL (migrations replay, brand isolation, billing invariants)
         run: npm run test:sql
 
+      # Ahead of the test step, which is a change from how this used to run.
+      #
+      # `npm run build` now ends in scripts/prerender.mjs, which renders the ten public
+      # pages into dist/ and refuses to write anything that fails its own checks. That
+      # makes it a real gate in its own right, and it means dist/ exists by the time the
+      # suite runs — which is what src/lib/prerendered-output.test.ts needs. Without a
+      # build first those tests skip, and a suite that skips its way to green is the
+      # failure mode this whole change is about.
+      - name: Build (including the prerender pass)
+        run: npm run build
+
       - name: Test (with coverage)
         run: npm run test:coverage
-
-      - name: Build
-        run: npm run build
 
       - name: Upload coverage report
         if: always()
