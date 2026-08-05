@@ -52,22 +52,51 @@ export async function fetchMembershipState(): Promise<MembershipState> {
 }
 
 export const FINISH_SETUP_PATH = '/finish-setup';
-export const DASHBOARD_PATH = '/dashboard';
 
 /**
- * Where a signed-in user should be sent, or null to render the page they asked for.
+ * Where an authenticated person belongs.
  *
- * Kept as a plain function so the routing rule is testable on its own, and so both ends
- * of the gate use the same rule and cannot disagree into a redirect loop:
- * the dashboard only ever pushes people OUT on `needs_setup`, and the completion screen
- * only ever pushes people out on `complete`. `unknown` never redirects, from either side.
+ * `app` is the product on app.batchlabel.xyz, reached by a full cross-origin navigation
+ * through lib/app-handoff.ts. `finish_setup` is this site's completion screen. `render` is
+ * "you are already looking at the right thing".
+ *
+ * There used to be a third destination, www's own /dashboard, and it is what this whole
+ * change removes: the app owns account management, so there is nowhere on this site for a
+ * signed-in maker to be sent that is not a detour.
  */
-export function membershipRedirect(
-state: MembershipState,
-page: 'dashboard' | 'finish_setup')
-: string | null {
-  if (page === 'dashboard') return state === 'needs_setup' ? FINISH_SETUP_PATH : null;
-  return state === 'complete' ? DASHBOARD_PATH : null;
+export type Destination = 'app' | 'finish_setup' | 'render';
+
+/**
+ * What the completion screen at /finish-setup should do.
+ *
+ * This is where Google returns everybody, signup and login alike, because an OAuth call
+ * has nowhere to carry a brand, a business name or a Terms acceptance and the account is
+ * not really made until those are collected. So the screen has to answer two questions
+ * with one route: a new Google user sees the form, and a returning one is handed to the
+ * app without touching anything.
+ *
+ * `unknown` renders the form rather than handing over. A failed membership read must never
+ * push somebody PAST a consent gate — the worst case here is that a returning user is
+ * asked once more, and complete_oauth_signup is idempotent, so re-submitting provisions
+ * nothing and re-applies only the box they ticked.
+ */
+export function finishSetupDestination(state: MembershipState): Destination {
+  return state === 'complete' ? 'app' : 'render';
+}
+
+/**
+ * What to do with somebody who is ALREADY signed in and has opened /log-in.
+ *
+ * Deliberately the opposite call on `unknown` from the rule above, and for the opposite
+ * reason: there is no consent gate to skip here, and this person has an account and asked
+ * to get into it. A successful password login on this same page hands them to the app
+ * without reading the membership at all, so treating a failed read as "go to the app" is
+ * the behaviour they would have had anyway. The app has its own session gate, and its
+ * bounce counter (the app repo's lib/auth-redirect.ts) is what stops a crossing that does
+ * not carry from becoming a loop.
+ */
+export function signedInDestination(state: MembershipState): Destination {
+  return state === 'needs_setup' ? 'finish_setup' : 'app';
 }
 
 export interface CompletionInput {

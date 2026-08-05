@@ -39,8 +39,14 @@ export function CheckoutSuccess() {
           <Button href={APP_URL} size="lg" track={{ label: 'Open Batchlabel', location: 'checkout_success' }}>
             Back to my labels
           </Button>
-          <Button to="/dashboard/account" variant="secondary" size="lg">
-            Account and billing
+          {/*
+            Into the app, not to this site's account page — there is no longer one, and
+            there should not be. This used to point at /dashboard/account, which is now a
+            forwarding address; linking through it would be a redirect a customer could
+            watch happen for no reason.
+           */}
+          <Button href={`${APP_URL}/billing`} variant="secondary" size="lg">
+            Billing and invoices
           </Button>
         </div>
 

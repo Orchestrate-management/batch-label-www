@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { AuthProvider, RequireAuth, RequireMembership } from './lib/auth';
+import { AuthProvider, HandOffIfSignedIn, RequireAuth, RequireSetup } from './lib/auth';
 import { captureAttribution } from './lib/attribution';
 import { SiteLayout } from './components/layout/SiteLayout';
 import { CookieBanner } from './components/CookieBanner';
 import { RouteAnnouncer } from './components/RouteAnnouncer';
-import { DashboardLayout } from './components/dashboard/DashboardLayout';
+import { AppRedirect } from './pages/AppRedirect';
 import { Home } from './pages/Home';
 import { Pricing } from './pages/Pricing';
 import { HowItWorks } from './pages/HowItWorks';
@@ -25,8 +25,6 @@ import { ResetPassword } from './pages/auth/ResetPassword';
 import { FinishSetup } from './pages/auth/FinishSetup';
 import { CheckoutSuccess } from './pages/checkout/CheckoutSuccess';
 import { CheckoutCancelled } from './pages/checkout/CheckoutCancelled';
-import { Labels } from './pages/dashboard/Labels';
-import { Account } from './pages/dashboard/Account';
 
 /** First touch attribution is captured once, before anything else can overwrite it. */
 function AttributionCapture() {
@@ -69,40 +67,60 @@ export function App() {
           </Route>
 
           <Route path="/sign-up" element={<SignUp />} />
-          <Route path="/log-in" element={<LogIn />} />
+          {/*
+            Somebody who is already signed in is not shown a login form; they are sent
+            where they were going. See HandOffIfSignedIn in lib/auth.tsx.
+
+            /sign-up is deliberately NOT wrapped the same way. "Log in" while logged in has
+            one sensible meaning and no other; "make a label free" does not, and a maker
+            who wants a second account under a different email must be able to reach the
+            form to sign out of the first one.
+          */}
+          <Route
+            path="/log-in"
+            element={
+            <HandOffIfSignedIn>
+                <LogIn />
+              </HandOffIfSignedIn>
+            } />
+
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/check-your-email" element={<CheckEmail />} />
           <Route path="/reset-password" element={<ResetPassword />} />
 
           {/*
-            Where Google sends people who signed up rather than logged in. Guarded the
-            same way as the dashboard but in the opposite direction: anyone who already
-            has a membership is bounced to /dashboard rather than re-asked for consent.
+            Where Google returns everybody, signup and login alike, because an OAuth call
+            cannot carry a business name or a Terms acceptance and this is the first point
+            at which we can tell the two apart. A new user gets the form; a returning one
+            is handed straight to the app without touching anything.
           */}
           <Route
             path="/finish-setup"
             element={
             <RequireAuth>
-                <RequireMembership page="finish_setup">
+                <RequireSetup>
                   <FinishSetup />
-                </RequireMembership>
+                </RequireSetup>
               </RequireAuth>
             } />
 
 
-          <Route
-            path="/dashboard"
-            element={
-            <RequireAuth>
-                <RequireMembership page="dashboard">
-                  <DashboardLayout />
-                </RequireMembership>
-              </RequireAuth>
-            }>
+          {/*
+            THE WWW DASHBOARD IS GONE, AND THESE TWO ROUTES ARE ITS FORWARDING ADDRESS.
 
-            <Route index element={<Labels />} />
-            <Route path="account" element={<Account />} />
-          </Route>
+            www is marketing and auth. app.batchlabel.xyz owns account management, and it
+            covers everything this site's account page used to: the email address, the
+            password, the marketing email consent, the plan, the Stripe portal and the
+            data-rights requests — several of them properly, where www could only print an
+            address to write to. Keeping a second place to manage an account is what
+            produced the complaint this change answers.
+
+            Not gated on a session, on purpose. Somebody signed out following an old
+            bookmark is better served by the app's own gate, which sends them to /log-in
+            with `next` set and therefore brings them back to where they were aiming.
+          */}
+          <Route path="/dashboard" element={<AppRedirect />} />
+          <Route path="/dashboard/account" element={<AppRedirect to="/settings/account" />} />
         </Routes>
         <CookieBanner />
       </AuthProvider>
