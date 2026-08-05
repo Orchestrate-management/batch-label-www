@@ -58,7 +58,7 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   title: 'Which products we cover',
   items: [
   {
-    question: 'Which product categories can I label today?',
+    question: 'What can I label with Batchlabel?',
     answer:
     'Candles, wax melts, reed diffusers and room sprays, all built against UK CLP and EU CLP.'
   },

@@ -337,6 +337,24 @@ const OTHER_CATEGORIES: BannedClaim[] = [
   {
     why: 'Electronics went with the CE, RoHS and WEEE regimes. Nothing on the site may imply a device is labellable.',
     pattern: /electronics?|\bWEEE\b|\bRoHS\b|\bUKCA\b/i
+  },
+  {
+    /**
+     * The last roadmap entry standing, and the one that survived the cosmetics and
+     * electronics sweep by being neither.
+     *
+     * "Wider consumer goods" was an `idea` card: household products, detergents and food
+     * contact items, named out loud with no work behind it. It was the only thing left for
+     * the categories section to compare candles against, which is how a section that exists
+     * to compare ended up comparing one thing with nothing. Cutting it is what let that
+     * section become four product forms instead of a ladder.
+     *
+     * It is banned by the same rule as the other two and for the same reason: a second scope
+     * in the reader's head costs the same whether it is offered or refused. Detergents and
+     * food contact items are a real labelling problem — they are just not this one.
+     */
+    why: 'Wider consumer goods was a named direction with nothing behind it. Naming it again puts a second scope in the reader\'s head.',
+    pattern: /consumer goods|detergents?|household (?:products?|cleaners?|goods)|food[ -]contact/i
   }
 ];
 
@@ -362,18 +380,30 @@ describe('no surface names a category Batchlabel does not label', () => {
   'cosmetics is the one makers ask us for most',
   'it would never replace a Cosmetic Product Safety Report',
   'Electronics & batteries',
-  'CE and UKCA marking, WEEE and battery rules'])(
+  'CE and UKCA marking, WEEE and battery rules',
+  'Wider consumer goods',
+  'Household products, detergents and food contact items turn safety data into label copy too.',
+  'Will Batchlabel work for other products, like wider consumer goods or electronics?'])(
     'still catches the copy that shipped: %s',
     (shipped) => {
       expect(OTHER_CATEGORIES.some((claim) => claim.pattern.test(shipped))).toBe(true);
     }
   );
 
+  /**
+   * The other half, and it earns its place twice over now: the consumer-goods pattern is the
+   * broadest of the three, so the copy that replaced the card has to be pinned against it.
+   * Every sentence below is live on the homepage or on /about.
+   */
   it('leaves the category we do label alone', () => {
     for (const allowed of [
     'Candles, wax melts, reed diffusers and room sprays',
     'built against UK CLP and EU CLP',
-    'Upload the safety data sheet from your fragrance supplier']) {
+    'Upload the safety data sheet from your fragrance supplier',
+    'Wax poured into a jar or a tin, sold by net weight.',
+    'A fragrance base in a bottle with reeds, sold by volume.',
+    'Fragrance in an alcohol or solvent base, in a spray bottle, sold by volume.',
+    'Home fragrance is the only category we cover, and everything in Batchlabel is built around it.']) {
       expect(OTHER_CATEGORIES.some((claim) => claim.pattern.test(allowed))).toBe(false);
     }
   });
