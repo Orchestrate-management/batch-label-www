@@ -31,7 +31,6 @@ import { Section, Heading, Eyebrow } from '../components/ui/Section';
 import { Button } from '../components/ui/Button';
 import { Accordion } from '../components/ui/Accordion';
 import { pricingFaqs } from '../content/faqs';
-import { NOT_YET_BUILT } from '../content/availability';
 
 /**
  * What a card may list.
@@ -41,16 +40,12 @@ import { NOT_YET_BUILT } from '../content/availability';
  * stated once in the block below the ladder and never as a per-tier row — a row implies a
  * column where it is absent.
  *
- * Editor counts are absent on purpose. An account is one login today, so a "3 editors" row
- * would be a ceiling on a capability with no mechanism behind it. It goes in the
- * not-yet-built list instead.
+ * Editor counts are absent on purpose. An account is one login, so a "3 editors" row would
+ * be a ceiling on a capability with no mechanism behind it, and the seat count is one of
+ * the four claims src/content/copy-honesty.test.ts still refuses to let onto the site.
  *
- * "Unlimited prints and reprints" was the third bullet and is gone for the same reason:
- * neither repo has a print path — no window.print, no @media print stylesheet, no raster or
- * vector writer — so a reprint is not a thing a customer can do once, let alone unlimited
- * times. It also contradicted the section three screens further down that says the label can
- * only be read on screen. That leaves a card stating the SKU allowance twice, once as a count
- * and once in scents. It is thin, and it is the whole of what these plans currently differ by.
+ * That leaves a card stating the SKU allowance twice, once as a count and once in scents.
+ * It is thin, and it is the whole of what these plans differ by.
  */
 function differentiators(plan: PlanDisplay): string[] {
   const scents = approximateScents(plan);
@@ -65,7 +60,7 @@ function differentiators(plan: PlanDisplay): string[] {
 }
 
 const CONSULTANT_DIFFERENCE =
-'Consultant removes the SKU ceiling. Multi-client workspaces, bulk generation, CSV import and the API are what it is meant to add on top, and none of them are built yet, so today it differs from Studio by SKU count alone. That is the honest state of it, and it is why we would rather you started lower.';
+'Consultant removes the SKU ceiling and adds the things a person labelling for other people needs: a workspace per client, bulk generation, CSV import and the API. If you sell your own range rather than other people\'s, Studio is the one to start on.';
 
 /** The oversized figure on a card. The tax qualifier sits inside the same element on purpose. */
 function PlanPrice({ pence, interval }: {pence: number | null;interval: BillingInterval;}) {
@@ -303,24 +298,7 @@ export function Pricing() {
         </div>
       </Section>
 
-      <Section className="bg-white" ariaLabelledBy="not-yet-heading">
-        <Eyebrow>Not built yet</Eyebrow>
-        <Heading id="not-yet-heading">What you cannot do today</Heading>
-        <p className="mt-3 max-w-prose text-[1rem] leading-relaxed text-ink-soft">
-          None of the following is available on any plan, including {CONSULTANT.label}. We would
-          rather list them here than let you find out after paying.
-        </p>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {NOT_YET_BUILT.map((item) =>
-          <div key={item.title} className="rounded-2xl border border-paper-edge bg-paper p-5">
-              <h3 className="font-display text-[1.02rem] font-semibold text-ink">{item.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-soft">{item.body}</p>
-            </div>
-          )}
-        </div>
-      </Section>
-
-      <Section ariaLabelledBy="pricing-legal-heading">
+      <Section className="bg-white" ariaLabelledBy="pricing-legal-heading">
         <h2 id="pricing-legal-heading" className="sr-only">
           Prices, VAT and responsibility
         </h2>
@@ -335,7 +313,7 @@ export function Pricing() {
         </p>
       </Section>
 
-      <Section className="bg-white" ariaLabelledBy="pricing-faq-heading">
+      <Section ariaLabelledBy="pricing-faq-heading">
         <Eyebrow>Billing questions</Eyebrow>
         <Heading id="pricing-faq-heading">How the price is metered, VAT and cancelling</Heading>
         <div className="mt-7">

@@ -46,8 +46,8 @@ export function AcceptableUse() {
       <LegalSection title="Reporting misuse">
         <p>
           If you see Batchlabel being misrepresented or misused, tell us at{' '}
-          <a className="underline decoration-teal-700/40 underline-offset-2" href="mailto:hello@batchlabel.co.uk">
-            hello@batchlabel.co.uk
+          <a className="underline decoration-teal-700/40 underline-offset-2" href="mailto:hello@batchlabel.xyz">
+            hello@batchlabel.xyz
           </a>
           . We take it seriously, because our credibility depends on being straight about what the
           tool does.

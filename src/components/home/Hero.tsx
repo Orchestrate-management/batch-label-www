@@ -21,7 +21,7 @@ export function Hero() {
             For small batch makers in the UK and EU
           </p>
           <h1 className="font-display text-[2.1rem] font-semibold leading-[1.08] tracking-[-0.02em] text-ink sm:text-[3.1rem]">
-            Correct CLP labels for your candles, in minutes.
+            Correct CLP labels for candles, melts, diffusers and sprays.
           </h1>
           <p className="mt-4 max-w-prose text-[1.08rem] leading-relaxed text-ink-soft">
             Upload the safety data sheet from your fragrance supplier, enter how much fragrance is
@@ -29,8 +29,8 @@ export function Hero() {
             minimum sizes your label needs.
           </p>
           <p className="mt-3 max-w-prose text-[0.98rem] leading-relaxed text-ink-muted">
-            Home fragrance is the only category we cover, and everything in Batchlabel is built
-            around it.
+            A reed diffuser at 30 per cent fragrance and a candle at 8 per cent are two different
+            labelling jobs. Batchlabel does both properly.
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">

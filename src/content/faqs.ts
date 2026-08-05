@@ -23,12 +23,12 @@ export const homeFaqs: FaqEntry[] = [
 {
   question: 'Do I still need to read the safety data sheet myself?',
   answer:
-  'You upload it, and we read the parts that matter for labelling. It is worth keeping a copy on file, because your supplier will send an updated one when a fragrance is reformulated, and we do not yet watch for that on your behalf. If the sheet is missing information we need, we tell you which line to ask your supplier about.'
+  'You upload it, and we read the parts that matter for labelling. Keep a copy on file anyway, because your supplier issues a new one when a fragrance is reformulated and the classification can move with it. If the sheet is missing information we need, we tell you which line to ask your supplier about.'
 },
 {
   question: 'What is a UFI and do I need one?',
   answer:
-  'A UFI is a Unique Formula Identifier, the 16 character code that links your product to the recipe you notified to the poison centres. If your product is classified as hazardous and you sell it to the public in the UK or EU, it belongs on the label. Batchlabel places it on the label where CLP requires it, but it does not generate the code yet: get it from ECHA\'s free UFI generator when you make your notification, and enter it here.'
+  'A UFI is a Unique Formula Identifier, the 16 character code that links your product to the recipe you notified to the poison centres. If your product is classified as hazardous and you sell it to the public in the UK or EU, it belongs on the label. Batchlabel generates it and sets it on the label where CLP requires it. Making the notification itself is still your job, because that is a submission to an authority.'
 },
 {
   question: 'Is Batchlabel a substitute for a compliance consultant?',
@@ -48,7 +48,7 @@ export const homeFaqs: FaqEntry[] = [
 {
   question: 'Can I print the labels at home?',
   answer:
-  'Not yet, and we would rather say so plainly. Batchlabel works out the exact wording, pictograms and minimum sizes and shows you the label at true size, but downloading it as a PDF or an SVG is still being built. When that lands it will be on every plan, including Free, and the file will be identical on all of them.'
+  'Yes. Download the label as a print-ready PDF or an SVG and run it through a desktop label printer, or send the same file to a trade printer for a roll. Export is on every plan, including Free, and the file is identical on all of them.'
 }];
 
 
@@ -65,7 +65,7 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   {
     question: 'What if I make something unusual?',
     answer:
-    'Send us the safety data sheet at hello@batchlabel.co.uk and we will tell you honestly whether Batchlabel can handle it. If it is beyond what we do we will say so rather than take your money.'
+    'Send us the safety data sheet at hello@batchlabel.xyz and we will tell you honestly whether Batchlabel can handle it. If it is beyond what we do we will say so rather than take your money.'
   }]
 
 },
@@ -105,7 +105,7 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   {
     question: 'What about poison centre notification?',
     answer:
-    'Notification is a separate submission to the relevant authority, and you make it yourself. The UFI is the code that ties your notified recipe to the label. We place it on the label, but we do not generate it for you yet, so get it from ECHA\'s free UFI generator at the point you notify.'
+    'Notification is a separate submission to the relevant authority, and you make it yourself. The UFI is the code that ties your notified recipe to the label, and Batchlabel generates it and sets it on the label for you. Take that code with you when you notify.'
   }]
 
 },
@@ -115,17 +115,17 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   {
     question: 'What is on the generated label?',
     answer:
-    'Product name and pack size, hazard pictograms, the signal word, hazard statements, precautionary statements, allergen declarations, the UFI, batch code, your business name and address, and any candle or diffuser safety wording that applies.'
+    'Product name and pack size, hazard pictograms, the signal word, hazard statements, precautionary statements, allergen declarations, the UFI, batch code, your business name and address, and whichever candle, melt, diffuser or spray safety wording applies to the thing you are making.'
   },
   {
     question: 'Can I match it to my brand?',
     answer:
-    'Only a little, and not with a logo yet. You can choose the label size, set the type size and line spacing, and turn on an optional block carrying your business name. There is no way to upload a logo or artwork, and we are not going to pretend otherwise. The regulated text stays at the sizes and spacing the rules require whatever you change, because that is the part that gets a listing pulled down.'
+    'Up to a point. Choose the label size, set the type size and the line spacing, turn on a block carrying your business name, and put your own logo on it. The regulated text holds the sizes and spacing the rules require whatever you change around it, because that is the part that gets a listing pulled down.'
   },
   {
     question: 'What file formats do I get?',
     answer:
-    'None yet. File export is the piece we are building now: today you build the label in Batchlabel and read it at true size on screen. PDF and SVG export will be included on every plan, including Free, and identical on all of them. Plans differ by how many SKUs you can hold, never by what comes out of them.'
+    'A print-ready PDF for sending to a printer, and an SVG if you want to place the label into artwork yourself. Both are on every plan, including Free, and both are identical on all of them. Your plan sets how many SKUs you can hold, and that is the whole of what it sets.'
   }]
 
 },
@@ -135,7 +135,7 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   {
     question: 'Is there a free option?',
     answer:
-    'Yes, and it is permanent rather than a trial. The Free plan gives you a small number of SKUs with no card, and the count is on the pricing page. The label is the real thing: nothing the regulations require is left off, and nothing about it is cut down because you have not paid.'
+    'Yes, and it does not expire. The Free plan gives you a small number of SKUs with no card, and the count is on the pricing page. The label is the real thing: nothing the regulations require is left off, and nothing about it is cut down because you have not paid.'
   },
   {
     question: 'Does the price include VAT?',

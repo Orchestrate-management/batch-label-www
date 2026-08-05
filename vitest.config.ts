@@ -11,7 +11,7 @@ export default defineConfig({
     // Serve the jsdom document from an https origin so `Secure` cookies (written by the
     // attribution/consent helpers on https) are actually persisted in the cookie jar.
     environmentOptions: {
-      jsdom: { url: 'https://batchlabel.co.uk/' },
+      jsdom: { url: 'https://batchlabel.xyz/' },
     },
     setupFiles: ['./src/test/setup.ts'],
     // supabase/tests holds the SQL suite: real migrations replayed into a real

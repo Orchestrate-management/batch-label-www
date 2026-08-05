@@ -234,7 +234,7 @@ export default {
           status: 403,
           message:
           'This account cannot start a subscription at the moment, and paying would not ' +
-          'switch it back on. Email hello@batchlabel.co.uk and we will sort it out.'
+          'switch it back on. Email hello@batchlabel.xyz and we will sort it out.'
         },
         cors
       );

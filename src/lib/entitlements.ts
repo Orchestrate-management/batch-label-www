@@ -123,7 +123,7 @@ export function summarisePlan(entitlement: Entitlement | null): PlanSummary {
       detail: 'Your account is suspended.',
       showUpgrade: false,
       showManageBilling: true,
-      warning: 'Your account is suspended. Email hello@batchlabel.co.uk and we will sort it out.'
+      warning: 'Your account is suspended. Email hello@batchlabel.xyz and we will sort it out.'
     };
   }
 
@@ -172,7 +172,7 @@ export function summarisePlan(entitlement: Entitlement | null): PlanSummary {
       showUpgrade: false,
       showManageBilling: true,
       warning:
-      'Your last payment did not go through. Update your card in Manage billing to keep your plan — nothing is switched off yet.'
+      'Your last payment did not go through. Update your card in Manage billing to keep your plan. Nothing has been switched off.'
     };
   }
 
@@ -180,8 +180,8 @@ export function summarisePlan(entitlement: Entitlement | null): PlanSummary {
     return {
       label,
       detail: endsOn ?
-      `Cancelled — your plan stays on until ${endsOn}.` :
-      'Cancelled — your plan stays on until the end of the period you have paid for.',
+      `Cancelled. Your plan stays on until ${endsOn}.` :
+      'Cancelled. Your plan stays on until the end of the period you have paid for.',
       showUpgrade: false,
       showManageBilling: true,
       warning: null

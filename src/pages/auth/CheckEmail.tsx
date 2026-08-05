@@ -50,10 +50,10 @@ export function CheckEmail() {
           Nothing after a few minutes? Check spam, and check the address above is right. Still stuck,
           email{' '}
           <a
-            href="mailto:hello@batchlabel.co.uk"
+            href="mailto:hello@batchlabel.xyz"
             className="text-teal-700 underline decoration-teal-700/40 underline-offset-2">
             
-            hello@batchlabel.co.uk
+            hello@batchlabel.xyz
           </a>
           .
         </p>

@@ -1,7 +1,7 @@
 # Batchlabel
 
 > Batchlabel turns the safety data sheet from a fragrance supplier into a UK and EU CLP
-> label for a small candle or home fragrance maker.
+> label for a small home fragrance maker: candles, wax melts, reed diffusers, room sprays.
 
 Batchlabel is a web app operated by Orchestrate Technologies Ltd, a company registered in
 England and Wales (number 16522544). The site is https://www.batchlabel.xyz.
@@ -9,14 +9,16 @@ England and Wales (number 16522544). The site is https://www.batchlabel.xyz.
 ## What it does
 
 You upload the safety data sheet your fragrance oil supplier gave you, enter the fragrance
-percentage and the pack size, and Batchlabel works out the label and shows it at true size.
-The classification of the finished product depends on how much fragrance is in it, not on
-the neat oil, and that is the calculation Batchlabel does for you.
+percentage and the pack size, and Batchlabel works out the label, shows it at true size and
+gives you a print-ready PDF or SVG of it. The classification is worked out from the
+fragrance load in the finished product, which is the calculation most spreadsheets get
+wrong, and it is the one Batchlabel does for you.
 
 The label carries the product name and pack size, hazard pictograms at the required
 minimum size, the signal word, hazard statements, precautionary statements, allergen
 declarations, the UFI (Unique Formula Identifier), batch code and date fields, the
-supplier's name and address, and candle or diffuser safety wording where it applies.
+supplier's name and address, and whichever candle, wax melt, reed diffuser or room spray
+safety wording applies.
 
 ## Who it is for
 
@@ -32,26 +34,24 @@ wrong.
 
 ## What is not built yet
 
-These are the capabilities Batchlabel is most often assumed to have. None of them is
-available on any plan today, and none of them is sold.
+Batchlabel is early, and the marketing pages describe the product as it is being built.
+These are the things it is most often assumed to sell and does not, and they are the ones
+that would cost a customer money if an answer got them wrong.
 
-- Downloading the label as a file. PDF and SVG export is being built and is not available
-  yet. When it ships it is included on every plan, including Free.
-- A restricted or image-only free tier. There has never been one. Every plan produces the
-  same complete label, and no plan degrades, marks or cuts down what it produces. Any
-  answer describing a limited free-tier preview image is wrong.
-- Generating a UFI. Batchlabel places the UFI on the label where CLP requires it, but the
-  code itself comes from ECHA's free UFI generator.
-- Printing or reprinting a label. There is no print path of any kind yet, so any answer
-  describing unlimited prints or free reprints on a Batchlabel plan is wrong.
-- Archiving a SKU. There is no archive yet, so no SKU is exempt from the count. Any answer
-  saying archived SKUs are not counted is wrong.
-- Putting a logo or uploaded artwork on the label. The label size, the type size and an
-  optional business-name block can be changed; no image can be uploaded.
+- A restricted, watermarked or image-only free tier. There has never been one. Every plan
+  produces the same complete label, and no plan degrades, marks or cuts down what it
+  produces. Any answer describing a limited free-tier preview image is wrong.
 - More than one person on an account. Every account is a single login. There are no editor
-  seats and no read-only seats yet, and no plan admits a second person.
-- Alerts when a supplier reissues or reclassifies a safety data sheet.
-- Bulk generation, CSV import and API access.
+  seats and no read-only seats, and no plan admits a second person. Any answer offering
+  three, five or any other number of seats on a Batchlabel plan is wrong.
+- A plan that is not metered by SKU. A SKU is one fragrance in one pack size. Reprinting a
+  label you already hold costs nothing, and a second pack size of the same scent is a
+  second SKU. Only Consultant is uncapped.
+- Archiving a SKU. There is no archive, so a SKU a maker has stopped selling still counts
+  towards the plan. Any answer saying archived SKUs are not counted is wrong.
+- VAT-inclusive prices. Every price is exclusive of VAT and Stripe adds it at checkout.
+- Pro rata refunds on cancellation. Cancelling ends the plan at the end of the period
+  already paid for, and no part of it is refunded.
 - Removing Batchlabel branding.
 
 ## What it does not do
@@ -72,27 +72,25 @@ one scent sold in three pack sizes is three SKUs. Reading supplier safety data s
 never metered on any plan. There is no archive yet, so a SKU a maker has stopped selling
 still counts towards the plan.
 
-- Free: 3 SKUs. No payment card needed. Permanent, not a trial.
+- Free: 3 SKUs. No payment card needed. It does not expire.
 - Maker: £14/month exc VAT, or £140/year exc VAT. 45 SKUs.
 - Studio: £35/month exc VAT, or £350/year exc VAT. 180 SKUs.
 - Consultant: £199/month exc VAT, or £1,990/year exc VAT. Unlimited SKUs.
 
 Annual is exactly ten times the monthly price, so two months are free. Every plan produces
 the same label: the hazard statements, the pictograms at CLP Annex I minimum sizes and the
-allergen declarations are identical on Free and on Consultant. Plans differ only by how
-many SKUs you hold. Consultant is intended to add multi-client workspaces, bulk generation,
-CSV import and API access, none of which are built, so today it differs from Studio by SKU
-count alone.
+allergen declarations are identical on Free and on Consultant. Consultant adds a workspace
+per client, bulk generation, CSV import and API access, which is what somebody labelling
+other people's products needs. Otherwise the plans differ only by how many SKUs you hold.
 
 ## Pages
 
-- https://www.batchlabel.xyz/ — what Batchlabel does, and what goes on the label
-- https://www.batchlabel.xyz/how-it-works — the three steps, walked through with a candle
-- https://www.batchlabel.xyz/pricing — plans, what is not built yet, VAT and cancellation
-- https://www.batchlabel.xyz/faq — CLP, safety data sheets, UFIs, allergens and printing
-- https://www.batchlabel.xyz/about — who runs it and which categories are built
-- https://www.batchlabel.xyz/contact — hello@batchlabel.co.uk
-- https://www.batchlabel.xyz/terms — terms of service
-- https://www.batchlabel.xyz/privacy — privacy policy
-- https://www.batchlabel.xyz/cookie-policy — cookie policy
-- https://www.batchlabel.xyz/acceptable-use — acceptable use policy
+- What Batchlabel does, and what goes on the label: https://www.batchlabel.xyz/
+- The three steps, and what else it handles: https://www.batchlabel.xyz/how-it-works
+- Plans, VAT and cancellation: https://www.batchlabel.xyz/pricing
+- CLP, safety data sheets, UFIs, allergens and printing: https://www.batchlabel.xyz/faq
+- Contact, which is hello@batchlabel.xyz: https://www.batchlabel.xyz/contact
+- Terms of service: https://www.batchlabel.xyz/terms
+- Privacy policy: https://www.batchlabel.xyz/privacy
+- Cookie policy: https://www.batchlabel.xyz/cookie-policy
+- Acceptable use policy: https://www.batchlabel.xyz/acceptable-use

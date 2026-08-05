@@ -44,7 +44,7 @@ export const productForms: ProductForm[] = [
     name: 'Container candles',
     what: 'Wax poured into a jar or a tin, sold by net weight.',
     changes:
-      'The classification follows the fragrance load in the finished wax, not the strength of the neat oil, so the same fragrance can land on a different label in a 180 g tin than in a 30 cl jar. Candle safety wording sits alongside the CLP elements.',
+      'The classification is worked out from the fragrance load in the finished wax, so the same oil can land on a different label in a 180 g tin than in a 30 cl jar. Candle safety wording sits alongside the CLP elements.',
     rules: 'UK CLP, EU CLP and EN 15494'
   },
   {

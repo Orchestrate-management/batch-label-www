@@ -16,15 +16,15 @@ export function Privacy() {
     <LegalLayout
       title="Privacy policy"
       updated="August 2026"
-      intro="What we collect, why, and how to make us stop. Written to be read, not to be skipped.">
+      intro="What we collect, why, and how to make us stop. It is short enough to read in full.">
       
       <LegalSection title="Who is the controller">
         <p>
           Orchestrate Technologies Ltd, trading as Batchlabel, registered in England and Wales,
           company number 16522544, registered office 167-169 Great Portland Street, London W1W 5PF,
           is the data controller. Contact us at{' '}
-          <a className="underline decoration-teal-700/40 underline-offset-2" href="mailto:privacy@batchlabel.co.uk">
-            privacy@batchlabel.co.uk
+          <a className="underline decoration-teal-700/40 underline-offset-2" href="mailto:hello@batchlabel.xyz">
+            hello@batchlabel.xyz
           </a>
           .
         </p>
@@ -38,7 +38,7 @@ export function Privacy() {
           'Billing data: your Stripe customer reference, plan, invoices and VAT number if you give one. Card details are handled by Stripe and never reach us. Lawful basis: contract and our legal obligation to keep records.',
           'Marketing attribution data: the campaign values in the link you arrived on, that is utm_source, utm_medium, utm_campaign, utm_term and utm_content, plus advertising click identifiers gclid, gbraid, wbraid and fbclid, the site that referred you, the first page you landed on, and the time of your first visit. These are stored in your browser and, if you create an account, saved against your account record so we know which advert paid for itself. Lawful basis: our legitimate interest in understanding how our advertising performs, and your consent where cookies or similar technologies are not strictly necessary.',
           'Analytics and advertising data: how you move through the site, collected through Google Analytics 4 and the Meta Pixel via Google Tag Manager. Lawful basis: your consent. Nothing optional loads until you agree.',
-          'Diagnostic data: when something in the signed-in app fails we record the error name and message, the technical stack and the names of our own components in it, which part of the app reported the fault, the route pattern of the page you were on — the shape of the address, such as /products/:productId, rather than the address itself or anything in its query string — a short reference code you can quote to us, whether the message was one the app recognises, a short fingerprint so that repeats of the same fault group together instead of scattering, and the time. That report is scrubbed in your browser before it is sent: the free-text parts that could carry a product name, a supplier name or a formulation value are removed or replaced. Where the app recognises the message, the fingerprint is calculated from the scrubbed text we send, so nothing we took out goes into it. Where it does not recognise the message, the message is replaced in full and the fingerprint is calculated from the original instead, because it is then the only thing that tells two unknown faults apart. It is deliberately short, but it is still derived from your text, and short does not mean vague: someone who already holds a short list of likely messages can tell from the fingerprint which message on that list it was. It reduces what we can see. It does not make the report anonymous. Lawful basis: our legitimate interest in finding and fixing faults.',
+          'Diagnostic data: when something in the signed-in app fails we record the error name and message, the technical stack and the names of our own components in it, which part of the app reported the fault, the route pattern of the page you were on, a short reference code you can quote to us, whether the message was one the app recognises, a short fingerprint so that repeats of the same fault group together instead of scattering, and the time. The route pattern is the shape of the address, such as /products/:productId. We do not record the address itself or anything in its query string. That report is scrubbed in your browser before it is sent: the free-text parts that could carry a product name, a supplier name or a formulation value are removed or replaced. Where the app recognises the message, the fingerprint is calculated from the scrubbed text we send, so nothing we took out goes into it. Where it does not recognise the message, the message is replaced in full and the fingerprint is calculated from the original instead, because it is then the only thing that tells two unknown faults apart. It is deliberately short, but it is still derived from your text, and short does not mean vague: someone who already holds a short list of likely messages can tell from the fingerprint which message on that list it was. It reduces what we can see. It does not make the report anonymous. Lawful basis: our legitimate interest in finding and fixing faults.',
           'Support data: the emails you send us and our replies. Lawful basis: legitimate interest in helping you.']
           } />
         
@@ -74,8 +74,8 @@ export function Privacy() {
           Some of these providers are outside the UK. Where data leaves the UK or EEA we rely on the
           UK International Data Transfer Addendum or the European Commission standard contractual
           clauses. If you want to see the safeguards we rely on for a particular provider, email{' '}
-          <a className="underline decoration-teal-700/40 underline-offset-2" href="mailto:privacy@batchlabel.co.uk">
-            privacy@batchlabel.co.uk
+          <a className="underline decoration-teal-700/40 underline-offset-2" href="mailto:hello@batchlabel.xyz">
+            hello@batchlabel.xyz
           </a>{' '}
           and we will send you a copy of the clauses, with commercial terms removed.
         </p>
@@ -107,8 +107,8 @@ export function Privacy() {
           Under the UK GDPR you can ask for a copy of your data, ask us to correct or delete it, ask
           us to restrict or stop certain processing, object to processing based on legitimate
           interests, and withdraw consent for analytics and marketing at any time. Email{' '}
-          <a className="underline decoration-teal-700/40 underline-offset-2" href="mailto:privacy@batchlabel.co.uk">
-            privacy@batchlabel.co.uk
+          <a className="underline decoration-teal-700/40 underline-offset-2" href="mailto:hello@batchlabel.xyz">
+            hello@batchlabel.xyz
           </a>{' '}
           and we will reply within one month. If we get it wrong you can complain to the Information
           Commissioner's Office at ico.org.uk.

@@ -19,8 +19,8 @@ export function ProductForms() {
       <Eyebrow>What we cover</Eyebrow>
       <Heading id="forms-heading">Candles, melts, diffusers and sprays</Heading>
       <Lead className="mt-3">
-        The calculation behind all four is the same one. What ends up on the label is not,
-        and Batchlabel knows the difference.
+        One calculation sits behind all four. It produces a different label for each of them,
+        and this is what changes.
       </Lead>
 
       <ul className="mt-8 grid gap-4 sm:grid-cols-2">

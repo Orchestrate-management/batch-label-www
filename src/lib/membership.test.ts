@@ -167,7 +167,7 @@ describe('membership', () => {
       expect(p_agreements.terms).toMatchObject({
         id: TERMS_AGREEMENT.id,
         version: TERMS_AGREEMENT.version,
-        url: `https://batchlabel.co.uk${TERMS_AGREEMENT.path}`,
+        url: `https://batchlabel.xyz${TERMS_AGREEMENT.path}`,
       });
     });
 

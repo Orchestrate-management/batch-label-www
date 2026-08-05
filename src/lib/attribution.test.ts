@@ -37,7 +37,7 @@ describe('attribution', () => {
   beforeEach(() => {
     window.localStorage.clear();
     clearCookies();
-    setLocation('https://batchlabel.co.uk/');
+    setLocation('https://batchlabel.xyz/');
     Object.defineProperty(document, 'referrer', { configurable: true, value: '' });
   });
 
@@ -48,7 +48,7 @@ describe('attribution', () => {
   describe('captureAttribution', () => {
     it('captures utm params and click ids from the landing URL', () => {
       setLocation(
-        'https://batchlabel.co.uk/pricing?utm_source=google&utm_medium=cpc&utm_campaign=spring&gclid=abc123',
+        'https://batchlabel.xyz/pricing?utm_source=google&utm_medium=cpc&utm_campaign=spring&gclid=abc123',
       );
       Object.defineProperty(document, 'referrer', {
         configurable: true,
@@ -67,7 +67,7 @@ describe('attribution', () => {
     });
 
     it('persists the record to both localStorage and the cookie', () => {
-      setLocation('https://batchlabel.co.uk/?utm_source=meta');
+      setLocation('https://batchlabel.xyz/?utm_source=meta');
       captureAttribution();
 
       const stored = window.localStorage.getItem(ATTRIBUTION_STORAGE_KEY);
@@ -76,12 +76,12 @@ describe('attribution', () => {
     });
 
     it('first touch wins: a later visit never overwrites the original values', () => {
-      setLocation('https://batchlabel.co.uk/?utm_source=google&utm_campaign=first');
+      setLocation('https://batchlabel.xyz/?utm_source=google&utm_campaign=first');
       const first = captureAttribution();
       expect(first.utm_source).toBe('google');
 
       // A second, organic-looking visit with different params.
-      setLocation('https://batchlabel.co.uk/?utm_source=newsletter&utm_campaign=second');
+      setLocation('https://batchlabel.xyz/?utm_source=newsletter&utm_campaign=second');
       const second = captureAttribution();
 
       expect(second.utm_source).toBe('google');
@@ -90,10 +90,10 @@ describe('attribution', () => {
     });
 
     it('marks a same-host referrer as direct', () => {
-      setLocation('https://batchlabel.co.uk/');
+      setLocation('https://batchlabel.xyz/');
       Object.defineProperty(document, 'referrer', {
         configurable: true,
-        value: 'https://batchlabel.co.uk/pricing',
+        value: 'https://batchlabel.xyz/pricing',
       });
       const record = captureAttribution();
       expect(record.referrer).toBe('direct');
@@ -135,7 +135,7 @@ describe('attribution', () => {
 
   describe('attributionForMetadata', () => {
     it('flattens the record and omits null values', () => {
-      setLocation('https://batchlabel.co.uk/?utm_source=google&gclid=xyz');
+      setLocation('https://batchlabel.xyz/?utm_source=google&gclid=xyz');
       captureAttribution();
 
       const meta = attributionForMetadata();

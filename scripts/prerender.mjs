@@ -193,7 +193,7 @@ async function renderRoute(container, index) {
 /**
  * Things that would mean a session, a user or an account leaked into a public file.
  *
- * `hello@batchlabel.co.uk` is the published support address and appears on the contact
+ * `hello@batchlabel.xyz` is the published support address and appears on the contact
  * and legal pages on purpose, so the email pattern excludes it rather than excluding
  * emails.
  */
@@ -203,7 +203,7 @@ const SESSION_SHAPED = {
   'that looks like a refresh token': /"?refresh_token"?\s*[:=]/i,
   'that looks like a Supabase session key': /\bsb-[a-z0-9]+-auth-token\b/,
   'that looks like a private email address':
-    /[A-Za-z0-9._%+-]+@(?!batchlabel\.co\.uk|batchlabel\.xyz|example\.com)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
+    /[A-Za-z0-9._%+-]+@(?!batchlabel\.xyz|example\.com)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
   'that looks like a signed-in navigation': /Sign out|Log out|My account|Dashboard<\/a>/
 };
 

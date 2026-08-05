@@ -41,7 +41,7 @@ describe('billing', () => {
     Object.defineProperty(window, 'location', {
       configurable: true,
       writable: true,
-      value: { href: 'https://batchlabel.co.uk/pricing', pathname: '/pricing', search: '' }
+      value: { href: 'https://batchlabel.xyz/pricing', pathname: '/pricing', search: '' }
     });
   });
 

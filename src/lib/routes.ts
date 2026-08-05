@@ -33,7 +33,6 @@ export const INDEXABLE_ROUTES: SiteRoute[] = [
   { path: '/how-it-works', label: 'How it works', changefreq: 'monthly', priority: 0.9 },
   { path: '/pricing', label: 'Pricing', changefreq: 'monthly', priority: 0.9 },
   { path: '/faq', label: 'FAQ', changefreq: 'monthly', priority: 0.8 },
-  { path: '/about', label: 'About', changefreq: 'yearly', priority: 0.5 },
   { path: '/contact', label: 'Contact', changefreq: 'yearly', priority: 0.5 },
   { path: '/terms', label: 'Terms of service', changefreq: 'yearly', priority: 0.3 },
   { path: '/privacy', label: 'Privacy policy', changefreq: 'yearly', priority: 0.3 },

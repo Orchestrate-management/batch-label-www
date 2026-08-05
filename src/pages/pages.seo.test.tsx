@@ -6,7 +6,6 @@ import { Home } from './Home';
 import { Pricing } from './Pricing';
 import { HowItWorks } from './HowItWorks';
 import { Faq } from './Faq';
-import { About } from './About';
 import { Contact } from './Contact';
 import { Terms } from './legal/Terms';
 import { Privacy } from './legal/Privacy';
@@ -29,7 +28,6 @@ const PAGES: PageCase[] = [
   { path: '/how-it-works', element: <HowItWorks /> },
   { path: '/pricing', element: <Pricing /> },
   { path: '/faq', element: <Faq /> },
-  { path: '/about', element: <About /> },
   { path: '/contact', element: <Contact /> },
   { path: '/terms', element: <Terms /> },
   { path: '/privacy', element: <Privacy /> },

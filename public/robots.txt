@@ -1,4 +1,4 @@
-# Batchlabel — https://www.batchlabel.xyz
+# Batchlabel. https://www.batchlabel.xyz
 # The apex domain 308-redirects to www, so www is the canonical host.
 
 User-agent: *
