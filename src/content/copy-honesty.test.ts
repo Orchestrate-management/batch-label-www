@@ -270,7 +270,7 @@ describe('no surface names a category Batchlabel does not label', () => {
    *
    * A guard asserting the absence of words that are already absent everywhere looks identical
    * to a guard that works, and stays green if somebody rewrites the pattern into nonsense.
-   * These are the exact strings that shipped, from the cards, the FAQ and the About page.
+   * These are the exact strings that shipped, from the cards and the FAQ.
    */
   it.each([
   'Cosmetics & skincare',
@@ -291,7 +291,7 @@ describe('no surface names a category Batchlabel does not label', () => {
   /**
    * The other half, and it earns its place twice over now: the consumer-goods pattern is the
    * broadest of the three, so the copy that replaced the card has to be pinned against it.
-   * Every sentence below is live on the homepage or on /about.
+   * Every sentence below is live on the homepage.
    */
   it('leaves the category we do label alone', () => {
     for (const allowed of [

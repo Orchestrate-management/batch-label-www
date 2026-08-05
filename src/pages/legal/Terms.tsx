@@ -106,7 +106,7 @@ export function Terms() {
           // No pro rata refund is promised, because none is issued: cancellation in the
           // billing portal takes effect at the end of the paid period with no proration.
           // Copy conforms to the mechanism, never the other way round.
-          'If Batchlabel does not do what the pricing page describes, tell us within 14 days of payment and we will refund you in full if we cannot put it right. Outside that, cancelling ends the plan at the end of the period you have already paid for rather than refunding any part of it.',
+          'If a plan does not give you what it says it includes, tell us within 14 days of payment and we will refund you in full if we cannot put it right. Outside that, cancelling ends the plan at the end of the period you have already paid for rather than refunding any part of it.',
           'We may change prices for future billing periods. We will give you at least 30 days notice by email, and you may cancel before the change takes effect.']
           } />
 

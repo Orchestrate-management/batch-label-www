@@ -150,7 +150,7 @@ export const faqGroups: {title: string;items: FaqEntry[];}[] = [
   {
     question: 'Do you refund?',
     answer:
-    'If something is wrong within 14 days of paying and we cannot put it right, email us and we will refund you. Outside that, cancelling stops the next payment rather than refunding the current period, so you keep your plan until the period you paid for runs out.'
+    'If a plan does not give you what it says it includes, tell us within 14 days of paying and we will refund you in full if we cannot put it right. Outside that, cancelling stops the next payment rather than refunding the current period, so you keep your plan until the period you paid for runs out.'
   }]
 
 }];

@@ -21,8 +21,18 @@ export default defineConfig({
     // Booting Postgres and replaying the whole chain is seconds, not milliseconds,
     // and several suites do it more than once. The default 5s kills them on a
     // busy machine — which is a flaky gate, not a signal.
-    testTimeout: 60_000,
-    hookTimeout: 60_000,
+    // Booting PGlite and replaying the whole migration chain is the slowest thing
+    // in this suite by an order of magnitude, and the chain only grows: nine
+    // migrations now, up from seven. Measured in isolation it takes 43-72s, so a
+    // 60s budget was already inside the noise, and under full-suite load it tipped
+    // over — "Hook timed out in 60000ms", intermittently, on a suite that passes
+    // when you run that one file.
+    //
+    // Raised with headroom rather than trimmed to fit, because the alternative is a
+    // gate that reddens at random, and a gate that reddens at random is one
+    // somebody eventually deletes.
+    testTimeout: 180_000,
+    hookTimeout: 180_000,
     css: false,
     coverage: {
       provider: 'v8',

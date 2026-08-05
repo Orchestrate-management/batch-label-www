@@ -33,7 +33,7 @@ export const SOFTWARE_ID = `${SITE_ORIGIN}/#software`;
 export const OG_IMAGE_PATH = '/og/batchlabel-share.png';
 export const OG_IMAGE_URL = `${SITE_ORIGIN}${OG_IMAGE_PATH}`;
 export const OG_IMAGE_ALT =
-  'Batchlabel. Correct CLP labels for your candles, in minutes.';
+  'Batchlabel. Correct CLP labels for candles, wax melts, diffusers and room sprays.';
 
 /** JSON-LD is an untyped tree; this keeps it honest without fighting the type system. */
 export type JsonLd = Record<string, unknown>;

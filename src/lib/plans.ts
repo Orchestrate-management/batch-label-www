@@ -41,7 +41,7 @@ export interface PlanDisplay {
    * Held so this projection matches the server contract field for field. Deliberately
    * rendered nowhere: multi-person accounts are not built, so an editor count on a pricing
    * card would be a ceiling on a capability that does not exist. See
-   * src/content/availability.ts.
+   * the plan contract in src/server/plan-contract.ts, which is what actually grants it.
    */
   readonly editors: number;
 }

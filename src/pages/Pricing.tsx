@@ -59,8 +59,22 @@ function differentiators(plan: PlanDisplay): string[] {
 
 }
 
+/**
+ * WHAT A PLAN INCLUDES IS NOT A FORWARD-LOOKING CLAIM.
+ *
+ * The rest of this site describes the finished product, deliberately. This
+ * sentence cannot, because it is the only stated reason to pay £164 a month more
+ * than Studio, and Terms section 6 says in the same deploy that a workspace per
+ * client, bulk generation, CSV import and the API are not sold on any plan.
+ *
+ * In the plan contract, Consultant differs from Studio by exactly two numbers:
+ * skuLimit UNLIMITED against 180, and editorSeatLimit 10 against 3. So that is
+ * what the difference sentence says. Everything else the tier will eventually
+ * carry is described where it costs nothing to be early — on How it works, on
+ * every plan, as the product it is becoming.
+ */
 const CONSULTANT_DIFFERENCE =
-'Consultant removes the SKU ceiling and adds the things a person labelling for other people needs: a workspace per client, bulk generation, CSV import and the API. If you sell your own range rather than other people\'s, Studio is the one to start on.';
+'Consultant takes the SKU ceiling off, so a range of any size fits, and raises the workspace to ten editors. If you sell your own range rather than labelling for other people, Studio is the one to start on.';
 
 /** The oversized figure on a card. The tax qualifier sits inside the same element on purpose. */
 function PlanPrice({ pence, interval }: {pence: number | null;interval: BillingInterval;}) {

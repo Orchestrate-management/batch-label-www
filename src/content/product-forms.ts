@@ -21,8 +21,10 @@
  * P261 a room spray gets for being sprayed. If a sentence here cannot be traced to a branch
  * in that file, it does not belong in it.
  *
- * The homepage section and the About page both render from this array, so they cannot drift
- * apart. See POSITIONING.md.
+ * The homepage section renders from this array. The About page did too, until it was deleted,
+ * which is why "so they cannot drift apart" is no longer the reason this array exists — one
+ * surface renders it now. It stays a single list because the four forms are named in the h1,
+ * the titles, the schema and the FAQ, and those are what must not drift. See POSITIONING.md.
  */
 
 export interface ProductForm {
