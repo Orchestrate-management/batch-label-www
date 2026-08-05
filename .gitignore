@@ -4,6 +4,10 @@ node_modules/
 # Build output
 dist/
 
+# The app bundled for Node so scripts/prerender.mjs can run it. Written during the build
+# and deleted at the end of it; never served, never committed.
+.prerender/
+
 # Test / coverage output
 coverage/
 *.lcov
