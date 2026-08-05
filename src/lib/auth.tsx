@@ -3,12 +3,18 @@ import type { Session, User } from '@supabase/supabase-js';
 import { Navigate, useLocation } from 'react-router-dom';
 import { supabase, isSupabaseConfigured, MISSING_CONFIG_MESSAGE } from './supabase';
 import { BRAND_SLUG } from './brand';
-import { APP_URL } from './app-handoff';
+import { APP_URL, goToApp } from './app-handoff';
 import { signupConsents } from './agreements';
 import { advertisingConsentFromBanner } from './consent';
 import { attributionForMetadata } from './attribution';
 import { trackSignUpCompleted, trackSignUpStarted } from './analytics';
-import { fetchMembershipState, membershipRedirect, type MembershipState } from './membership';
+import {
+  fetchMembershipState,
+  finishSetupDestination,
+  signedInDestination,
+  FINISH_SETUP_PATH,
+  type MembershipState } from
+'./membership';
 
 interface AuthResult {
   error: string | null;
@@ -34,9 +40,10 @@ interface AuthContextValue {
    * Starts the Google redirect. Nothing about the account can be decided here: an OAuth
    * call has no options.data, so no brand, business name or consent reaches
    * raw_user_meta_data and the provisioning trigger cannot fire. Both signup and login
-   * therefore land on /dashboard, where the membership gate sends anyone without a
-   * membership to /finish-setup to accept the terms. `intent` only decides whether this
-   * counts as a signup for analytics.
+   * therefore come back to /finish-setup, which is the one route that can tell the two
+   * apart AFTER the round trip: a new user gets the form, a returning one is handed
+   * straight to the app. `intent` only decides whether this counts as a signup for
+   * analytics.
    */
   signInWithGoogle: (input: {intent: 'sign_up' | 'log_in';}) => Promise<AuthResult>;
   /**
@@ -77,9 +84,10 @@ function redirectTo(path: string) {
  * happens in the app.
  *
  * Not used for the Google redirect or the password reset, and deliberately so. OAuth has
- * nowhere to put the brand and consent, so it must come back here for /finish-setup; and
+ * nowhere to put the brand and consent, so it must come back here to /finish-setup; and
  * the reset link must land on this site's /reset-password, which is where the recovery
- * gate lives.
+ * gate lives. Both of those routes end in the same handoff, so neither is a stop the
+ * maker has to click their way out of.
  */
 function appRedirect() {
   if (typeof window === 'undefined') return undefined;
@@ -161,10 +169,23 @@ export function AuthProvider({ children }: {children: React.ReactNode;}) {
     // sign_up_completed is deliberately NOT fired here. The account is not really made
     // until the terms are accepted on /finish-setup, and this call ends in a full page
     // redirect to Google anyway.
+    // BACK TO /finish-setup, NOT TO THE APP AND NOT TO A DASHBOARD.
+    //
+    // Sending a Google return straight to APP_URL would drop a brand new user into the
+    // product with no membership and no Terms acceptance on file, which is a compliance
+    // problem rather than a fast signup. Sending it to a www dashboard — what this used to
+    // do — made every returning Google user stop on this site and press a link to get to
+    // the product they had just asked to be signed in to.
+    //
+    // /finish-setup is the only route that can decide, because the answer is not knowable
+    // until Supabase has made the session: the gate reads the membership and either shows
+    // the consent form or hands over. Supabase's Redirect URLs allow-list is a
+    // `https://www.batchlabel.xyz/**` wildcard, so this path needs no configuration change
+    // — see docs/GOOGLE_OAUTH_SETUP.md §2b.
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: redirectTo('/dashboard'),
+        redirectTo: redirectTo(FINISH_SETUP_PATH),
         // Always show the account chooser. Makers often have a personal and a shop
         // Google account and silently reusing the last one is how you end up with two.
         queryParams: { prompt: 'select_account' }
@@ -275,9 +296,8 @@ export function useAuth(): AuthContextValue {
 }
 
 /**
- * Protected route wrapper for the dashboard shell. While Supabase is not configured we
- * let the shell through so the placeholder can be reviewed, and the dashboard shows a
- * plain notice explaining that sign in is not connected yet.
+ * Protected route wrapper. While Supabase is not configured we let the page through so it
+ * can be reviewed, and each page says plainly that sign in is not connected yet.
  */
 export function RequireAuth({ children }: {children: React.ReactNode;}) {
   const { session, loading, configured } = useAuth();
@@ -299,61 +319,130 @@ export function RequireAuth({ children }: {children: React.ReactNode;}) {
 }
 
 /**
- * The second half of the gate, for OAuth users.
+ * Reads the membership for whoever is signed in.
  *
- * RequireAuth proves there is a session. It does not prove the person has a brand
- * membership, and after a Google redirect they will not have one — no membership, and no
- * terms accepted. Dropping them on the dashboard would show an account area with nothing
- * in it, so they go to /finish-setup instead.
+ * Null while no answer for THIS user has arrived yet; a MembershipState once one has.
  *
- * Wrap the dashboard with page="dashboard" and the completion screen with
- * page="finish_setup". Both use the same rule (membershipRedirect), which is what keeps
- * them from bouncing a user back and forth: neither redirects on `unknown`, and they
- * redirect on opposite states otherwise.
+ * THE ANSWER IS STORED WITH THE USER IT IS ABOUT, and that is the whole design of this
+ * hook. A membership state on its own cannot say whose it is, and there are two moments
+ * when it would be read as the wrong person's:
+ *
+ *  - On the very first paint the session has not resolved, so there is no user to ask
+ *    about and the state is `unknown`. `unknown` means "the read failed", and a gate that
+ *    acts on it will act — this exact race sent a Google user who still owed us a Terms
+ *    acceptance straight into the app, because for one frame between "no session yet" and
+ *    "session, now reading" the gate believed the read had already failed.
+ *  - When a genuinely different user signs in, the previous user's answer is still in
+ *    hand and is not an answer about this one.
+ *
+ * Pairing the state with the user id makes both of those a spinner instead of a decision.
+ *
+ * Keyed on the user ID, NOT the session object. supabase-js hands us a freshly parsed
+ * session object on every tab refocus and token refresh, so depending on the object would
+ * re-run this on each one, and the state would blank each time — unmounting whatever is
+ * gated and wiping a half-filled consent form the moment someone opens the terms in a new
+ * tab to read them, which is exactly what we ask them to do. A refresh for the same user
+ * leaves the id untouched, so the answer stays valid and the children stay mounted.
  */
-export function RequireMembership({
-  page,
-  children
-
-
-
-}: {page: 'dashboard' | 'finish_setup';children: React.ReactNode;}) {
+function useMembershipState(): {state: MembershipState | null;authLoading: boolean;} {
   const { session, loading: authLoading, configured } = useAuth();
-  const [state, setState] = useState<MembershipState | null>(null);
-
-  // Key on the user id, NOT the session object. supabase-js hands us a freshly parsed
-  // session object on every tab refocus and token refresh, so depending on the object
-  // would re-run this on each one. Combined with blanking the state that would unmount
-  // the children — wiping a half-filled consent form the moment someone opens the terms
-  // in a new tab to read them, which is exactly what we ask them to do.
+  const [resolved, setResolved] = useState<
+    {userId: string | null;state: MembershipState;} | null>(
+    null);
   const userId = session?.user?.id ?? null;
 
   useEffect(() => {
     if (!configured || !userId) {
-      setState('unknown');
+      setResolved({ userId, state: 'unknown' });
       return;
     }
     let active = true;
-    // Deliberately no setState(null) here: revalidate in the background and keep showing
-    // the answer we already have. Only the very first resolution shows the spinner.
     fetchMembershipState().then((next) => {
-      if (active) setState(next);
+      if (active) setResolved({ userId, state: next });
     });
     return () => {
       active = false;
     };
   }, [configured, userId]);
 
-  if (authLoading || state === null) {
-    return (
-      <div className="flex min-h-[60vh] w-full items-center justify-center bg-paper">
-        <p className="text-sm text-ink-muted">Checking your account...</p>
-      </div>);
+  const state = resolved && resolved.userId === userId ? resolved.state : null;
+  return { state, authLoading };
+}
 
-  }
+function Waiting({ children }: {children: React.ReactNode;}) {
+  return (
+    <div className="flex min-h-[60vh] w-full items-center justify-center bg-paper">
+      <p className="text-sm text-ink-muted" role="status">
+        {children}
+      </p>
+    </div>);
 
-  const destination = membershipRedirect(state, page);
-  if (destination) return <Navigate to={destination} replace />;
+}
+
+/**
+ * Leaves for the product. A full navigation, so it happens in an effect rather than
+ * during render, and it says so while the browser is on its way.
+ *
+ * `next` is the app URL the app itself asked us to return to. goToApp validates it against
+ * the allow-list in lib/app-handoff.ts before following it — anything else falls back to
+ * the app's front door rather than being obeyed.
+ */
+function LeavingForApp({ next }: {next?: string | null;}) {
+  useEffect(() => {
+    goToApp(next);
+  }, [next]);
+  return <Waiting>Taking you to Batchlabel...</Waiting>;
+}
+
+/**
+ * The gate on /finish-setup, which is where Google returns everybody.
+ *
+ * RequireAuth proves there is a session. It does not prove the person has a brand
+ * membership, and after a Google signup they will not have one — no membership, and no
+ * Terms acceptance. So this screen asks. Someone who already has a membership is not
+ * re-asked; they are handed to the app, which is the only place there is for them to go.
+ *
+ * This used to send that person to www's /dashboard, and that redirect is the whole
+ * complaint: a returning Google user was signed in, bounced to a marketing-site account
+ * page, and left to find the product themselves.
+ */
+export function RequireSetup({ children }: {children: React.ReactNode;}) {
+  const { state, authLoading } = useMembershipState();
+
+  if (authLoading || state === null) return <Waiting>Checking your account...</Waiting>;
+  if (finishSetupDestination(state) === 'app') return <LeavingForApp />;
 
   return <>{children}</>;
+}
+
+/**
+ * Wraps /log-in so that somebody who is ALREADY signed in never sees a login form.
+ *
+ * The session cookie on `.batchlabel.xyz` lasts 400 days, so "already signed in" is the
+ * normal state for a returning maker, and a bookmark or a header link to /log-in is a
+ * thing that happens. Showing them a form and making them type a password they do not
+ * need — and which ends in the same handoff anyway — is the same detour as the dashboard,
+ * one page along.
+ *
+ * The membership is still checked. A Google user who abandoned /finish-setup has a session
+ * and no Terms acceptance, and this is one of the routes that could otherwise drop them
+ * into the product without one.
+ */
+export function HandOffIfSignedIn({ children }: {children: React.ReactNode;}) {
+  const { session, configured } = useAuth();
+  const location = useLocation();
+  const { state, authLoading } = useMembershipState();
+
+  // `next` is the page inside the app the maker was actually trying to reach when it
+  // bounced them here to sign in.
+  const next = new URLSearchParams(location.search).get('next');
+
+  // Not signed in, or no Supabase to ask: the form is exactly what they came for.
+  if (!configured || !authLoading && !session) return <>{children}</>;
+  if (authLoading || state === null) return <Waiting>Checking your session...</Waiting>;
+
+  if (signedInDestination(state) === 'finish_setup') {
+    return <Navigate to={FINISH_SETUP_PATH} replace />;
+  }
+  return <LeavingForApp next={next} />;
 }

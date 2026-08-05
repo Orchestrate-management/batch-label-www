@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  membershipRedirect,
+  finishSetupDestination,
+  signedInDestination,
   completionPayload,
   completeOAuthSignup,
   fetchMembershipState,
-  FINISH_SETUP_PATH,
-  DASHBOARD_PATH } from
+  FINISH_SETUP_PATH } from
 './membership';
 import { ATTRIBUTION_STORAGE_KEY } from './attribution';
 import { CONSENT_STORAGE_KEY } from './consent';
@@ -42,34 +42,61 @@ describe('membership', () => {
     window.localStorage.clear();
   });
 
-  describe('membershipRedirect (the completion gate)', () => {
-    it('sends a signed-in user with no membership to the completion screen', () => {
-      expect(membershipRedirect('needs_setup', 'dashboard')).toBe(FINISH_SETUP_PATH);
+  /**
+   * The two routing rules, kept as plain functions so the decision that produced the
+   * "why am I on www/dashboard" complaint is asserted rather than left in a component.
+   *
+   * NEITHER OF THEM MAY EVER RETURN A PATH ON THIS SITE OTHER THAN /finish-setup. That is
+   * the rule the deleted dashboard broke, and the last test in this block is what would
+   * catch it coming back.
+   */
+  describe('finishSetupDestination (where Google returns)', () => {
+    it('shows the form to a Google user who has no membership yet', () => {
+      expect(finishSetupDestination('needs_setup')).toBe('render');
     });
 
-    it('lets a provisioned user into the dashboard', () => {
-      expect(membershipRedirect('complete', 'dashboard')).toBeNull();
+    it('hands a returning Google user to the app rather than re-asking for consent', () => {
+      expect(finishSetupDestination('complete')).toBe('app');
     });
 
-    it('does not re-ask a returning user for consent', () => {
-      expect(membershipRedirect('complete', 'finish_setup')).toBe(DASHBOARD_PATH);
+    /**
+     * A flaky membership read must never push somebody PAST a consent gate. Re-asking
+     * costs one screen; skipping it means a user in the product with no Terms acceptance
+     * on file. complete_oauth_signup is idempotent, so a second submit provisions nothing.
+     */
+    it('shows the form rather than handing over when the membership read failed', () => {
+      expect(finishSetupDestination('unknown')).toBe('render');
     });
 
-    it('shows the completion screen to a user who still needs it', () => {
-      expect(membershipRedirect('needs_setup', 'finish_setup')).toBeNull();
-    });
-
-    it('never redirects on an unknown state, from either side, so there is no loop', () => {
-      expect(membershipRedirect('unknown', 'dashboard')).toBeNull();
-      expect(membershipRedirect('unknown', 'finish_setup')).toBeNull();
-    });
-
-    it('never has both pages redirecting at once for any state', () => {
+    it('never sends anyone to a page on this site', () => {
       (['complete', 'needs_setup', 'unknown'] as const).forEach((state) => {
-        const both =
-          membershipRedirect(state, 'dashboard') !== null &&
-          membershipRedirect(state, 'finish_setup') !== null;
-        expect(both).toBe(false);
+        expect(finishSetupDestination(state)).not.toBe('finish_setup');
+      });
+    });
+  });
+
+  describe('signedInDestination (already signed in, opening /log-in)', () => {
+    it('sends a provisioned maker straight to the app, with no form to fill in', () => {
+      expect(signedInDestination('complete')).toBe('app');
+    });
+
+    it('sends a half-finished Google signup to the completion screen, not the app', () => {
+      expect(signedInDestination('needs_setup')).toBe('finish_setup');
+      expect(FINISH_SETUP_PATH).toBe('/finish-setup');
+    });
+
+    /**
+     * The opposite call from the rule above, deliberately. There is no consent gate to
+     * skip here and this person already has an account, so a failed read resolves the way
+     * a successful password login on this same page already resolves: into the app.
+     */
+    it('sends them to the app when the membership read failed', () => {
+      expect(signedInDestination('unknown')).toBe('app');
+    });
+
+    it('never leaves a signed-in maker sitting on a login form', () => {
+      (['complete', 'needs_setup', 'unknown'] as const).forEach((state) => {
+        expect(signedInDestination(state)).not.toBe('render');
       });
     });
   });

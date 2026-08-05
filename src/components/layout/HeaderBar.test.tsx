@@ -4,7 +4,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { SiteHeader } from './SiteHeader';
 import { HEADER_ROW_CLASS, HEADER_SHELL_CLASS } from './HeaderBar';
 import { AuthShell } from '../auth/AuthShell';
-import { DashboardLayout } from '../dashboard/DashboardLayout';
 
 vi.mock('../../lib/auth', () => ({
   useAuth: () => ({
@@ -24,8 +23,13 @@ vi.mock('../../lib/auth', () => ({
  * container. And the marketing row took its height from the call-to-action button while
  * the auth row took its from the logo's line box, so the auth logo sat 7.1px higher.
  * Neither is visible in jsdom, which has no layout, so the assertion is on the thing
- * that produces the layout: all three shells must render the same header primitive with
- * the same row box.
+ * that produces the layout: every shell must render the same header primitive with the
+ * same row box.
+ *
+ * THERE ARE TWO SHELLS NOW, NOT THREE. The dashboard shell was deleted with the dashboard
+ * itself — this site is marketing and auth, and account management lives in the product —
+ * so its rows are gone from here rather than relaxed. Nothing about the marketing and auth
+ * comparison has been loosened; the third shell simply has no header to measure.
  */
 function rowOf(container: HTMLElement) {
   const row = container.querySelector('header [data-header-row]');
@@ -51,31 +55,20 @@ function renderAuth() {
   ).container;
 }
 
-function renderDashboard() {
-  return render(
-    <MemoryRouter>
-      <DashboardLayout />
-    </MemoryRouter>
-  ).container;
-}
-
 describe('shared header geometry', () => {
-  it('gives the marketing, auth and dashboard shells the same header row box', () => {
+  it('gives the marketing and auth shells the same header row box', () => {
     const marketing = rowOf(renderMarketing());
     const auth = rowOf(renderAuth());
-    const dashboard = rowOf(renderDashboard());
 
     expect(auth.className).toBe(marketing.className);
-    expect(dashboard.className).toBe(marketing.className);
     expect(marketing.className).toBe(HEADER_ROW_CLASS);
   });
 
-  it('gives all three the same header shell — same background, same stickiness', () => {
+  it('gives both the same header shell — same background, same stickiness', () => {
     const shell = (container: HTMLElement) => container.querySelector('header')?.className;
 
     expect(shell(renderAuth())).toBe(HEADER_SHELL_CLASS);
     expect(shell(renderMarketing())).toBe(HEADER_SHELL_CLASS);
-    expect(shell(renderDashboard())).toBe(HEADER_SHELL_CLASS);
   });
 
   it('reserves the row height, so a header with no button is as tall as one with a button', () => {
@@ -84,26 +77,25 @@ describe('shared header geometry', () => {
     expect(HEADER_ROW_CLASS).toContain('min-h-[4.25rem]');
     expect(rowOf(renderAuth()).className).toContain('min-h-[4.25rem]');
     expect(rowOf(renderMarketing()).className).toContain('min-h-[4.25rem]');
-    expect(rowOf(renderDashboard()).className).toContain('min-h-[4.25rem]');
   });
 
   it('puts the horizontal padding on the same box as the width constraint', () => {
     // The horizontal half. Padding on the <header> with an unpadded max-w-5xl box inside
     // it centres the content one gutter to the left of padding on the box itself.
-    for (const row of [rowOf(renderMarketing()), rowOf(renderAuth()), rowOf(renderDashboard())]) {
+    for (const row of [rowOf(renderMarketing()), rowOf(renderAuth())]) {
       expect(row.className).toContain('max-w-5xl');
       expect(row.className).toContain('px-5');
       expect(row.className).toContain('sm:px-6');
       expect(row.className).toContain('mx-auto');
     }
-    for (const container of [renderMarketing(), renderAuth(), renderDashboard()]) {
+    for (const container of [renderMarketing(), renderAuth()]) {
       const header = container.querySelector('header') as HTMLElement;
       expect(header.className).not.toContain('px-');
     }
   });
 
   it('puts the mark in the header row on every shell, at the same size', () => {
-    const marks = [renderMarketing(), renderAuth(), renderDashboard()].map((container) =>
+    const marks = [renderMarketing(), renderAuth()].map((container) =>
     within(rowOf(container)).getByRole('link', { name: /batchlabel\s*, home/i })
     );
 
@@ -116,11 +108,9 @@ describe('shared header geometry', () => {
     // The lockup's font-size is derived from the mark height, so a mismatch here would
     // scale the whole thing on one route and not another. Compared to each other rather
     // than to a literal — the number is Logo's business, sameness is this file's.
-    const [marketing, auth, dashboard] = marks;
+    const [marketing, auth] = marks;
     expect(auth.getAttribute('style')).toBe(marketing.getAttribute('style'));
-    expect(dashboard.getAttribute('style')).toBe(marketing.getAttribute('style'));
     expect(auth.className).toBe(marketing.className);
-    expect(dashboard.className).toBe(marketing.className);
   });
 });
 
@@ -141,12 +131,14 @@ describe('header variants', () => {
     expect(within(header).queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('keeps the dashboard tabs and log out inside the one banner landmark', () => {
-    const container = renderDashboard();
-    expect(container.querySelectorAll('header')).toHaveLength(1);
-    const header = container.querySelector('header') as HTMLElement;
-    expect(within(header).getByRole('navigation', { name: 'Dashboard' })).toBeInTheDocument();
-    expect(within(header).getByRole('button', { name: /log out/i })).toBeInTheDocument();
+  /**
+   * The `below` slot is what kept the dashboard's tab row inside the one banner landmark.
+   * The dashboard is gone, but the slot is still load-bearing for the marketing site's
+   * mobile panel — covered below, including the single-landmark assertion.
+   */
+  it('renders exactly one banner landmark per shell', () => {
+    expect(renderMarketing().querySelectorAll('header')).toHaveLength(1);
+    expect(renderAuth().querySelectorAll('header')).toHaveLength(1);
   });
 });
 

@@ -29,9 +29,12 @@ export function LogIn() {
   // sign in; it is validated against an allowlist before being followed.
   const next = new URLSearchParams(location.search).get('next');
 
-  // Google always returns to /dashboard, so a deep link the user was aiming at is lost
-  // on this path. Losing it is better than trusting a redirect target through an
-  // external provider, and the dashboard is one click from anywhere in the app.
+  // Google always returns to /finish-setup, which reads the membership and then either
+  // asks for the terms or hands the maker to the app. `next` is deliberately NOT carried
+  // through that round trip: it would have to survive a redirect to an external provider
+  // and back, and losing a deep link is a cheaper failure than being talked into one. A
+  // returning Google user still ends up inside the app without pressing anything; they
+  // land on its front door rather than on the exact page they started from.
   const handleGoogle = async () => {
     setGoogleBusy(true);
     setError(null);

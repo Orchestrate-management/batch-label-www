@@ -33,7 +33,7 @@ Real values for this project, used throughout:
 
 The redirect URI goes to **Supabase**, not to batchlabel.xyz. Google hands the code to
 Supabase, Supabase makes the session and then sends the browser on to
-`https://www.batchlabel.xyz/dashboard`. Getting this wrong is the single most common
+`https://www.batchlabel.xyz/finish-setup`. Getting this wrong is the single most common
 failure, so copy that row exactly — no trailing slash, no `www`, all lower case.
 
 ---
@@ -143,7 +143,7 @@ credentials → OAuth client ID**.
   https://cqzrwfresuiktgzhkhok.supabase.co/auth/v1/callback
   ```
 
-  Do **not** add `https://www.batchlabel.xyz/dashboard` here. That URL never talks to
+  Do **not** add `https://www.batchlabel.xyz/finish-setup` here. That URL never talks to
   Google.
 
 Press **Create**.
@@ -195,10 +195,15 @@ value you put into Google in 1e.
   - `https://www.batchlabel.xyz/**` (already there)
   - `http://localhost:5173/**` — add this if you want Google sign-in to work in local dev
 
-The app asks Supabase to return the browser to `<origin>/dashboard`, so the wildcard
-covers both `/dashboard` and the `/finish-setup` screen it forwards to. A redirect target
-that is not on this list is silently replaced with the Site URL, which looks like "it
-signed me in but sent me to the home page".
+The app asks Supabase to return the browser to `<origin>/finish-setup`, which the
+wildcard covers. A redirect target that is not on this list is silently replaced with the
+Site URL, which looks like "it signed me in but sent me to the home page".
+
+`/finish-setup` is the return for **both** signup and login, because an OAuth redirect
+cannot say which button was pressed. That one screen reads the membership and then either
+asks for the terms (new user) or hands the maker straight to app.batchlabel.xyz
+(returning user, no click). It used to return to `/dashboard`, a page on the marketing
+site that no longer exists — see `src/lib/auth.tsx`.
 
 Note the apex domain: `batchlabel.xyz` 308-redirects to `www`, so the app origin is always
 `https://www.batchlabel.xyz` and the `www` form is the one that matters here.
@@ -258,14 +263,14 @@ Testing, it must be on the Test users list.
 1. Go to <https://www.batchlabel.xyz/sign-up>.
 2. Press **Continue with Google**. The Google account chooser appears.
 3. Pick the account and approve.
-4. You should land on **`/finish-setup`**, not the dashboard. This is correct — it is
-   where the terms are collected.
+4. You should land on **`/finish-setup`**. This is correct — it is where the terms are
+   collected, and it is where every Google return lands.
 5. Try pressing **Finish and start my label** with the terms box unticked. It must refuse.
-6. Tick the terms, enter a shop name, submit. You should land on `/dashboard`.
-7. Go to **Account and billing**. The marketing email box must load (not "we could not
-   load your preferences"), and the advertising row must show "Currently on" or
-   "Currently off" with a button to cookie settings. That is the membership row being
-   read back.
+6. Tick the terms, enter a shop name, submit. You should land in the **product**, on
+   app.batchlabel.xyz, already signed in. Not on a page of the marketing site.
+7. In the app, open **Settings -> Account**. The marketing email box must load (not "we
+   could not read your preferences"), and the advertising row must show On or Off with a
+   link to cookie settings. That is the membership row being read back.
 
 ### What should be in the database
 
@@ -331,12 +336,15 @@ all with `source = 'oauth_signup'` and a server timestamp. Three, not six.
 
 Log out, then press **Continue with Google** again with the same account.
 
-- You should go straight to `/dashboard`. **You must not see `/finish-setup` again.**
+- You should go **straight into the app** at app.batchlabel.xyz, with no click. You will
+  pass through `/finish-setup`, which is where Google returns everybody, but it must not
+  show you the form: it reads the membership, finds one, and hands over. If you see the
+  consent form again, or you come to rest anywhere on www, that is the bug.
 - Re-run query 4. Still three rows. Signing in is not a new consent decision, and
   `complete_oauth_signup` writes nothing when a membership already exists.
 - Re-run query 3. Still one membership, `business_name` unchanged.
 
-Changing the marketing email box in **Account and billing** *does* add a row to
+Changing the marketing email box in the app's **Settings -> Account** *does* add a row to
 `consent_events`, with `source = 'account_settings'`. So does changing the marketing
 cookie toggle, which is where advertising is changed. That is the intended difference:
 every real decision is logged once, and a login is not a decision.
@@ -364,7 +372,7 @@ The consent screen is still in **Testing** and the account trying to sign in is 
 that will silently break launch: it works for you, because you are a test user, and fails
 for every maker.
 
-**Signed in, but landed on the home page instead of the dashboard**
+**Signed in, but landed on the home page instead of the product**
 The redirect target was not on the Supabase allow-list, so Supabase fell back to the Site
 URL. Add `https://www.batchlabel.xyz/**` (§2b).
 
@@ -439,8 +447,8 @@ group by u.email;
 ```
 
 Expect **one** user with **two** identities (`email`, `google`). That is linking working.
-Then confirm they land on `/dashboard` and not `/finish-setup`, and that
-`brand_memberships` still holds their original row with its original consents.
+Then confirm they are handed to the app rather than shown the `/finish-setup` form, and
+that `brand_memberships` still holds their original row with its original consents.
 
 #### Password-less Google users
 
