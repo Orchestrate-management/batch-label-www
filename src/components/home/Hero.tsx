@@ -29,8 +29,8 @@ export function Hero() {
             minimum sizes your label needs.
           </p>
           <p className="mt-3 max-w-prose text-[0.98rem] leading-relaxed text-ink-muted">
-            Candles and home fragrance is the only category we cover. We would like to add more,
-            but nothing else is built yet.
+            Home fragrance is the only category we cover, and everything in Batchlabel is built
+            around it.
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">

@@ -65,26 +65,52 @@ because the guard only knew the previous audit's exact strings.
 - Verify against the product app before writing, not after. Every one of the four
   took a single grep to disprove.
 
-## The category list
+## There is no category list any more
 
-`src/content/verticals.ts` is the single source of truth. The homepage categories
-section and the About page both render from it, so they cannot drift apart.
+`src/content/verticals.ts` is deleted. `src/content/product-forms.ts` replaces it,
+and the replacement is a change of subject rather than a rename.
 
-| Category | Status | What that means |
-|---|---|---|
-| Candles & home fragrance | `live` | Built. You can label this today. |
-| Wider consumer goods | `idea` | Named out loud. No work has happened. |
+The old file was a ladder: a `status` of `live` or `idea`, a `statusLabel`, an
+`activeVerticals` / `plannedVerticals` split, and — after cosmetics and electronics
+went — exactly two entries. The survivor was "Wider consumer goods", an `idea` card
+covering household products, detergents and food contact items with no work behind
+it. It survived the sweep by being neither cosmetics nor electronics, not by being
+closer to real.
 
-The status names are deliberate. `coming-soon` was an earlier value and it was the
-wrong word, so it is gone. If someone later wants to promise a date, they have to add
-a new status to do it, which is the point. `interest` is gone too — it existed for one
-category, which is no longer on the list.
+Dropping it left the homepage section rendering one live card in a two-column grid
+above a dashed "further off, and not started" box containing nothing. A section
+whose entire structure exists to compare had one thing to compare with nothing, and
+an empty dashed box is an invitation to wonder what used to be in it.
 
-## Where the category story appears
+**So the section changed subject.** The question it now answers is the one a maker
+actually arrives with — *will this handle what I make* — and the unit is the product
+form, not the vertical:
 
-Once on the homepage, in the categories section, and once on About. Not in the
-footer, not in the page metadata, and not in the FAQ. It says what Batchlabel
-covers; it does not enumerate what it does not.
+| Product form | What is specific about it |
+|---|---|
+| Container candles | Load in the finished wax, not the neat oil. Candle safety wording. |
+| Wax melts | Same calculation, safety wording written for a warmer not a flame. |
+| Reed diffusers | Far higher load, so statements a candle never triggers. |
+| Room sprays | Flammable base, and a precautionary statement for being sprayed. |
+
+There is no status field, and adding one back would be a mistake: with nothing to
+contrast against, "Available now" is a badge on everything. `coming-soon`,
+`interest` and `idea` are all gone with the ladder, and the way to promise a date is
+now to write a whole section rather than flip an enum, which is the point.
+
+Every `changes` line in that file is traceable to a branch in `derive.ts` in the app
+repo — the EN 15494 wording on candles and melts, the diffuser wording under GPSR,
+the `P261` a room spray gets for being aerosolised. A sentence that cannot be traced
+there does not belong in the file. This is the categories rule and the capabilities
+rule meeting: the section is only worth its space because it says something true and
+specific, and the moment it stops being checkable it is back to being a brochure.
+
+## Where the product scope appears
+
+Once on the homepage, in the "What we cover" section, and once on About, as the four
+names alone. Not in the footer, not in the page metadata. The FAQ answers "What can I
+label with Batchlabel?" in one sentence and stops. It says what Batchlabel covers; it
+does not enumerate what it does not.
 
 ## SEO
 
@@ -96,19 +122,24 @@ The homepage `<h1>` is unchanged: "Correct CLP labels for your candles, in minut
 
 ## Adding a category later
 
-Edit the entry in `src/content/verticals.ts`. Move it to `status: 'live'`, change
-`statusLabel` to "Available now", and point the CTA at `/sign-up`. The homepage
-section and the About list follow automatically.
+There is no longer a one-line way to do this, and that is deliberate. A second
+category is a real event and it should cost a real edit.
 
-The FAQ answers in `src/content/faqs.ts` are hand-written, so update the "Which
-products we cover" group by hand at the same time. Note that the copy-honesty
-category register would have to be relaxed first: it bans the words outright, which
-is the correct default while home fragrance is the only thing that works.
+It means: relaxing the copy-honesty category register, which bans the words outright
+today; deciding whether `product-forms.ts` grows a grouping or gains a sibling;
+rewriting the homepage section, because four product forms of one category and two
+categories of several forms are not the same shape; hand-updating the "Which products
+we cover" group in `src/content/faqs.ts`; and revisiting the `<h1>`, which says
+"candles".
+
+Do not reach for a `status` field to stage it. That is what the last one was, and a
+category with a badge on it is a promise whether or not the badge says so.
 
 ## Open questions
 
-1. **Naming "wider consumer goods" at all.** It is the last roadmap entry standing
-   and it is a category past anything real. Keep it on the page or cut it?
+1. ~~**Naming "wider consumer goods" at all.**~~ Cut. The site now names exactly one
+   category and four product forms within it, and the copy-honesty register bans the
+   words so it cannot drift back.
 2. **Pricing across categories.** A four-step ladder metered by SKU today, priced
    from `src/lib/plans.ts`. Same ladder when a second category arrives, or a
    separate line?
