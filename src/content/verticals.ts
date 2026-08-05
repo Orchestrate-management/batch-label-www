@@ -16,11 +16,10 @@
  */
 
 /**
- * `live`     — built, and you can label this today.
- * `interest` — not built and not started. We collect interest, nothing more.
- * `idea`     — a direction we have named out loud. No work has happened.
+ * `live` — built, and you can label this today.
+ * `idea` — a direction we have named out loud. No work has happened.
  */
-export type VerticalStatus = 'live' | 'interest' | 'idea';
+export type VerticalStatus = 'live' | 'idea';
 
 export interface Vertical {
   /** Stable slug, also used as the React key. */
@@ -60,23 +59,6 @@ export const verticals: Vertical[] = [
     cta: { label: 'Make a label free', to: '/sign-up', location: 'verticals_candles' }
   },
   {
-    id: 'cosmetics',
-    name: 'Cosmetics & skincare',
-    status: 'interest',
-    statusLabel: 'Not built',
-    tagline: 'The one makers ask us for most.',
-    description:
-      'We have not started this and we will not give you a date. Tell us you want it and we will let you know if that changes. It would cover the label only, so it would never replace a Cosmetic Product Safety Report.',
-    inputName: 'ingredient and product information',
-    regulation: 'UK and EU cosmetics labelling rules',
-    examples: ['Soaps', 'Balms & butters', 'Skincare', 'Bath products'],
-    cta: {
-      label: 'Tell us you want this',
-      href: 'mailto:hello@batchlabel.co.uk?subject=Cosmetics%20labelling',
-      location: 'verticals_cosmetics'
-    }
-  },
-  {
     id: 'cpg',
     name: 'Wider consumer goods',
     status: 'idea',
@@ -87,22 +69,10 @@ export const verticals: Vertical[] = [
     inputName: 'product safety and regulatory data',
     regulation: 'category specific labelling rules',
     examples: ['Household products', 'Food contact items', 'Detergents']
-  },
-  {
-    id: 'electronics',
-    name: 'Electronics & batteries',
-    status: 'idea',
-    statusLabel: 'Idea',
-    tagline: 'Named, not started.',
-    description:
-      'Conformity marks, warnings and disposal wording, on products that carry a CE or UKCA mark.',
-    inputName: 'conformity and technical documentation',
-    regulation: 'CE and UKCA marking, WEEE and battery rules',
-    examples: ['Consumer electronics', 'Batteries', 'Chargers']
   }
 ];
 
-/** Categories with a card of their own: the one you can use, and the one you can ask for. */
+/** Categories with a card of their own: the one you can actually use. */
 export const activeVerticals = verticals.filter((v) => v.status !== 'idea');
 
 /** Directions we have named but not started. Rendered as a lighter row. */

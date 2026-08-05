@@ -8,8 +8,8 @@
  *    cannot drift from the visible answers. Offers are built from `PLANS` in `lib/plans.ts`,
  *    the same projection the pricing page maps over, for the same reason.
  * 2. Never claim a category we have not built. Candles and home fragrance is the only
- *    live category (see POSITIONING.md), so nothing here mentions cosmetics, wider
- *    consumer goods or electronics as something Batchlabel does.
+ *    category (see POSITIONING.md), and nothing here names another as something
+ *    Batchlabel does.
  * 3. Never claim a *capability* we have not built either. This file is indexed and quoted
  *    verbatim by answer engines, so a false line here outlives its correction on the page.
  *    It once advertised a watermarked PNG free tier, print-ready PDF and SVG export and UFI

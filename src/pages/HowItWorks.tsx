@@ -141,7 +141,7 @@ export function HowItWorks() {
           },
           {
             title: 'It does not replace other duties',
-            body: 'Poison centre notification, a Cosmetic Product Safety Report, weights and measures rules and packaging duties are all separate. We only do the label.'
+            body: 'Poison centre notification, weights and measures rules and packaging duties are all separate. We only do the label.'
           }].
           map((card) =>
           <div key={card.title} className="rounded-2xl border border-paper-edge bg-white p-5">

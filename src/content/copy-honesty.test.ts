@@ -306,3 +306,75 @@ describe('public/llms.txt', () => {
     expect(llmsTxt).toMatch(/## What is not built yet/);
   });
 });
+
+/**
+ * THE THIRD REGISTER: the categories Batchlabel is not.
+ *
+ * The master specification is blunt about it — §13, "Out of scope, permanently: Cosmetics in
+ * any form" — and the app repo has been brought back to that scope: there is no cosmetics
+ * regime, no phased formula, no bill of materials, no CE mark and no wheelie bin in it.
+ *
+ * WHAT THIS GUARDS IS THE SITE SAYING OTHERWISE, and it is worth its own register because the
+ * failure mode is not a lie so much as a leak. The words came back before as a roadmap: a
+ * "Cosmetics & skincare" card, an FAQ answering "Do you do cosmetics labelling?", an About
+ * paragraph naming it as the category makers ask for most. Every one of those sentences was
+ * true and every one of them put a second category in the reader's head on the two highest
+ * traffic pages on the site.
+ *
+ * SO THE RULE IS ABSENCE, NOT DENIAL. "We do not label cosmetics" is banned by this guard for
+ * the same reason "we do label cosmetics" is: both are the site talking about cosmetics.
+ * Batchlabel is CLP for candles, wax melts, reed diffusers and room sprays, and the way to say
+ * that is to say it.
+ *
+ * Comments are stripped first, so this comment may name what it bans — and the one in
+ * structured-data.ts may keep explaining the rule it follows.
+ */
+const OTHER_CATEGORIES: BannedClaim[] = [
+  {
+    why: 'Cosmetics is out of scope permanently. Naming it — to offer it OR to refuse it — puts it back in the reader\'s head.',
+    pattern: /cosmetics?|skincare|\bCPSR\b/i
+  },
+  {
+    why: 'Electronics went with the CE, RoHS and WEEE regimes. Nothing on the site may imply a device is labellable.',
+    pattern: /electronics?|\bWEEE\b|\bRoHS\b|\bUKCA\b/i
+  }
+];
+
+describe('no surface names a category Batchlabel does not label', () => {
+  it.each(OTHER_CATEGORIES)('$why', ({ pattern, except }) => {
+    const offenders = surfaces.
+      filter((surface) => !except?.test(surface.name)).
+      filter((surface) => pattern.test(surface.text)).
+      map((surface) => surface.name);
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * Non-vacuity, and this register needs it more than the other two.
+   *
+   * A guard asserting the absence of words that are already absent everywhere looks identical
+   * to a guard that works, and stays green if somebody rewrites the pattern into nonsense.
+   * These are the exact strings that shipped, from the cards, the FAQ and the About page.
+   */
+  it.each([
+  'Cosmetics & skincare',
+  'Do you do cosmetics labelling?',
+  'cosmetics is the one makers ask us for most',
+  'it would never replace a Cosmetic Product Safety Report',
+  'Electronics & batteries',
+  'CE and UKCA marking, WEEE and battery rules'])(
+    'still catches the copy that shipped: %s',
+    (shipped) => {
+      expect(OTHER_CATEGORIES.some((claim) => claim.pattern.test(shipped))).toBe(true);
+    }
+  );
+
+  it('leaves the category we do label alone', () => {
+    for (const allowed of [
+    'Candles, wax melts, reed diffusers and room sprays',
+    'built against UK CLP and EU CLP',
+    'Upload the safety data sheet from your fragrance supplier']) {
+      expect(OTHER_CATEGORIES.some((claim) => claim.pattern.test(allowed))).toBe(false);
+    }
+  });
+});

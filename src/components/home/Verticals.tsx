@@ -9,7 +9,6 @@ import {
 
 const statusStyles: Record<Vertical['status'], string> = {
   'live': 'border-teal-600/25 bg-teal-50 text-teal-800',
-  'interest': 'border-clay-500/25 bg-clay-100 text-clay-600',
   'idea': 'border-paper-edge bg-paper text-ink-muted'
 };
 
@@ -82,10 +81,10 @@ export function Verticals() {
   return (
     <Section className="bg-white" ariaLabelledBy="verticals-heading">
       <Eyebrow>Categories</Eyebrow>
-      <Heading id="verticals-heading">What we cover, and what we do not</Heading>
+      <Heading id="verticals-heading">What we cover</Heading>
       <Lead className="mt-3">
-        Candles and home fragrance is the only category you can label with Batchlabel today. The
-        rest of this is where we would like to go.
+        Candles and home fragrance. It is what Batchlabel is built for, and it is what you can
+        label with it today.
       </Lead>
 
       <ul className="mt-8 grid gap-4 sm:grid-cols-2">

@@ -20,8 +20,21 @@ room sprays.
 
 ## What it does not do
 
-Nothing else. Cosmetics is not built. Wider consumer goods and electronics are not
-built. No category outside candles and home fragrance has been started.
+Nothing else. No category outside candles and home fragrance has been started, and
+per the master specification §13 none is going to be: "Out of scope, permanently:
+Cosmetics in any form."
+
+THE SITE NAMES NO OTHER CATEGORY AT ALL, and that is a deliberate change from the
+earlier draft. It used to carry a "Cosmetics & skincare" card, an FAQ answering
+"Do you do cosmetics labelling?" and an About paragraph calling cosmetics the
+category makers ask for most. Every one of those sentences was true, and every one
+of them put a second category in the reader's head on the two highest traffic pages
+on the site. The rule now is ABSENCE, NOT DENIAL: a refusal to label cosmetics is
+still the site talking about cosmetics.
+
+`src/content/copy-honesty.test.ts` enforces it — see the third register, "no surface
+names a category Batchlabel does not label", which bans the words on every copy
+surface and carries a non-vacuity test built from the exact strings that shipped.
 
 This matters more than it looks. The site's one real advantage over a compliance
 consultant is that people believe it. A "coming soon" badge on a category nobody
@@ -60,28 +73,24 @@ section and the About page both render from it, so they cannot drift apart.
 | Category | Status | What that means |
 |---|---|---|
 | Candles & home fragrance | `live` | Built. You can label this today. |
-| Cosmetics & skincare | `interest` | Not built, not started. We collect interest and nothing else. |
 | Wider consumer goods | `idea` | Named out loud. No work has happened. |
-| Electronics & batteries | `idea` | Named out loud. No work has happened. |
 
-The status names are deliberate. `coming-soon` was the old value for cosmetics and
-it was the wrong word, so it is gone. If someone later wants to promise a date, they
-have to add a new status to do it, which is the point.
+The status names are deliberate. `coming-soon` was an earlier value and it was the
+wrong word, so it is gone. If someone later wants to promise a date, they have to add
+a new status to do it, which is the point. `interest` is gone too — it existed for one
+category, which is no longer on the list.
 
-## Where the multi-category story appears
+## Where the category story appears
 
-Once on the homepage, in the hero subhead and the categories section. Once on
-About. Not in the footer, not in the page metadata, and not in the FAQ beyond a
-straight "no, and here is why".
-
-The earlier draft said the same "one engine, many categories" idea in five places.
-Three of them are gone. The reader only needs it once.
+Once on the homepage, in the categories section, and once on About. Not in the
+footer, not in the page metadata, and not in the FAQ. It says what Batchlabel
+covers; it does not enumerate what it does not.
 
 ## SEO
 
 Titles and descriptions lead with candle terms: candle, wax melt, reed diffuser,
-room spray, CLP, safety data sheet. Cosmetics keywords came out of the metadata,
-because ranking for something you cannot sell wastes the click and the trust.
+room spray, CLP, safety data sheet. Keywords for any other category came out of the
+metadata, because ranking for something you cannot sell wastes the click and the trust.
 
 The homepage `<h1>` is unchanged: "Correct CLP labels for your candles, in minutes."
 
@@ -92,16 +101,15 @@ Edit the entry in `src/content/verticals.ts`. Move it to `status: 'live'`, chang
 section and the About list follow automatically.
 
 The FAQ answers in `src/content/faqs.ts` are hand-written, so update the "Which
-products we cover" group by hand at the same time. Three answers there currently
-say a category does not exist. They will be wrong the day one does.
+products we cover" group by hand at the same time. Note that the copy-honesty
+category register would have to be relaxed first: it bans the words outright, which
+is the correct default while home fragrance is the only thing that works.
 
 ## Open questions
 
-1. **Cosmetics interest capture.** The CTA is a `mailto:` today. Worth a real list
-   before it gets any traffic?
-2. **Naming electronics at all.** It is two categories past anything real. Keep it
-   on the page or cut it?
-3. **Pricing across categories.** A four-step ladder metered by SKU today, priced
+1. **Naming "wider consumer goods" at all.** It is the last roadmap entry standing
+   and it is a category past anything real. Keep it on the page or cut it?
+2. **Pricing across categories.** A four-step ladder metered by SKU today, priced
    from `src/lib/plans.ts`. Same ladder when a second category arrives, or a
    separate line?
 4. **How prominent Orchestrate should be.** It appears on About only.
