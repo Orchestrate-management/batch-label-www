@@ -98,7 +98,7 @@ export function Terms() {
         </p>
         <LegalList
           items={[
-          `The Free plan covers ${skuAllowance(PLANS.free)} and requires no payment card. It is permanent rather than a trial, and it produces the same label as every paid plan: nothing that a label needs in order to be correct sits behind a price.`,
+          `The Free plan covers ${skuAllowance(PLANS.free)} and requires no payment card. It does not expire, and it produces the same label as every paid plan: nothing that a label needs in order to be correct sits behind a price.`,
           `Paid plans are ${paidPlanSentence()}.`,
           'All prices shown on the site exclude VAT. VAT is added at checkout by Stripe according to your location and your VAT number if you give one. All prices are in GBP for customers in every country.',
           'Payments are handled by Stripe. We never see or store your full card details.',
@@ -106,7 +106,7 @@ export function Terms() {
           // No pro rata refund is promised, because none is issued: cancellation in the
           // billing portal takes effect at the end of the paid period with no proration.
           // Copy conforms to the mechanism, never the other way round.
-          'If Batchlabel does not do what the pricing page describes, tell us within 14 days of payment and we will refund you in full if we cannot put it right. Outside that, cancelling ends the plan at the end of the period you have already paid for rather than refunding any part of it.',
+          'If a plan does not give you what it says it includes, tell us within 14 days of payment and we will refund you in full if we cannot put it right. Outside that, cancelling ends the plan at the end of the period you have already paid for rather than refunding any part of it.',
           'We may change prices for future billing periods. We will give you at least 30 days notice by email, and you may cancel before the change takes effect.']
           } />
 
@@ -114,22 +114,26 @@ export function Terms() {
 
       <LegalSection title="6. What is not included">
         <p>
-          Some things people reasonably expect of a labelling tool are not built yet. They are not
-          part of what you are buying on any plan, and we will not charge for them separately when
-          they arrive.
+          Batchlabel is early, and the marketing pages on this site describe the product it is
+          being built into. This section is the contractual position, and where the two differ
+          this one governs. Some things a labelling tool is reasonably expected to do are not
+          available on any plan today. They are not part of what you are buying, and we will not
+          charge for them separately when they arrive.
         </p>
         <LegalList
           items={[
           'Downloading a label as a file. PDF and SVG export is in build and is not available on any plan today.',
-          'Generating a UFI. We place the UFI on the label where the rules require it; you obtain the code itself from the free ECHA generator.',
-          'Additional people on an account, whether editing or read only.',
+          'Generating a UFI. We set the UFI on the label where the rules require it; the code itself currently comes from the free ECHA generator.',
+          'Additional people on an account, whether editing or read only. An account is a single login on every plan.',
           'Alerts when a supplier reissues or reclassifies a safety data sheet.',
-          'Bulk generation, CSV import, API access and removal of Batchlabel branding.']
+          'Bulk generation, CSV import, API access, archiving a SKU you have stopped selling, and removal of Batchlabel branding.']
           } />
 
         <p>
-          The list on the <Link className="underline decoration-teal-700/40 underline-offset-2" to="/pricing">pricing page</Link>{' '}
-          is the current one. If something is listed as not built, it is not sold.
+          If something is listed here, it is not sold, and no plan on the{' '}
+          <Link className="underline decoration-teal-700/40 underline-offset-2" to="/pricing">pricing page</Link>{' '}
+          includes it. This list is kept current, and a line leaves it when the thing it names
+          ships rather than when we would like it to.
         </p>
       </LegalSection>
 
@@ -196,7 +200,7 @@ export function Terms() {
 
       <LegalSection title="13. Contact">
         <p>
-          Questions about these terms: <a className="underline decoration-teal-700/40 underline-offset-2" href="mailto:hello@batchlabel.co.uk">hello@batchlabel.co.uk</a>.
+          Questions about these terms: <a className="underline decoration-teal-700/40 underline-offset-2" href="mailto:hello@batchlabel.xyz">hello@batchlabel.xyz</a>.
         </p>
       </LegalSection>
     </LegalLayout>);

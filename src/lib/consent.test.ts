@@ -12,7 +12,7 @@ describe('consent', () => {
     window.localStorage.clear();
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { protocol: 'https:', href: 'https://batchlabel.co.uk/' },
+      value: { protocol: 'https:', href: 'https://batchlabel.xyz/' },
     });
   });
 

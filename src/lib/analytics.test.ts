@@ -47,7 +47,7 @@ describe('analytics', () => {
     window.localStorage.clear();
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { pathname: '/pricing', search: '', href: 'https://batchlabel.co.uk/pricing' },
+      value: { pathname: '/pricing', search: '', href: 'https://batchlabel.xyz/pricing' },
     });
   });
 
@@ -167,7 +167,7 @@ describe('analytics', () => {
       const event = gtagCommands().find((c) => c[1] === 'page_view');
       expect(event![2]).toMatchObject({
         page_path: '/pricing',
-        page_location: 'https://batchlabel.co.uk/pricing',
+        page_location: 'https://batchlabel.xyz/pricing',
       });
     });
   });

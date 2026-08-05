@@ -8,7 +8,7 @@ describe('Button', () => {
     window.dataLayer = [];
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { pathname: '/pricing', search: '', href: 'https://batchlabel.co.uk/pricing' },
+      value: { pathname: '/pricing', search: '', href: 'https://batchlabel.xyz/pricing' },
     });
   });
 

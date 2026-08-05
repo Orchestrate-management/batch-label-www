@@ -184,7 +184,7 @@ describe('summarisePlan', () => {
   it('tells a past_due customer to fix their card, without switching anything off', () => {
     const summary = summarisePlan(entitlement({ status: 'past_due' }));
     expect(summary.warning).toMatch(/update your card/i);
-    expect(summary.warning).toMatch(/nothing is switched off/i);
+    expect(summary.warning).toMatch(/nothing has been switched off/i);
     expect(summary.showUpgrade).toBe(false);
   });
 

@@ -9,8 +9,7 @@ import { APP_URL } from '../../lib/app-handoff';
 const links = [
 { to: '/how-it-works', label: 'How it works' },
 { to: '/pricing', label: 'Pricing' },
-{ to: '/faq', label: 'FAQ' },
-{ to: '/about', label: 'About' }];
+{ to: '/faq', label: 'FAQ' }];
 
 
 /**

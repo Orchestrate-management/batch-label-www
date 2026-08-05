@@ -9,10 +9,10 @@ export const labelContents = [
 'Hazard statements, the H codes, in full sentences',
 'Precautionary statements, the P codes, chosen and combined',
 'Allergen declarations from the fragrance, such as linalool and limonene',
-'A place for your UFI, that is a Unique Formula Identifier, set where poison centre rules require it',
+'Your UFI, that is a Unique Formula Identifier, generated and set where poison centre rules require it',
 'Batch code and date fields',
 'Your business name, address and contact details as the supplier',
-'Candle and diffuser safety wording, such as burn within sight',
+'Candle, melt, diffuser and spray safety wording, such as burn within sight',
 'CLP text set at the minimum size your pack size requires'];
 
 

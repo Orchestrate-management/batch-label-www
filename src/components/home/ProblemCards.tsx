@@ -1,27 +1,38 @@
 import { Section, Heading, Eyebrow, Lead } from '../ui/Section';
 
+/**
+ * Three specific things that go wrong, replacing three manufactured ones.
+ *
+ * The old set opened "You did not start making candles so you could read regulations at
+ * eleven at night", which is a sentence written about makers rather than for them. It
+ * invented a general anguish to sell against, and no maker describes their own week that
+ * way.
+ *
+ * Each card is now one concrete failure with the mechanism in it: what broke, why the label
+ * was wrong, what it cost. A card that cannot name the thing that broke is decoration.
+ */
 const cards = [
 {
-  title: 'Getting it wrong is expensive',
-  body: 'A missing hazard statement can get a listing pulled from Etsy or Shopify, and Trading Standards can fine you. Most makers only find out when the email lands.'
+  title: 'A listing gets flagged',
+  body: 'A marketplace pulls a wax melt listing because the label is one hazard statement short. You find out from the email, the listing is down while you fix it, and the reviewer will not tell you which statement is missing.'
 },
 {
-  title: 'Consultants charge per fragrance',
-  body: 'A one off assessment often costs more than a whole market stall takes in a day. Add a new scent and you pay again, then again when the supplier reformulates.'
+  title: 'Your supplier reformulates',
+  body: 'A new safety data sheet lands for a fragrance you already sell. The classification has moved, so the label has moved with it, and every pack size using that oil needs redoing before the next batch goes out.'
 },
 {
-  title: 'Spreadsheets break quietly',
-  body: 'Change the fragrance load from 8 per cent to 10 per cent and half the formulas are wrong, but the sheet still prints something that looks fine.'
+  title: 'The wording will not fit',
+  body: 'The text is right and the tin is 40 mm across. CLP sets a minimum size for the pictograms and for the regulated text, so shrinking it until it fits is the one thing you cannot do.'
 }];
 
 
 export function ProblemCards() {
   return (
     <Section ariaLabelledBy="problem-heading">
-      <Eyebrow>The bit nobody enjoys</Eyebrow>
-      <Heading id="problem-heading">Labelling is where good products get stuck</Heading>
+      <Eyebrow>Why it exists</Eyebrow>
+      <Heading id="problem-heading">Three ways a label goes wrong</Heading>
       <Lead className="mt-3">
-        You did not start making candles so you could read regulations at eleven at night.
+        None of these are unusual, and all three cost an evening.
       </Lead>
 
       <ul className="mt-8 grid gap-4 sm:grid-cols-3">
@@ -29,7 +40,7 @@ export function ProblemCards() {
         <li
           key={card.title}
           className="rounded-2xl border border-paper-edge bg-white p-5 sm:p-6">
-          
+
             <h3 className="font-display text-[1.05rem] font-semibold text-ink">{card.title}</h3>
             <p className="mt-2 text-sm leading-relaxed text-ink-soft">{card.body}</p>
           </li>

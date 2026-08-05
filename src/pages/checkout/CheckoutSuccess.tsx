@@ -56,7 +56,7 @@ export function CheckoutSuccess() {
         <p className="mt-4 text-xs text-ink-muted">
           {/* The purchase conversion is recorded server side from the Stripe webhook, not here,
                so refunds and failed payments cannot inflate it. See api/stripe-webhook.ts. */}
-          Anything not right? Email hello@batchlabel.co.uk and we will fix it or refund you.
+          Anything not right? Email hello@batchlabel.xyz and we will fix it or refund you.
         </p>
       </div>
     </section>);

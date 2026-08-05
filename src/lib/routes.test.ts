@@ -43,8 +43,8 @@ describe('canonicalUrl', () => {
     expect(canonicalUrl('/faq#main')).toBe('https://www.batchlabel.xyz/faq');
   });
 
-  it('strips a trailing slash so /about and /about/ agree', () => {
-    expect(canonicalUrl('/about/')).toBe(canonicalUrl('/about'));
+  it('strips a trailing slash so /contact and /contact/ agree', () => {
+    expect(canonicalUrl('/contact/')).toBe(canonicalUrl('/contact'));
   });
 });
 

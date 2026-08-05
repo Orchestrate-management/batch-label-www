@@ -50,7 +50,7 @@ export function ForgotPassword() {
             If we have an account for {email}, a reset link is on its way. It is valid for one hour.
           </Alert>
           <p className="text-sm text-ink-soft">
-            Nothing in a few minutes? Check your spam folder, then email hello@batchlabel.co.uk and we
+            Nothing in a few minutes? Check your spam folder, then email hello@batchlabel.xyz and we
             will sort it out.
           </p>
         </div> :

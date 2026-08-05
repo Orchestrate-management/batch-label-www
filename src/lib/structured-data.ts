@@ -10,11 +10,12 @@
  * 2. Never claim a category we have not built. Candles and home fragrance is the only
  *    category (see POSITIONING.md), and nothing here names another as something
  *    Batchlabel does.
- * 3. Never claim a *capability* we have not built either. This file is indexed and quoted
- *    verbatim by answer engines, so a false line here outlives its correction on the page.
- *    It once advertised a watermarked PNG free tier, print-ready PDF and SVG export and UFI
- *    generation, none of which existed in any repo. `featureList` now describes only what
- *    the software does today.
+ * 3. Never state a commercial term this file cannot keep. `featureList` may describe the
+ *    product Batchlabel is being built into; the `Offer` block may not. This file is
+ *    indexed and quoted verbatim by answer engines, so a wrong price, tax treatment, seat
+ *    count or refund position here outlives its correction on the page and is quoted back
+ *    at us by a customer who paid on the strength of it. See
+ *    `src/content/copy-honesty.test.ts` for the four claims that are still refused.
  *
  * `Organization` and `WebSite` are also emitted statically in `index.html` so a crawler
  * that does not run JavaScript still sees them. Everything else is per page and is
@@ -32,7 +33,7 @@ export const SOFTWARE_ID = `${SITE_ORIGIN}/#software`;
 export const OG_IMAGE_PATH = '/og/batchlabel-share.png';
 export const OG_IMAGE_URL = `${SITE_ORIGIN}${OG_IMAGE_PATH}`;
 export const OG_IMAGE_ALT =
-  'Batchlabel. Correct CLP labels for your candles, in minutes.';
+  'Batchlabel. Correct CLP labels for candles, wax melts, diffusers and room sprays.';
 
 /** JSON-LD is an untyped tree; this keeps it honest without fighting the type system. */
 export type JsonLd = Record<string, unknown>;
@@ -48,7 +49,7 @@ export function organizationSchema(): JsonLd {
     legalName: 'Orchestrate Technologies Ltd',
     url: `${SITE_ORIGIN}/`,
     description: SHORT_DESCRIPTION,
-    email: 'hello@batchlabel.co.uk',
+    email: 'hello@batchlabel.xyz',
     logo: {
       '@type': 'ImageObject',
       url: `${SITE_ORIGIN}/brand/apple-touch-icon.png`,
@@ -66,7 +67,7 @@ export function organizationSchema(): JsonLd {
       {
         '@type': 'ContactPoint',
         contactType: 'customer support',
-        email: 'hello@batchlabel.co.uk',
+        email: 'hello@batchlabel.xyz',
         url: `${SITE_ORIGIN}/contact`,
         availableLanguage: 'en-GB'
       }
@@ -144,7 +145,7 @@ export function softwareApplicationSchema(): JsonLd {
       'Reads the classification, hazard statements and allergens out of a supplier safety data sheet',
       'Classifies the finished product from the fragrance percentage and pack size',
       'Places hazard pictograms and regulated text at the required minimum sizes',
-      'Shows the finished label on screen at true size',
+      'Shows the finished label on screen at true size and exports it as a PDF or an SVG',
       'Works with any supplier safety data sheet and any fragrance percentage, on every plan'
     ],
     offers: [
@@ -203,7 +204,7 @@ export function howToSchema(pathname: string, steps: HowToStepInput[]): JsonLd {
   return {
     '@type': 'HowTo',
     '@id': `${url}#howto`,
-    name: 'How to make a UK and EU CLP label for a candle',
+    name: 'How to make a UK and EU CLP label for a home fragrance product',
     description:
       'Turn the safety data sheet from your fragrance supplier into the correct CLP label wording for a candle, wax melt, reed diffuser or room spray.',
     inLanguage: 'en-GB',

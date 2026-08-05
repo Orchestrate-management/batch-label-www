@@ -8,7 +8,7 @@ import { breadcrumbSchema, faqPageSchema, graph } from '../lib/structured-data';
 
 export function Faq() {
   usePageMeta({
-    title: 'Common questions about CLP labels for candles',
+    title: 'Common questions about CLP labels',
     description:
     'Plain answers on CLP, safety data sheets, UFI codes, allergens, printing, pricing and VAT. Batchlabel covers candles, wax melts, reed diffusers and room sprays.'
   });
@@ -24,7 +24,7 @@ export function Faq() {
       <PageHero
         eyebrow="FAQ"
         title="Common questions"
-        intro="If your question is not here, email hello@batchlabel.co.uk and a person will reply." />
+        intro="If your question is not here, email hello@batchlabel.xyz and a person will reply." />
       
 
       <Section>

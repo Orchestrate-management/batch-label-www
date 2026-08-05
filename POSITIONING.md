@@ -44,9 +44,19 @@ has written a line of code for spends that credibility for nothing.
 
 - Never say a category is coming, next, in build, in beta, or launching.
 - Never give a date, a quarter, or a countdown.
-- Naming a direction is fine. Promising it is not.
-- Candles stays the lead everywhere: the `<h1>`, the label preview, the funnel,
-  the SEO. It is the only thing that works and the only thing that pays.
+- **The site describes the finished product.** Reversed by Rhys on 5 August 2026,
+  deliberately and after being shown the trade-off: "the www represents what the
+  app WILL do, not the app's current functionality." Naming a capability the build
+  does not yet have is now correct on the marketing pages.
+- **Except about money.** What a plan includes, what it costs, what is refunded and
+  what is metered are statements about the contract somebody is about to enter, not
+  about the product's direction. `src/content/copy-honesty.test.ts` still enforces
+  those four and its header explains why. The Consultant tier is the live example:
+  it may not be sold on capabilities it does not grant, because that sentence is
+  the only stated reason to pay £164 a month more than Studio.
+- **Home fragrance, not candles.** Candles, wax melts, reed diffusers and room
+  sprays are all first-class, in the `<h1>`, the titles, the schema and the FAQ. A
+  wax melt seller should not have to work out whether the product is for her.
 
 **Rules for any copy about capabilities:**
 

@@ -21,8 +21,10 @@
  * P261 a room spray gets for being sprayed. If a sentence here cannot be traced to a branch
  * in that file, it does not belong in it.
  *
- * The homepage section and the About page both render from this array, so they cannot drift
- * apart. See POSITIONING.md.
+ * The homepage section renders from this array. The About page did too, until it was deleted,
+ * which is why "so they cannot drift apart" is no longer the reason this array exists — one
+ * surface renders it now. It stays a single list because the four forms are named in the h1,
+ * the titles, the schema and the FAQ, and those are what must not drift. See POSITIONING.md.
  */
 
 export interface ProductForm {
@@ -44,7 +46,7 @@ export const productForms: ProductForm[] = [
     name: 'Container candles',
     what: 'Wax poured into a jar or a tin, sold by net weight.',
     changes:
-      'The classification follows the fragrance load in the finished wax, not the strength of the neat oil, so the same fragrance can land on a different label in a 180 g tin than in a 30 cl jar. Candle safety wording sits alongside the CLP elements.',
+      'The classification is worked out from the fragrance load in the finished wax, so the same oil can land on a different label in a 180 g tin than in a 30 cl jar. Candle safety wording sits alongside the CLP elements.',
     rules: 'UK CLP, EU CLP and EN 15494'
   },
   {

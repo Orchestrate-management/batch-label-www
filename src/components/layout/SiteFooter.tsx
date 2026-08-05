@@ -10,7 +10,6 @@ const productLinks = [
 
 
 const companyLinks = [
-{ to: '/about', label: 'About' },
 { to: '/contact', label: 'Contact' }];
 
 
@@ -59,8 +58,8 @@ export function SiteFooter() {
                 </button>
               </li>
               <li>
-                <a href="mailto:hello@batchlabel.co.uk" className="text-ink-soft hover:text-ink">
-                  hello@batchlabel.co.uk
+                <a href="mailto:hello@batchlabel.xyz" className="text-ink-soft hover:text-ink">
+                  hello@batchlabel.xyz
                 </a>
               </li>
             </ul>

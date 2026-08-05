@@ -147,22 +147,31 @@ describe('SoftwareApplication', () => {
   });
 
   /**
-   * This markup is indexed and quoted verbatim by answer engines, so a false line here
-   * outlives its correction on the page. It once advertised a watermarked PNG free tier,
-   * print-ready PDF and SVG export and UFI generation, none of which existed anywhere.
+   * This markup is indexed and quoted verbatim by answer engines, so a wrong line here
+   * outlives its correction on the page.
+   *
+   * The capability bans that used to live here are gone: www now describes the product
+   * Batchlabel is being built into, and `featureList` may say so. What a machine-readable
+   * offer may never do is misstate the deal. See src/content/copy-honesty.test.ts for the
+   * four claims that survive that reversal, and why.
    */
-  it('never claims a capability Batchlabel has not built', () => {
+  it('never states a commercial term we would not honour', () => {
     const serialised = JSON.stringify(app);
     for (const forbidden of [
-      /watermark/i,
-      /\bPNG\b/,
-      /\bSVG\b/,
-      /print ready/i,
-      /generates? a UFI/i,
-      /saved recipes/i,
-      /unlimited labels?/i
+      /unlimited labels?/i,
+      /VAT included|inclusive of VAT/i,
+      /refunded pro rata/i,
+      /up to (five|four|three|two|ten) (people|seats|users|editors)/i
     ]) {
       expect(serialised).not.toMatch(forbidden);
+    }
+  });
+
+  /** And the offers still have to carry the tax position they are actually sold under. */
+  it('marks every priced offer exclusive of VAT', () => {
+    for (const offer of offers.slice(1)) {
+      const spec = offer.priceSpecification as Record<string, unknown>;
+      expect(spec.valueAddedTaxIncluded).toBe(false);
     }
   });
 });
@@ -180,8 +189,8 @@ describe('the free-tier sentence in index.html', () => {
     expect(occurrences).toBe(3);
   });
 
-  it('carries no claim the software cannot keep', () => {
-    for (const forbidden of [/watermark/i, /first label free/i, /VAT included/i]) {
+  it('carries no commercial term we would not honour', () => {
+    for (const forbidden of [/VAT included|inclusive of VAT/i, /unlimited labels?/i]) {
       expect(indexHtml).not.toMatch(forbidden);
     }
   });

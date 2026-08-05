@@ -65,7 +65,7 @@ describe('consent preferences', () => {
         p_brand: 'batchlabel',
         p_title: MARKETING_EMAIL_AGREEMENT.title,
         p_version: MARKETING_EMAIL_AGREEMENT.version,
-        p_url: `https://batchlabel.co.uk${MARKETING_EMAIL_AGREEMENT.path}`,
+        p_url: `https://batchlabel.xyz${MARKETING_EMAIL_AGREEMENT.path}`,
       });
     });
   });

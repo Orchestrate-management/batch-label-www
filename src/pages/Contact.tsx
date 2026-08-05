@@ -11,7 +11,7 @@ export function Contact() {
   usePageMeta({
     title: 'Contact us about CLP labelling or your account',
     description:
-    'Email hello@batchlabel.co.uk with a question about CLP labelling or your Batchlabel account. A person replies, usually the same working day.'
+    'Email hello@batchlabel.xyz with a question about CLP labelling or your Batchlabel account. A person replies, usually the same working day.'
   });
 
   useStructuredData(graph([breadcrumbSchema('Contact', '/contact')]));
@@ -26,7 +26,7 @@ export function Contact() {
     // TODO: post to your support inbox or helpdesk endpoint. Until then this opens the
     // maker's email client so no message is lost.
     const body = encodeURIComponent(`${message}\n\nFrom: ${name} (${email})`);
-    window.location.href = `mailto:hello@batchlabel.co.uk?subject=${encodeURIComponent(
+    window.location.href = `mailto:hello@batchlabel.xyz?subject=${encodeURIComponent(
       'Question from the Batchlabel site'
     )}&body=${body}`;
     setSent(true);
@@ -94,7 +94,7 @@ export function Contact() {
             {sent ?
             <Alert tone="success">
                 Thanks. Your email client should have opened. If it did not, write to
-                hello@batchlabel.co.uk and we will pick it up.
+                hello@batchlabel.xyz and we will pick it up.
               </Alert> :
             null}
           </form>
@@ -103,10 +103,10 @@ export function Contact() {
             <h2 className="sr-only">Other ways to reach us</h2>
             <DetailCard icon={<MailIcon size={18} aria-hidden="true" />} title="Email">
               <a
-                href="mailto:hello@batchlabel.co.uk"
+                href="mailto:hello@batchlabel.xyz"
                 className="text-teal-700 underline decoration-teal-700/40 underline-offset-2">
                 
-                hello@batchlabel.co.uk
+                hello@batchlabel.xyz
               </a>
             </DetailCard>
             <DetailCard icon={<ClockIcon size={18} aria-hidden="true" />} title="Replies">
