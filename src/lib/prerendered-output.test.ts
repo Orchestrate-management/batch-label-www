@@ -11,8 +11,9 @@ import { INDEXABLE_ROUTES, canonicalUrl } from './routes';
  * and the suite fail in different places and at different times: this is the version that
  * turns red in the pull request, next to the diff that caused it.
  *
- * It needs a build. CI runs `npm run build` before the test step for exactly this reason,
- * so these do not skip there. Locally: `npm run build && npm run test:run`.
+ * It needs a build, and both CI and `vercel-build` now run `npm run build` BEFORE the test
+ * step so these actually execute rather than skipping their way to green. Locally:
+ * `npm run build && npm run test:run`.
  */
 
 const DIST = resolve(process.cwd(), 'dist');
@@ -31,13 +32,23 @@ const canonicalOf = (html: string) =>
   /<link[^>]+rel="canonical"[^>]+href="([^"]*)"/.exec(html)?.[1] ?? '';
 
 describe.skipIf(!built)('the prerendered pages in dist/', () => {
-  const pages = INDEXABLE_ROUTES.map((route) => ({
-    path: route.path,
-    html: read(fileFor(route.path))
-  }));
+  /**
+   * Read lazily, per test, NOT in this callback.
+   *
+   * `describe.skipIf` skips the TESTS; it does not stop vitest running the callback, which
+   * it must do at collection time to discover them. Reading here therefore happens even
+   * when the guard says to skip — so on a checkout with no dist/ this file did not skip,
+   * it threw ENOENT and took the whole suite with it. That is how `vercel-build` came to
+   * fail before it ever reached `vite build`.
+   */
+  const htmlFor = (path: string) => read(fileFor(path));
 
-  it.each(pages.map((page) => page.path))('%s is a real document, not the shell', (path) => {
-    const html = pages.find((page) => page.path === path)!.html;
+  /** The same shape the eager array had, built inside a test rather than at collection. */
+  const allPages = () =>
+  INDEXABLE_ROUTES.map((route) => ({ path: route.path, html: htmlFor(route.path) }));
+
+  it.each(INDEXABLE_ROUTES.map((route) => route.path))('%s is a real document, not the shell', (path) => {
+    const html = htmlFor(path);
     // The shell was 6,413 bytes with 54 characters of readable text. Anything that size
     // means React produced nothing and the bug is back.
     expect(html.length).toBeGreaterThan(10_000);
@@ -46,9 +57,9 @@ describe.skipIf(!built)('the prerendered pages in dist/', () => {
   });
 
   it('gives every route its own title, description and canonical', () => {
-    expect(new Set(pages.map((page) => titleOf(page.html))).size).toBe(pages.length);
-    expect(new Set(pages.map((page) => metaOf(page.html, 'description'))).size).toBe(pages.length);
-    for (const page of pages) {
+    expect(new Set(allPages().map((page) => titleOf(page.html))).size).toBe(INDEXABLE_ROUTES.length);
+    expect(new Set(allPages().map((page) => metaOf(page.html, 'description'))).size).toBe(INDEXABLE_ROUTES.length);
+    for (const page of allPages()) {
       expect(canonicalOf(page.html)).toBe(canonicalUrl(page.path));
       expect(metaOf(page.html, 'og:url')).toBe(canonicalUrl(page.path));
       expect(metaOf(page.html, 'og:title')).toBe(titleOf(page.html));
@@ -57,11 +68,11 @@ describe.skipIf(!built)('the prerendered pages in dist/', () => {
   });
 
   it('makes no two routes byte-identical, which is the defect this replaced', () => {
-    expect(new Set(pages.map((page) => page.html)).size).toBe(pages.length);
+    expect(new Set(allPages().map((page) => page.html)).size).toBe(INDEXABLE_ROUTES.length);
   });
 
   it('carries the site-wide and the page-level JSON-LD on every route', () => {
-    for (const page of pages) {
+    for (const page of allPages()) {
       // Two at least: the static Organization/WebSite graph from index.html, and the
       // page's own, which useStructuredData appends with a data-bl-jsonld attribute.
       const blocks = [...page.html.matchAll(/<script type="application\/ld\+json"[^>]*>/g)];
@@ -72,7 +83,7 @@ describe.skipIf(!built)('the prerendered pages in dist/', () => {
   });
 
   it('shows the cookie banner in its first-visit state and grants nothing', () => {
-    for (const page of pages) {
+    for (const page of allPages()) {
       expect(page.html).toContain('id="cookie-title"');
       expect(page.html).toContain('Accept all');
       expect(page.html).toContain('Reject optional');
@@ -85,7 +96,7 @@ describe.skipIf(!built)('the prerendered pages in dist/', () => {
   });
 
   it('contains no session, no user and no account data', () => {
-    for (const page of pages) {
+    for (const page of allPages()) {
       expect(page.html).not.toMatch(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/);
       expect(page.html).not.toMatch(/access_token|refresh_token/);
       expect(page.html).not.toMatch(/sb-[a-z0-9]+-auth-token/);
@@ -96,7 +107,7 @@ describe.skipIf(!built)('the prerendered pages in dist/', () => {
   });
 
   it('still boots the app for everybody who does run JavaScript', () => {
-    for (const page of pages) {
+    for (const page of allPages()) {
       expect(page.html).toMatch(/<script type="module"[^>]+src="\/assets\//);
       expect(page.html).toMatch(/<link rel="stylesheet"[^>]+href="\/assets\//);
     }
