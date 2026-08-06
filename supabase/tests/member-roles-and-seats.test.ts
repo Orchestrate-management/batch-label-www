@@ -1150,6 +1150,69 @@ async function run(): Promise<readonly CheckResult[]> {
     readmitted.rows[0]?.status === 'active' && readmitted.rows[0]?.role === 'editor',
     JSON.stringify(readmitted.rows[0]));
 
+  // ── THE TIE, PINNED. The four checks above used to fail about half the time, and the cause
+  //    was not any of them: the sanction guard read `created_at <= updated_at` and refused the
+  //    tie. now() is the TRANSACTION timestamp and PGlite's clock resolves to a millisecond, so
+  //    a removal and the re-invitation after it land on the same value whenever they run inside
+  //    one tick — measured at 19 collisions in 40 consecutive pairs. Reproducing that by racing
+  //    the clock would only reproduce it sometimes, which is the property that let it reach a
+  //    pull request, so both cases below CONSTRUCT the timestamp relationship in SQL instead.
+  //    They cannot flake in either direction.
+  //
+  //    Role is 'viewer' on purpose: viewers are free and unlimited, so nothing here can fail for
+  //    want of a seat and read as a timestamp bug.
+  await db.exec(`update public.account_members set status = 'removed'
+    where user_id = '${INVITEE}' and account_id = '${ACCOUNT}';`);
+  await db.exec(`insert into public.account_invites
+      (account_id, email, role, token_hash, invited_by, created_at)
+    select '${ACCOUNT}','invitee@example.com','viewer',${hashOf('tie-token')},'${ADMIN}', am.updated_at
+      from public.account_members am
+     where am.user_id = '${INVITEE}' and am.account_id = '${ACCOUNT}';`);
+  const tie = await as(INVITEE, `select outcome from public.accept_account_invite('tie-token')`);
+  c.check('an invite minted in the SAME instant as the removal is admitted, because a tie cannot say which came first',
+    tie.ok && tie.rows[0]?.outcome === 'accepted',
+    JSON.stringify(tie.rows[0] ?? tie.message));
+
+  const tieMember = await q(`select role, status from public.account_members
+    where user_id = '${INVITEE}' and account_id = '${ACCOUNT}'`);
+  c.check('and the tie really re-admits rather than merely answering accepted',
+    tieMember.rows[0]?.status === 'active' && tieMember.rows[0]?.role === 'viewer',
+    JSON.stringify(tieMember.rows[0]));
+
+  // CLEAR THE SLOT BEFORE THE NEXT MINT, and the reason is a failure mode this pair produced
+  // while being written. A refused invite is still LIVE, so under the bug the tie token above
+  // survives and the next insert for the same address trips
+  // account_invites_one_live_per_email — which throws, aborts run() and reports ZERO of this
+  // file's checks instead of the handful that actually broke. A regression has to read as
+  // failed assertions naming the fault, not as a suite that did not start.
+  await db.exec(`update public.account_invites set revoked_at = now()
+    where email = 'invitee@example.com' and accepted_at is null and revoked_at is null;`);
+
+  // The other half of the same fix: conceding the tie must not concede the attack. An invite
+  // minted STRICTLY before the removal is the key somebody was already holding when they were
+  // thrown out, and it stays refused.
+  await db.exec(`update public.account_members set status = 'removed'
+    where user_id = '${INVITEE}' and account_id = '${ACCOUNT}';`);
+  await db.exec(`insert into public.account_invites
+      (account_id, email, role, token_hash, invited_by, created_at)
+    select '${ACCOUNT}','invitee@example.com','viewer',${hashOf('predates-token')},'${ADMIN}',
+           am.updated_at - interval '1 second'
+      from public.account_members am
+     where am.user_id = '${INVITEE}' and am.account_id = '${ACCOUNT}';`);
+  const predates = await as(INVITEE, `select outcome from public.accept_account_invite('predates-token')`);
+  c.check('while an invite minted STRICTLY before the removal is still refused, so the sanction still bites',
+    predates.ok && predates.rows[0]?.outcome === 'invalid',
+    JSON.stringify(predates.rows[0] ?? predates.message));
+
+  const stillOut = await q(`select status from public.account_members
+    where user_id = '${INVITEE}' and account_id = '${ACCOUNT}'`);
+  c.check('and that person is still out',
+    stillOut.rows[0]?.status === 'removed', JSON.stringify(stillOut.rows[0]));
+
+  // Put the fixture back where the rest of this section expects it: an active editor.
+  await db.exec(`update public.account_members set status = 'active', role = 'editor'
+    where user_id = '${INVITEE}' and account_id = '${ACCOUNT}';`);
+
   await db.exec(`insert into public.account_invites (account_id, email, role, token_hash, invited_by)
     values ('${ACCOUNT}','admin@example.com','viewer',${hashOf('stale-token')},'${OWNER}');`);
   await as(ADMIN, `select outcome from public.accept_account_invite('stale-token')`);

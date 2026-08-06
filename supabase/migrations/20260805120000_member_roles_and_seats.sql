@@ -1500,6 +1500,28 @@ begin
   -- refuses nothing legitimate. The one false refusal it can produce is a row edited in the
   -- window between the invite and the click, which costs the person one fresh invite from a
   -- manager who is still there.
+  --
+  -- STRICTLY EARLIER, AND THE STRICTNESS IS THE WHOLE FIX. This read `created_at <= v_was_touched`
+  -- and refused on equality, which cost four checks in this suite and would have cost real
+  -- customers. now() is the TRANSACTION timestamp, so a removal and a re-invitation issued
+  -- close together can carry the same value and be genuinely indistinguishable: under PGlite,
+  -- whose clock resolves to a millisecond, two consecutive statements collided 19 times in 40.
+  -- Refusing the tie treats "cannot tell which came first" as "the invite came first", which is
+  -- the one reading that punishes the innocent case.
+  --
+  -- Nothing is given up by conceding the tie, because THIS IS THE SECOND OF TWO GATES. The
+  -- attack it exists for (invite yourself, get removed, redeem the key you already hold) is
+  -- already dead upstream: account_members_revoke_invites in section 6 stamps revoked_at on
+  -- every live invite a sanctioned member was holding, so that token fails the
+  -- `revoked_at is not null` test above and never reaches this line. What this check uniquely
+  -- adds is invites minted STRICTLY earlier that the trigger somehow missed, and `<` keeps
+  -- every one of them.
+  --
+  -- The same-instant case is not merely a test artefact. On a real server two separate
+  -- transactions usually differ by microseconds, but anything that removes and re-invites
+  -- inside ONE transaction gets one now() by definition, so `<=` would refuse that person
+  -- every single time rather than half of it. A "change somebody's role" flow written as
+  -- remove-then-reinvite is exactly that shape.
   select am.status, am.updated_at into v_was_status, v_was_touched
     from public.account_members am
    where am.account_id = v_invite.account_id
@@ -1508,7 +1530,7 @@ begin
 
   if v_was_status is not null
      and v_was_status <> 'active'
-     and v_invite.created_at <= v_was_touched then
+     and v_invite.created_at < v_was_touched then
     return query select 'invalid'::text, null::uuid, null::text;
     return;
   end if;
