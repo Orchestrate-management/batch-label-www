@@ -39,12 +39,45 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
  * script exists to prevent, with a green build. Reading the handlers means the bundle cannot
  * be out of step with them by construction.
  */
+/**
+ * Every handler under api/, at any depth.
+ *
+ * THIS USED TO READ THE TOP LEVEL ONLY, and that was a trap rather than a simplification.
+ * Vercel maps api/account/invite.ts to /api/account/invite, so a nested route is a perfectly
+ * ordinary handler — but readdirSync without recursion never saw it, none of its imports
+ * reached `wanted`, and the bundle shipped without the exports it needed. That is a 500 on a
+ * live endpoint with typecheck, tests and build all green, which is the entire failure class
+ * described at the top of this file. It would have been introduced by adding a directory.
+ *
+ * Directories beginning with `_` are skipped for the same reason files are: Vercel does not
+ * route them, so nothing in them is a handler.
+ */
+function handlerFiles(dir = join(ROOT, 'api'), depth = 0) {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith('_') || entry.name.startsWith('.')) continue;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      // Guard against a symlink loop turning the build into a hang.
+      if (depth < 6) out.push(...handlerFiles(full, depth + 1));
+    } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
 function deriveBarrel() {
-  // 1. What do the handlers ask for? They import a flat list of names from './_server.js'.
+  // 1. What do the handlers ask for? They import a flat list of names from the bundle. A
+  //    top-level handler spells that './_server.js' and a nested one '../_server.js', so the
+  //    specifier is matched with an optional run of parent hops rather than one literal.
+  //    Matching only './' would silently ignore every nested handler's imports.
   const wanted = new Set();
-  for (const file of readdirSync(join(ROOT, 'api')).filter((f) => f.endsWith('.ts') && !f.startsWith('_'))) {
-    const source = readFileSync(join(ROOT, 'api', file), 'utf8');
-    for (const [, names] of source.matchAll(/import\s*\{([^}]+)\}\s*from\s*'\.\/_server\.js'/g)) {
+  for (const file of handlerFiles()) {
+    const source = readFileSync(file, 'utf8');
+    for (const [, names] of source.matchAll(
+      /import\s*\{([^}]+)\}\s*from\s*'(?:\.\.\/)*\.?\/?_server\.js'/g
+    )) {
       for (const raw of names.split(',')) {
         const name = raw.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0].trim();
         if (name) wanted.add(name);
