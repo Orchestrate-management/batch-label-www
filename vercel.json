@@ -1,5 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/spa-shell" }]
+  "rewrites": [
+    {
+      "source": "/api/account/invite",
+      "destination": "/api/account-invite"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/spa-shell"
+    }
+  ]
 }
