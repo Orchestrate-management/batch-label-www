@@ -40,7 +40,10 @@ export function PageHero({
         as negative space. A document masthead stays a single column, because a contract
         with a pull quote beside it is a contract nobody trusts.
        */}
-      <div className={`relative mx-auto w-full ${isDocument ? 'max-w-3xl' : 'max-w-6xl'}`}>
+      {/* max-w-legal on a document, not max-w-3xl: it is the measure LegalLayout sets the
+          body to, and two different centred widths put the title and the first paragraph
+          on two different left edges. */}
+      <div className={`relative mx-auto w-full ${isDocument ? 'max-w-legal' : 'max-w-6xl'}`}>
         {isDocument ?
         <>
             {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
