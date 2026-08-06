@@ -6,8 +6,7 @@ import { StepIllustration } from '../components/StepIllustration';
 import { LabelPreview } from '../components/LabelPreview';
 import { CtaBand } from '../components/CtaBand';
 import { Button } from '../components/ui/Button';
-import { labelContents } from '../components/home/WhatsIncluded';
-import { CheckIcon } from 'lucide-react';
+import { labelContents, LabelContentsList } from '../components/home/WhatsIncluded';
 
 const detailedSteps = [
 {
@@ -64,6 +63,20 @@ const capabilities = [
   body: 'Free builds the same label as Consultant. Same hazard statements, same pictograms at CLP Annex I sizes, same allergen declarations, same export. The plans are metered by how many things you sell.'
 }];
 
+const scopeCards = [
+{
+  title: 'It does not approve your label',
+  body: 'We build the label against published CLP requirements from your inputs. We do not certify or verify it, and the finished label stays your responsibility as the seller.'
+},
+{
+  title: 'It does not check your data',
+  body: 'If the safety data sheet is out of date, or the percentage you enter is wrong, the label will be wrong. Garbage in, garbage on the tin.'
+},
+{
+  title: 'It does not replace other duties',
+  body: 'Poison centre notification, weights and measures rules and packaging duties are all separate. We only do the label.'
+}];
+
 
 export function HowItWorks() {
   usePageMeta({
@@ -99,29 +112,50 @@ export function HowItWorks() {
         </Button>
       </PageHero>
 
+      {/*
+        The three steps, as a walkthrough rather than a stack.
+
+        Each step is a two-column spread: the plate and the step number hold a narrow
+        column on the left, sticky on a tall screen so the illustration stays beside the
+        prose it belongs to, and the reading column sits on the right at a proper measure.
+        A continuous hairline runs down the left of the whole sequence, which is what makes
+        three separate spreads read as one process.
+       */}
       <Section>
-        <ol className="space-y-12">
+        <ol className="relative space-y-20 border-l border-paper-edge pl-6 sm:space-y-24 sm:pl-12">
           {detailedSteps.map((step, index) =>
           <li
             key={step.title}
             id={`step-${index + 1}`}
-            className="grid gap-5 scroll-mt-24 sm:grid-cols-[56px_1fr] sm:gap-7">
-              <StepIllustration kind={step.kind} />
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">
+            className="relative grid scroll-mt-28 gap-8 lg:grid-cols-[minmax(0,15rem)_1fr] lg:gap-14">
+
+              {/* The bead on the rule. 10px wide, so its centre lands on the hairline at
+                  both gutters: 24px of padding at base, 48px from sm up. */}
+              <span
+              aria-hidden="true"
+              className="absolute -left-[1.81rem] top-1.5 h-2.5 w-2.5 rotate-45 border border-clay-500 bg-paper sm:-left-[3.31rem]" />
+
+              <div className="lg:sticky lg:top-28 lg:self-start">
+                <p className="bl-figures font-mono text-[0.7rem] font-medium uppercase tracking-[0.18em] text-clay-600">
                   Step {index + 1}
                 </p>
-                <h2 className="mt-1 font-display text-[1.35rem] font-semibold leading-snug text-ink sm:text-[1.6rem]">
+                <div className="mt-5">
+                  <StepIllustration kind={step.kind} size={148} />
+                </div>
+              </div>
+
+              <div>
+                <h2 className="font-display text-[1.55rem] font-semibold leading-[1.15] text-ink sm:text-[1.95rem]">
                   {step.title}
                 </h2>
-                <div className="mt-3 space-y-3">
+                <div className="mt-5 space-y-4">
                   {step.paragraphs.map((paragraph) =>
-                <p key={paragraph} className="max-w-prose text-[1rem] leading-relaxed text-ink-soft">
+                <p key={paragraph} className="max-w-prose text-[1.02rem] leading-[1.75] text-ink-soft">
                       {paragraph}
                     </p>
                 )}
                 </div>
-                <p className="mt-4 rounded-xl border border-paper-edge bg-white px-4 py-3 text-sm text-ink-muted">
+                <p className="mt-7 max-w-prose border-l-2 border-clay-500/50 bg-paper-deep py-3.5 pl-5 pr-4 text-[0.92rem] leading-[1.7] text-ink-muted">
                   {step.aside}
                 </p>
               </div>
@@ -131,65 +165,65 @@ export function HowItWorks() {
       </Section>
 
       <Section className="bg-white">
-        <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+        <div className="grid gap-12 lg:grid-cols-[1fr_0.9fr] lg:items-start lg:gap-16">
           <div>
             <Eyebrow>The output</Eyebrow>
             <Heading>What ends up on the label</Heading>
-            <Lead className="mt-3">
+            <Lead className="mt-4">
               If a line is on the label, it is because CLP requires it for a product like yours.
             </Lead>
-            <ul className="mt-6 space-y-2.5">
-              {labelContents.map((item) =>
-              <li key={item} className="flex items-start gap-2.5 text-[0.97rem] leading-relaxed text-ink-soft">
-                  <CheckIcon size={17} className="mt-1 shrink-0 text-teal-700" aria-hidden="true" />
-                  {item}
-                </li>
-              )}
-            </ul>
+            <div className="mt-8">
+              <LabelContentsList items={labelContents} />
+            </div>
           </div>
-          <LabelPreview />
+          <div className="lg:sticky lg:top-28">
+            <LabelPreview />
+          </div>
         </div>
       </Section>
 
       <Section ariaLabelledBy="capabilities-heading">
-        <Eyebrow>Around the three steps</Eyebrow>
-        <Heading id="capabilities-heading">The rest of what it handles</Heading>
-        <Lead className="mt-3">
-          The jobs that sit either side of the label itself.
-        </Lead>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        <div className="max-w-2xl">
+          <Eyebrow>Around the three steps</Eyebrow>
+          <Heading id="capabilities-heading">The rest of what it handles</Heading>
+          <Lead className="mt-4">
+            The jobs that sit either side of the label itself.
+          </Lead>
+        </div>
+        <div className="bl-numbered mt-12 grid gap-px overflow-hidden rounded-[0.5rem] border border-paper-edge bg-paper-edge sm:grid-cols-2">
           {capabilities.map((item) =>
-          <div key={item.title} className="rounded-2xl border border-paper-edge bg-white p-5 sm:p-6">
-              <h3 className="font-display text-[1.02rem] font-semibold text-ink">{item.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-soft">{item.body}</p>
+          <div key={item.title} className="bg-white p-6 sm:p-8">
+              <span
+              aria-hidden="true"
+              className="bl-num bl-figures block font-mono text-[0.72rem] font-medium tracking-[0.12em] text-clay-600" />
+
+              <h3 className="mt-3 font-display text-[1.15rem] font-semibold leading-snug text-ink">
+                {item.title}
+              </h3>
+              <p className="mt-2.5 text-[0.95rem] leading-[1.7] text-ink-soft">{item.body}</p>
             </div>
           )}
         </div>
       </Section>
 
-      <Section className="bg-white">
-        <Eyebrow>Scope</Eyebrow>
-        <Heading>What Batchlabel does not do</Heading>
-        <div className="mt-5 grid gap-4 sm:grid-cols-3">
-          {[
-          {
-            title: 'It does not approve your label',
-            body: 'We build the label against published CLP requirements from your inputs. We do not certify or verify it, and the finished label stays your responsibility as the seller.'
-          },
-          {
-            title: 'It does not check your data',
-            body: 'If the safety data sheet is out of date, or the percentage you enter is wrong, the label will be wrong. Garbage in, garbage on the tin.'
-          },
-          {
-            title: 'It does not replace other duties',
-            body: 'Poison centre notification, weights and measures rules and packaging duties are all separate. We only do the label.'
-          }].
-          map((card) =>
-          <div key={card.title} className="rounded-2xl border border-paper-edge bg-paper p-5">
-              <h3 className="font-display text-[1.02rem] font-semibold text-ink">{card.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-soft">{card.body}</p>
-            </div>
-          )}
+      {/* Scope. Set on the darkest stock with a rule between each entry rather than as
+          three cards: these are limits, and a card grid dresses a limit up as a feature. */}
+      <Section className="bg-paper-shade">
+        <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
+          <div className="lg:sticky lg:top-28 lg:self-start">
+            <Eyebrow>Scope</Eyebrow>
+            <Heading>What Batchlabel does not do</Heading>
+          </div>
+          <ul className="divide-y divide-paper-edge border-y border-paper-edge">
+            {scopeCards.map((card) =>
+            <li key={card.title} className="py-6">
+                <h3 className="font-display text-[1.1rem] font-semibold text-ink">{card.title}</h3>
+                <p className="mt-2 max-w-prose text-[0.95rem] leading-[1.7] text-ink-soft">
+                  {card.body}
+                </p>
+              </li>
+            )}
+          </ul>
         </div>
       </Section>
 

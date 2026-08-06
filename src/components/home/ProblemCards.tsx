@@ -26,26 +26,44 @@ const cards = [
 }];
 
 
+/**
+ * Three failures, set as a ruled column rather than three bordered boxes.
+ *
+ * Bordered cards in a row give three unrelated things identical visual weight and no
+ * order, and these three are a list of ways one job goes wrong. Numbered entries divided
+ * by hairlines say that; a card grid says "features".
+ */
 export function ProblemCards() {
   return (
-    <Section ariaLabelledBy="problem-heading">
-      <Eyebrow>Why it exists</Eyebrow>
-      <Heading id="problem-heading">Three ways a label goes wrong</Heading>
-      <Lead className="mt-3">
-        None of these are unusual, and all three cost an evening.
-      </Lead>
+    <Section ariaLabelledBy="problem-heading" width="wide">
+      <div className="grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
+        <div className="lg:sticky lg:top-28 lg:self-start">
+          <Eyebrow>Why it exists</Eyebrow>
+          <Heading id="problem-heading">Three ways a label goes wrong</Heading>
+          <Lead className="mt-4">
+            None of these are unusual, and all three cost an evening.
+          </Lead>
+        </div>
 
-      <ul className="mt-8 grid gap-4 sm:grid-cols-3">
-        {cards.map((card) =>
-        <li
-          key={card.title}
-          className="rounded-2xl border border-paper-edge bg-white p-5 sm:p-6">
+        <ul className="bl-numbered divide-y divide-paper-edge border-t border-paper-edge">
+          {cards.map((card) =>
+          <li key={card.title} className="grid gap-x-6 gap-y-2 py-7 sm:grid-cols-[3.25rem_1fr] sm:py-8">
+              <span
+              aria-hidden="true"
+              className="bl-num bl-figures font-mono text-[0.78rem] font-medium tracking-[0.12em] text-clay-600 sm:pt-1" />
 
-            <h3 className="font-display text-[1.05rem] font-semibold text-ink">{card.title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-ink-soft">{card.body}</p>
-          </li>
-        )}
-      </ul>
+              <div>
+                <h3 className="font-display text-[1.2rem] font-semibold leading-snug text-ink">
+                  {card.title}
+                </h3>
+                <p className="mt-2.5 max-w-prose text-[0.98rem] leading-[1.65] text-ink-soft">
+                  {card.body}
+                </p>
+              </div>
+            </li>
+          )}
+        </ul>
+      </div>
     </Section>);
 
 }

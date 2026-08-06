@@ -9,16 +9,19 @@ export function NotFound() {
   });
 
   return (
-    <section className="px-5 py-20 sm:px-6">
-      <div className="mx-auto w-full max-w-xl text-center">
-        <p className="font-mono text-sm text-ink-muted">404</p>
-        <h1 className="mt-2 font-display text-[1.8rem] font-semibold tracking-[-0.015em] text-ink">
+    <section className="bl-ruled relative overflow-hidden px-5 py-28 sm:px-6 sm:py-36">
+      <div aria-hidden="true" className="bl-grain pointer-events-none absolute inset-0" />
+      <div className="relative mx-auto w-full max-w-xl text-center">
+        <p className="bl-figures font-mono text-[0.72rem] font-medium uppercase tracking-[0.22em] text-clay-600">
+          404
+        </p>
+        <h1 className="mt-5 font-display text-[2.1rem] font-semibold leading-[1.1] text-ink sm:text-[2.6rem]">
           We cannot find that page
         </h1>
-        <p className="mt-3 text-[1.02rem] leading-relaxed text-ink-soft">
+        <p className="mx-auto mt-5 max-w-md text-[1.05rem] leading-[1.65] text-ink-soft">
           The link may be old, or we may have moved something.
         </p>
-        <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+        <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
           <Button to="/" size="lg">
             Back to the home page
           </Button>

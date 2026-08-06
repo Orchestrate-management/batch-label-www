@@ -113,17 +113,18 @@ export function CookieBanner() {
       aria-modal="false"
       aria-labelledby="cookie-title"
       aria-describedby="cookie-description"
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-paper-edge bg-white p-4 shadow-[0_-8px_30px_-24px_rgba(27,37,35,0.5)] sm:p-5">
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-paper-edge bg-white p-5 shadow-[0_-14px_44px_-24px_rgba(30,27,24,0.55)] sm:p-6">
 
-      <div className="mx-auto w-full max-w-5xl">
-        <h2 id="cookie-title" className="font-display text-base font-semibold text-ink">
+      <div className="relative mx-auto w-full max-w-6xl">
+        <span aria-hidden="true" className="absolute -top-5 left-0 h-px w-9 bg-clay-500 sm:-top-6" />
+        <h2 id="cookie-title" className="font-display text-[1.05rem] font-semibold text-ink">
           Cookies
         </h2>
-        <p id="cookie-description" className="mt-1 max-w-prose text-sm leading-relaxed text-ink-soft">
+        <p id="cookie-description" className="mt-1.5 max-w-prose text-[0.9rem] leading-[1.65] text-ink-soft">
           We use cookies that are needed to run the site. We would also like to measure how people
           find us, so we know which adverts are worth paying for. Nothing optional loads until you
           say yes.{' '}
-          <Link to="/cookie-policy" className="underline decoration-teal-700/40 underline-offset-2">
+          <Link to="/cookie-policy" className="bl-link text-teal-700">
             Read our cookie policy
           </Link>
           .
@@ -157,7 +158,7 @@ export function CookieBanner() {
           </fieldset> :
         null}
 
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:items-center">
           <Button onClick={() => decide({ analytics: true, marketing: true })}>Accept all</Button>
           <Button variant="secondary" onClick={() => decide({ analytics: false, marketing: false })}>
             Reject optional
@@ -188,7 +189,7 @@ interface ToggleRowProps {
 
 function ToggleRow({ id, title, description, checked, disabled, onChange }: ToggleRowProps) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-paper-edge bg-paper px-3.5 py-3">
+    <div className="flex items-start gap-3 rounded-xl border border-paper-edge bg-paper px-4 py-3.5">
       <input
         id={id}
         type="checkbox"

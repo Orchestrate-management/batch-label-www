@@ -20,33 +20,61 @@ export const steps = [
 }];
 
 
+/**
+ * Three steps on card white.
+ *
+ * The sequence is the thing being communicated, and the old layout — three equal columns
+ * with a small icon and a "STEP 1" caption above each — did not have one. There is a
+ * hairline running through the step numbers now, so the row reads left to right as a
+ * process, and the numerals are set large in the display face rather than as 12px caps.
+ */
 export function HowItWorksSteps({ withCta = true }: {withCta?: boolean;}) {
   return (
-    <Section id="how-it-works" className="bg-white" ariaLabelledBy="how-heading">
-      <Eyebrow>Three steps</Eyebrow>
-      <Heading id="how-heading">How Batchlabel works</Heading>
-      <Lead className="mt-3">
-        About ten minutes the first time, a couple of minutes after that.
-      </Lead>
+    <Section id="how-it-works" className="bg-white" ariaLabelledBy="how-heading" width="wide">
+      <div className="max-w-2xl">
+        <Eyebrow>Three steps</Eyebrow>
+        <Heading id="how-heading">How Batchlabel works</Heading>
+        <Lead className="mt-4">
+          About ten minutes the first time, a couple of minutes after that.
+        </Lead>
+      </div>
 
-      <ol className="mt-8 grid gap-6 sm:grid-cols-3">
+      <ol className="bl-numbered mt-14 grid gap-12 sm:grid-cols-3 sm:gap-8">
         {steps.map((step, index) =>
-        <li key={step.title}>
-            <StepIllustration kind={step.kind} />
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted">
+        <li key={step.title} className="relative">
+            {/* The connecting rule. Drawn per item and hidden on the last one, so it
+                never runs past the end of the sequence. */}
+            {index < steps.length - 1 ?
+          <span
+            aria-hidden="true"
+            className="absolute left-[3.25rem] right-0 top-[1.6rem] hidden h-px bg-paper-edge sm:block" /> :
+
+          null}
+
+            {/* The numeral is generated, not written: "Step 1" is already said in words
+                below it, so the disc is a mark rather than a second label. */}
+            <span
+            aria-hidden="true"
+            className="bl-num-plain bl-figures relative z-10 flex h-[3.2rem] w-[3.2rem] shrink-0 items-center justify-center rounded-full border border-paper-edge bg-paper font-display text-[1.35rem] font-semibold text-teal-700" />
+
+            <div className="mt-7">
+              <StepIllustration kind={step.kind} size={88} />
+            </div>
+
+            <p className="mt-6 font-mono text-[0.7rem] font-medium uppercase tracking-[0.18em] text-clay-600">
               Step {index + 1}
             </p>
-            <h3 className="mt-1 font-display text-[1.05rem] font-semibold leading-snug text-ink">
+            <h3 className="mt-2 max-w-[26ch] font-display text-[1.18rem] font-semibold leading-snug text-ink">
               {step.title}
             </h3>
-            <p className="mt-2 text-sm leading-relaxed text-ink-soft">{step.body}</p>
+            <p className="mt-2.5 text-[0.97rem] leading-[1.65] text-ink-soft">{step.body}</p>
           </li>
         )}
       </ol>
 
       {withCta ?
-      <div className="mt-9">
-          <Button to="/sign-up" track={{ label: 'Make a label free', location: 'home_how_it_works' }}>
+      <div className="mt-14">
+          <Button to="/sign-up" size="lg" track={{ label: 'Make a label free', location: 'home_how_it_works' }}>
             Make a label free
           </Button>
         </div> :

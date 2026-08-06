@@ -37,7 +37,10 @@ export function Logo({
   return (
     <Link
       to="/"
-      className={`inline-flex items-center gap-2.5 font-display font-semibold tracking-[-0.02em] ${
+      /* font-wordmark, not font-display. The display face is Fraunces now; the wordmark
+         stays Outfit because this component and
+         public/brand/batchlabel-lockup-horizontal.svg are the same artwork. */
+      className={`inline-flex items-center gap-2.5 font-wordmark font-semibold tracking-[-0.02em] ${
       reversed ? 'text-paper' : 'text-teal-700'} ${className}`}
       style={{ fontSize: size * 0.68 }}>
 

@@ -18,21 +18,25 @@ export function FaqSection({
   className
 }: FaqSectionProps) {
   return (
-    <Section className={className} ariaLabelledBy="faq-heading">
-      <Eyebrow>{eyebrow}</Eyebrow>
-      <Heading id="faq-heading">{heading}</Heading>
-      <div className="mt-7">
-        <Accordion items={items} />
+    <Section className={className} ariaLabelledBy="faq-heading" width="wide">
+      <div className="grid gap-10 lg:grid-cols-[0.75fr_1.25fr] lg:gap-16">
+        <div className="lg:sticky lg:top-28 lg:self-start">
+          <Eyebrow>{eyebrow}</Eyebrow>
+          <Heading id="faq-heading">{heading}</Heading>
+          {showAllLink ?
+          <p className="mt-6 text-[0.95rem] text-ink-soft">
+              More detail on the{' '}
+              <Link to="/faq" className="bl-link text-teal-700">
+                full FAQ page
+              </Link>
+              .
+            </p> :
+          null}
+        </div>
+        <div>
+          <Accordion items={items} />
+        </div>
       </div>
-      {showAllLink ?
-      <p className="mt-5 text-sm text-ink-soft">
-          More detail on the{' '}
-          <Link to="/faq" className="text-teal-700 underline decoration-teal-700/40 underline-offset-2">
-            full FAQ page
-          </Link>
-          .
-        </p> :
-      null}
     </Section>);
 
 }

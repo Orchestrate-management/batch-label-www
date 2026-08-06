@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckIcon } from 'lucide-react';
 import { usePageMeta, useStructuredData } from '../lib/seo';
 import {
   breadcrumbSchema,
@@ -76,21 +75,30 @@ function differentiators(plan: PlanDisplay): string[] {
 const CONSULTANT_DIFFERENCE =
 'Consultant takes the SKU ceiling off, so a range of any size fits, and raises the workspace to ten editors. If you sell your own range rather than labelling for other people, Studio is the one to start on.';
 
-/** The oversized figure on a card. The tax qualifier sits inside the same element on purpose. */
-function PlanPrice({ pence, interval }: {pence: number | null;interval: BillingInterval;}) {
-  if (pence === null) {
-    return (
-      <p className="mt-5 font-display text-[2.2rem] font-semibold leading-none text-ink">
-        {gbpNumeral(0)}
-        <span className="ml-1 font-sans text-sm font-normal text-ink-muted">for ever</span>
-      </p>);
-
-  }
+/**
+ * The oversized figure on a card.
+ *
+ * The tax qualifier sits inside the same element on purpose, and pages.seo.test.tsx
+ * asserts it: every leaf node carrying a £ figure must have a parent whose text also
+ * carries "exc VAT" or "for ever". The numeral is its own span so it can take tabular
+ * figures without the qualifier going monospaced with it.
+ */
+function PlanPrice({
+  pence,
+  interval,
+  tone = 'light'
+}: {pence: number | null;interval: BillingInterval;tone?: 'light' | 'reversed';}) {
+  const figure = tone === 'reversed' ? 'text-white' : 'text-ink';
+  const qualifier = tone === 'reversed' ? 'text-teal-100' : 'text-ink-muted';
   return (
-    <p className="mt-5 font-display text-[2.2rem] font-semibold leading-none text-ink">
-      {gbpNumeral(pence)}
-      <span className="ml-1 font-sans text-sm font-normal text-ink-muted">
-        {interval === 'monthly' ? 'per month' : 'per year'} exc VAT
+    <p className={`mt-6 flex flex-wrap items-baseline gap-x-2 font-display ${figure}`}>
+      <span className="bl-figures text-[2.7rem] font-semibold leading-none tracking-[-0.02em]">
+        {pence === null ? gbpNumeral(0) : gbpNumeral(pence)}
+      </span>
+      <span className={`font-sans text-[0.85rem] font-normal ${qualifier}`}>
+        {pence === null ?
+        'for ever' :
+        `${interval === 'monthly' ? 'per month' : 'per year'} exc VAT`}
       </span>
     </p>);
 
@@ -163,8 +171,13 @@ export function Pricing() {
           Plans
         </h2>
 
+        {/*
+          The billing toggle. It was two 32px pills in a bordered box, which is small for
+          the control that changes every figure on the page. It is a proper segmented
+          switch now, with the saving stated on the option that carries it.
+         */}
         <div
-          className="mb-7 inline-flex rounded-xl border border-paper-edge bg-white p-1"
+          className="mb-10 inline-flex rounded-2xl border border-paper-edge bg-white p-1 shadow-card"
           role="group"
           aria-label="Billing period, prices exclude VAT">
           {(['annual', 'monthly'] as BillingInterval[]).map((option) =>
@@ -173,8 +186,10 @@ export function Pricing() {
             type="button"
             aria-pressed={interval === option}
             onClick={() => setInterval(option)}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            interval === option ? 'bg-teal-700 text-white' : 'text-ink-soft hover:text-ink'}`
+            className={`min-h-[2.75rem] rounded-xl px-5 text-[0.92rem] font-medium transition-colors ${
+            interval === option ?
+            'bg-teal-700 text-white shadow-[0_8px_18px_-12px_rgba(15,61,59,0.9)]' :
+            'text-ink-soft hover:bg-paper-deep hover:text-ink'}`
             }>
 
               {option === 'monthly' ? 'Monthly' : 'Yearly, two months free'}
@@ -182,26 +197,55 @@ export function Pricing() {
           )}
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {/*
+          THE LADDER, AS SWING TAGS.
+
+          The mark is a punched swing tag and a plan is a thing you hang on a product, so
+          the cards take that silhouette: the top-left corner cut, a punch hole in the cut.
+          Maker is reversed out in the deepest teal rather than merely outlined in it,
+          because a 2px border is not enough to carry "this is the one most people want"
+          against two cards of identical size. .bl-reversed swaps the focus ring to paper
+          so keyboard focus stays visible on the dark tag.
+         */}
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {LADDER.map((slug) => {
             const plan = PLANS[slug] as PlanDisplay;
             const pence = priceForInterval(plan, interval);
             const isFree = plan.slug === 'free';
+            const lead = plan.slug === 'maker';
             return (
               <div
                 key={plan.slug}
-                className={`rounded-2xl bg-white p-6 ${
-                plan.slug === 'maker' ? 'border-2 border-teal-700' : 'border border-paper-edge'}`
+                className={`bl-tag bl-hover-lift flex flex-col p-7 sm:p-8 ${
+                lead ?
+                'bl-reversed bg-gradient-to-b from-teal-900 to-teal-800 text-white shadow-lift' :
+                'border border-paper-edge bg-white shadow-card hover:border-ink-line/50'}`
                 }>
+
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-display text-lg font-semibold text-ink">{plan.label}</h3>
-                  <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800">
+                  <h3
+                    className={`font-display text-[1.3rem] font-semibold ${
+                    lead ? 'text-white' : 'text-ink'}`
+                    }>
+
+                    {plan.label}
+                  </h3>
+                  <span
+                    className={`bl-figures rounded-full px-3 py-1 font-mono text-[0.68rem] font-medium uppercase tracking-[0.08em] ${
+                    lead ? 'bg-white/15 text-teal-100' : 'bg-teal-50 text-teal-800'}`
+                    }>
+
                     {skuAllowance(plan)}
                   </span>
                 </div>
 
-                <PlanPrice pence={pence} interval={interval} />
-                <p className="mt-1 text-sm text-ink-muted">
+                <PlanPrice pence={pence} interval={interval} tone={lead ? 'reversed' : 'light'} />
+
+                <p
+                  className={`mt-3 text-[0.86rem] leading-[1.6] ${
+                  lead ? 'text-teal-100' : 'text-ink-muted'}`
+                  }>
+
                   {isFree ?
                   'No card needed. Free is permanent, not a trial.' :
                   `VAT is added at checkout based on where you are. Cancel any time, ${
@@ -209,48 +253,69 @@ export function Pricing() {
                   }.`}
                 </p>
 
-                {isFree ?
-                <Button
-                  to="/sign-up"
-                  variant="secondary"
-                  fullWidth
-                  className="mt-6"
-                  track={{ label: `${plan.label} plan`, location: `pricing_${plan.slug}` }}>
+                <ul
+                  className={`mt-7 space-y-0 divide-y ${
+                  lead ? 'divide-white/15 border-y border-white/15' : 'divide-paper-edge border-y border-paper-edge'}`
+                  }>
 
-                    Start free
-                  </Button> :
-
-                <Button
-                  variant={plan.slug === 'maker' ? 'primary' : 'secondary'}
-                  fullWidth
-                  className="mt-6"
-                  onClick={handleChoose}
-                  track={{ label: `${plan.label} plan`, location: `pricing_${plan.slug}` }}>
-
-                    {signedOut ? `Sign up to get ${plan.label}` : `Get ${plan.label}`}
-                  </Button>
-                }
-
-                <ul className="mt-6 space-y-2.5">
                   {differentiators(plan).map((feature) =>
-                  <li key={feature} className="flex items-start gap-2.5 text-sm text-ink-soft">
-                      <CheckIcon size={16} className="mt-0.5 shrink-0 text-teal-700" aria-hidden="true" />
+                  <li
+                    key={feature}
+                    className={`flex items-baseline gap-3 py-3 text-[0.92rem] leading-snug ${
+                    lead ? 'text-teal-100' : 'text-ink-soft'}`
+                    }>
+
+                      <span
+                      aria-hidden="true"
+                      className={`h-1 w-1 shrink-0 rotate-45 ${lead ? 'bg-clay-300' : 'bg-clay-500'}`} />
+
                       <span>{feature}</span>
                     </li>
                   )}
                 </ul>
+
+                <div className="mt-auto pt-7">
+                  {isFree ?
+                  <Button
+                    to="/sign-up"
+                    variant="secondary"
+                    fullWidth
+                    track={{ label: `${plan.label} plan`, location: `pricing_${plan.slug}` }}>
+
+                      Start free
+                    </Button> :
+
+                  <Button
+                    variant={lead ? 'primary' : 'secondary'}
+                    fullWidth
+                    className={
+                    lead ? 'bg-white text-teal-800 shadow-none hover:bg-paper-deep' : undefined
+                    }
+                    onClick={handleChoose}
+                    track={{ label: `${plan.label} plan`, location: `pricing_${plan.slug}` }}>
+
+                      {signedOut ? `Sign up to get ${plan.label}` : `Get ${plan.label}`}
+                    </Button>
+                  }
+                </div>
               </div>);
 
           })}
         </div>
 
         {signedOut ?
-        <p className="mt-4 text-sm text-ink-muted">
+        <p className="mt-6 text-[0.9rem] text-ink-muted">
             You will make an account first, then choose your plan inside Batchlabel.
           </p> :
         null}
 
-        <p id="what-is-a-sku" className="mt-8 max-w-prose scroll-mt-24 text-sm leading-relaxed text-ink-soft">
+        {/* The unit definition. It is the single most consulted sentence on this page —
+            /pricing#what-is-a-sku is linked from the FAQ and from the app — so it is set
+            as an inset note against the clay rule rather than as another grey paragraph. */}
+        <p
+          id="what-is-a-sku"
+          className="mt-12 max-w-prose scroll-mt-28 border-l-2 border-clay-500 bg-paper-deep py-4 pl-5 pr-4 text-[0.95rem] leading-[1.7] text-ink-soft">
+
           <strong className="font-semibold text-ink">{SKU_DEFINITION}</strong> Most makers get about
           three SKUs out of one formulation, so {PLANS.maker.label} is roughly{' '}
           {approximateScents(PLANS.maker)} scents. Reading supplier safety data sheets is never
@@ -259,78 +324,89 @@ export function Pricing() {
       </Section>
 
       <Section className="bg-white" ariaLabelledBy="consultant-heading">
-        <div className="rounded-2xl border border-paper-edge bg-paper p-6 sm:p-8">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="bl-tag border border-paper-edge bg-paper p-7 shadow-card sm:p-10">
+          <div className="grid gap-8 lg:grid-cols-[1.25fr_0.75fr] lg:items-start lg:gap-14">
             <div>
               <Eyebrow>For people who label other people's products</Eyebrow>
-              <Heading id="consultant-heading" level={2} className="text-[1.4rem] sm:text-[1.7rem]">
+              <Heading id="consultant-heading" level={2} className="text-[1.55rem] sm:text-[1.9rem]">
                 {CONSULTANT.label}
               </Heading>
+              <p className="mt-5 max-w-prose text-[0.98rem] leading-[1.7] text-ink-soft">
+                {CONSULTANT_DIFFERENCE}
+              </p>
             </div>
-            <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800">
-              {skuAllowance(CONSULTANT)}
-            </span>
+
+            <div className="border-t border-paper-edge pt-6 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-1">
+              <span className="bl-figures inline-flex rounded-full bg-teal-50 px-3 py-1 font-mono text-[0.68rem] font-medium uppercase tracking-[0.08em] text-teal-800">
+                {skuAllowance(CONSULTANT)}
+              </span>
+              <PlanPrice pence={priceForInterval(CONSULTANT, interval)} interval={interval} />
+              <p className="mt-3 text-[0.86rem] leading-[1.6] text-ink-muted">
+                VAT is added at checkout based on where you are. Cancel any time.
+              </p>
+              <Button
+                variant="secondary"
+                fullWidth
+                className="mt-7"
+                onClick={handleChoose}
+                track={{ label: `${CONSULTANT.label} plan`, location: 'pricing_consultant' }}>
+
+                {signedOut ? `Sign up to get ${CONSULTANT.label}` : `Get ${CONSULTANT.label}`}
+              </Button>
+            </div>
           </div>
-
-          <PlanPrice pence={priceForInterval(CONSULTANT, interval)} interval={interval} />
-          <p className="mt-1 text-sm text-ink-muted">
-            VAT is added at checkout based on where you are. Cancel any time.
-          </p>
-
-          <p className="mt-4 max-w-prose text-sm leading-relaxed text-ink-soft">
-            {CONSULTANT_DIFFERENCE}
-          </p>
-
-          <Button
-            variant="secondary"
-            className="mt-6"
-            onClick={handleChoose}
-            track={{ label: `${CONSULTANT.label} plan`, location: 'pricing_consultant' }}>
-
-            {signedOut ? `Sign up to get ${CONSULTANT.label}` : `Get ${CONSULTANT.label}`}
-          </Button>
         </div>
       </Section>
 
       <Section ariaLabelledBy="universal-heading">
-        <Eyebrow>Why the plans look like this</Eyebrow>
-        <Heading id="universal-heading">Every plan makes the same label</Heading>
-        <div className="mt-5 max-w-prose space-y-4 text-[1rem] leading-relaxed text-ink-soft">
-          <p>
-            The label a free account builds is the label a {CONSULTANT.label} account builds. Same
-            hazard statements, same precautionary statements, same signal word, same pictograms at
-            the sizes CLP Annex I sets, same allergen declarations. Nothing that makes a label
-            legally correct sits behind a price.
-          </p>
-          <p>
-            If your fragrance supplier gives you free CLP labels, take them, right up until you buy
-            from a second supplier, or run a load their calculator does not offer, or need a label
-            for a blend you made yourself. Batchlabel reads any supplier's safety data sheet at any
-            percentage you actually use, and reading them is never metered on any plan.
-          </p>
-          <p>What the plans change is how many things you can sell.</p>
+        <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
+          <div className="lg:sticky lg:top-28 lg:self-start">
+            <Eyebrow>Why the plans look like this</Eyebrow>
+            <Heading id="universal-heading">Every plan makes the same label</Heading>
+          </div>
+          <div className="max-w-prose space-y-5 text-[1.02rem] leading-[1.75] text-ink-soft">
+            <p>
+              The label a free account builds is the label a {CONSULTANT.label} account builds. Same
+              hazard statements, same precautionary statements, same signal word, same pictograms at
+              the sizes CLP Annex I sets, same allergen declarations. Nothing that makes a label
+              legally correct sits behind a price.
+            </p>
+            <p>
+              If your fragrance supplier gives you free CLP labels, take them, right up until you buy
+              from a second supplier, or run a load their calculator does not offer, or need a label
+              for a blend you made yourself. Batchlabel reads any supplier's safety data sheet at any
+              percentage you actually use, and reading them is never metered on any plan.
+            </p>
+            <p className="font-display text-[1.25rem] font-semibold leading-snug text-ink">
+              What the plans change is how many things you can sell.
+            </p>
+          </div>
         </div>
       </Section>
 
-      <Section className="bg-white" ariaLabelledBy="pricing-legal-heading">
+      <Section className="bg-paper-shade" ariaLabelledBy="pricing-legal-heading">
         <h2 id="pricing-legal-heading" className="sr-only">
           Prices, VAT and responsibility
         </h2>
-        <p className="max-w-prose text-sm leading-relaxed text-ink-muted">
-          All prices are in GBP and exclude VAT, and they are the same in every country. Stripe adds
-          VAT at checkout according to where you are and your VAT number if you give one.
-        </p>
-        <p className="mt-4 max-w-prose text-sm leading-relaxed text-ink-muted">
-          Batchlabel produces labels against published UK CLP and EU CLP requirements from the
-          information you enter. We do not certify or approve labels, and responsibility for the
-          final label rests with you as the seller.
-        </p>
+        <div className="grid gap-6 text-[0.88rem] leading-[1.75] text-ink-muted lg:grid-cols-2 lg:gap-14">
+          <p>
+            All prices are in GBP and exclude VAT, and they are the same in every country. Stripe adds
+            VAT at checkout according to where you are and your VAT number if you give one.
+          </p>
+          <p>
+            Batchlabel produces labels against published UK CLP and EU CLP requirements from the
+            information you enter. We do not certify or approve labels, and responsibility for the
+            final label rests with you as the seller.
+          </p>
+        </div>
       </Section>
 
       <Section ariaLabelledBy="pricing-faq-heading">
-        <Eyebrow>Billing questions</Eyebrow>
-        <Heading id="pricing-faq-heading">How the price is metered, VAT and cancelling</Heading>
-        <div className="mt-7">
+        <div className="grid gap-10 lg:grid-cols-[0.75fr_1.25fr] lg:gap-16">
+          <div className="lg:sticky lg:top-28 lg:self-start">
+            <Eyebrow>Billing questions</Eyebrow>
+            <Heading id="pricing-faq-heading">How the price is metered, VAT and cancelling</Heading>
+          </div>
           <Accordion items={pricingFaqs} />
         </div>
       </Section>

@@ -84,6 +84,8 @@ changes.
 | Warm paper (page background) | `#F3EEE6` | `paper` |
 | Card white | `#FBF8F3` | `white` |
 | Ink | `#1E1B18` | `ink` |
+| Band stock (third surface) | `#EDE6D8` | `paper-shade` |
+| Deepest teal (reversed bands) | `#0A2B2A` | `teal-900` |
 | Muted ink (captions, hints) | `#6F6559` | `ink-muted` |
 | Form control boundary | `#8A8378` | `ink-line` |
 
@@ -108,6 +110,11 @@ Ratios below are WCAG 2.1 relative luminance, computed against the hexes in this
 | Card white on `teal-700` | 8.55:1 | AA and AAA body |
 | `clay-600` on paper | 5.01:1 | AA body |
 | `clay-300` on `teal-800` | 5.57:1 | AA body |
+| `ink-muted` on `paper-shade` | 4.59:1 | AA body |
+| `clay-600` on `paper-shade` | 4.66:1 | AA body |
+| `ink-line` on `paper-shade` | 3.02:1 | AA non-text (1.4.11) |
+| Card white on `teal-900` | 14.24:1 | AA and AAA body |
+| `teal-100` on `teal-900` | 11.20:1 | AA and AAA body |
 
 Two corrections to what this file used to say. Teal on paper is 7.84:1, not 8.5:1 — 8.55:1
 is teal on *card white*. And `ink-muted` was `#8A7F72`, which measured 3.39:1 on paper and
@@ -119,8 +126,17 @@ measured under 3:1.
 
 ## Type
 
-Headings: Outfit 500/600 (`font-display`). Body: IBM Plex Sans 400/500 (`font-sans`).
-Mono: IBM Plex Mono (`font-mono`). All three are loaded at the top of `src/index.css`.
+Headings: Fraunces 400-700 (`font-display`), variable, with `SOFT` 30 and `WONK` 1 set
+once in `src/index.css` and optical sizing left on. Body: IBM Plex Sans 400/500/600
+(`font-sans`). Mono: IBM Plex Mono (`font-mono`), which carries UFI codes, batch codes and
+every caption set in small caps.
+
+Outfit is still loaded, at 600 only, and is used for exactly one thing: the wordmark in
+`src/components/layout/Logo.tsx` (`font-wordmark`). That component and
+`batchlabel-lockup-horizontal.svg` are the same artwork, so the lockup is unchanged by the
+switch to a serif display face. Do not use `font-wordmark` anywhere else.
+
+All four families are loaded by the single `@import` at the top of `src/index.css`.
 
 ## Usage
 
