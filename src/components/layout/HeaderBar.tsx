@@ -37,9 +37,14 @@ import { Logo } from './Logo';
  * Brand pack rule (public/brand/README.md): clear space is half the mark height on every
  * side, minimum 16px. The mark is 28px, so the floor is 16px. 68px reserved against a
  * 28.55px lockup leaves 19.72px above and below.
+ *
+ * WIDTH. max-w-6xl, not max-w-5xl. The measure has to be the same box every band under it
+ * uses — see GUTTER and Section in components/ui/Section.tsx — or the mark sits inboard of
+ * the first word of every heading on the page. The two are asserted to agree in
+ * HeaderBar.test.tsx; if one moves the other has to move with it.
  */
 export const HEADER_ROW_CLASS =
-'mx-auto flex min-h-[4.25rem] w-full max-w-5xl items-center justify-between gap-4 px-5 py-2.5 sm:px-6';
+'mx-auto flex min-h-[4.25rem] w-full max-w-6xl items-center justify-between gap-4 px-5 py-2.5 sm:px-6';
 
 /**
  * Sticky everywhere, deliberately. It used to be sticky on marketing and static on auth
@@ -52,7 +57,7 @@ export const HEADER_ROW_CLASS =
  * boundary read as three different products.
  */
 export const HEADER_SHELL_CLASS =
-'sticky top-0 z-40 border-b border-paper-edge bg-paper/95 backdrop-blur-[2px]';
+'sticky top-0 z-40 border-b border-paper-edge bg-paper/85 backdrop-blur-md backdrop-saturate-150';
 
 interface HeaderBarProps {
   /**

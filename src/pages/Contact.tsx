@@ -41,7 +41,7 @@ export function Contact() {
       
 
       <Section>
-        <div className="grid gap-10 lg:grid-cols-[1fr_0.85fr]">
+        <div className="grid gap-12 lg:grid-cols-[1fr_0.8fr] lg:gap-16">
           {/* Both halves of this page had cards with their own headings but no heading of
               their own, which left the h1 with three unrelated h2 siblings and no way to
               tell the form apart from the contact details. The two headings are visually
@@ -85,7 +85,7 @@ export function Contact() {
                 required
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
-                className="w-full rounded-xl border border-ink-line bg-white px-3.5 py-2.5 text-[0.97rem] text-ink" />
+                className="w-full rounded-xl border border-ink-line bg-white px-3.5 py-3 text-[0.97rem] leading-relaxed text-ink" />
               
             </div>
             <Button type="submit" track={{ label: 'Send message', location: 'contact_form' }}>
@@ -102,10 +102,7 @@ export function Contact() {
           <div className="space-y-4">
             <h2 className="sr-only">Other ways to reach us</h2>
             <DetailCard icon={<MailIcon size={18} aria-hidden="true" />} title="Email">
-              <a
-                href="mailto:hello@batchlabel.xyz"
-                className="text-teal-700 underline decoration-teal-700/40 underline-offset-2">
-                
+              <a href="mailto:hello@batchlabel.xyz" className="bl-link font-mono text-[0.92rem] text-teal-700">
                 hello@batchlabel.xyz
               </a>
             </DetailCard>
@@ -137,10 +134,10 @@ function DetailCard({
 
 }: {icon: React.ReactNode;title: string;children: React.ReactNode;}) {
   return (
-    <div className="rounded-2xl border border-paper-edge bg-white p-5">
-      <div className="flex items-center gap-2 text-teal-700">{icon}</div>
-      <h3 className="mt-2 font-display text-[1.02rem] font-semibold text-ink">{title}</h3>
-      <p className="mt-1 text-sm leading-relaxed text-ink-soft">{children}</p>
+    <div className="bl-tag border border-paper-edge bg-white p-6 shadow-card">
+      <div className="flex items-center gap-2 text-clay-600">{icon}</div>
+      <h3 className="mt-3 font-display text-[1.08rem] font-semibold text-ink">{title}</h3>
+      <p className="mt-1.5 text-[0.92rem] leading-[1.7] text-ink-soft">{children}</p>
     </div>);
 
 }

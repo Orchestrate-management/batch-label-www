@@ -12,18 +12,29 @@ interface AccordionProps {
   defaultOpen?: number | null;
 }
 
+/**
+ * Ruled rows rather than a bordered box.
+ *
+ * The old accordion was a white card with dividers, so on the FAQ page — four of them
+ * stacked — the page was four large grey rectangles. The rows are now hairlines on the
+ * page's own stock, the open row is marked by a clay rule down its left edge, and the
+ * toggle is a full-height target rather than a 44px strip.
+ */
 export function Accordion({ items, defaultOpen = 0 }: AccordionProps) {
   const [open, setOpen] = useState<number | null>(defaultOpen);
   const baseId = useId();
 
   return (
-    <div className="divide-y divide-paper-edge overflow-hidden rounded-2xl border border-paper-edge bg-white">
+    <div className="border-t border-paper-edge">
       {items.map((item, index) => {
         const isOpen = open === index;
         const panelId = `${baseId}-panel-${index}`;
         const buttonId = `${baseId}-button-${index}`;
         return (
-          <div key={item.question}>
+          <div
+            key={item.question}
+            className={`border-b border-paper-edge ${isOpen ? 'bg-white' : ''}`}>
+
             <h3 className="m-0">
               <button
                 id={buttonId}
@@ -31,11 +42,16 @@ export function Accordion({ items, defaultOpen = 0 }: AccordionProps) {
                 aria-expanded={isOpen}
                 aria-controls={panelId}
                 onClick={() => setOpen(isOpen ? null : index)}
-                className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left font-display text-[1.02rem] font-medium text-ink hover:bg-paper-deep/60 sm:px-6">
-                
+                className={`flex w-full items-start justify-between gap-5 px-4 py-5 text-left font-display text-[1.06rem] font-semibold leading-snug text-ink transition-colors hover:bg-white sm:px-6 ${
+                isOpen ? 'border-l-2 border-clay-500' : 'border-l-2 border-transparent'}`
+                }>
+
                 <span>{item.question}</span>
-                <span aria-hidden="true" className="mt-0.5 shrink-0 text-teal-700">
-                  {isOpen ? <MinusIcon size={18} /> : <PlusIcon size={18} />}
+                <span
+                  aria-hidden="true"
+                  className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-paper-edge bg-paper text-teal-700">
+
+                  {isOpen ? <MinusIcon size={14} /> : <PlusIcon size={14} />}
                 </span>
               </button>
             </h3>
@@ -44,8 +60,8 @@ export function Accordion({ items, defaultOpen = 0 }: AccordionProps) {
               role="region"
               aria-labelledby={buttonId}
               hidden={!isOpen}
-              className="px-5 pb-5 text-[0.97rem] leading-relaxed text-ink-soft sm:px-6">
-              
+              className="border-l-2 border-clay-500 px-4 pb-6 pr-8 text-[0.99rem] leading-[1.7] text-ink-soft sm:px-6 sm:pr-16">
+
               {item.answer}
             </div>
           </div>);

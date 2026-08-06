@@ -40,18 +40,28 @@ interface ButtonProps extends CommonProps {
   onClick?: () => void;
 }
 
+/**
+ * min-h is the touch target rather than the padding. WCAG 2.5.8 asks for 24px and the
+ * practical floor on a phone is 44px, which a text button set at 0.95rem inside 10px of
+ * vertical padding does not reach on its own.
+ */
 const base =
-'inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60';
+'inline-flex min-h-[2.75rem] items-center justify-center gap-2 rounded-xl font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 disabled:cursor-not-allowed disabled:opacity-60 motion-safe:active:translate-y-px';
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-teal-700 text-white hover:bg-teal-800',
-  secondary: 'border border-ink/15 bg-white text-ink hover:border-ink/30 hover:bg-paper-deep',
-  quiet: 'text-teal-700 underline decoration-teal-700/30 underline-offset-4 hover:decoration-teal-700'
+  primary:
+  'bg-teal-700 text-white shadow-[0_1px_0_rgba(30,27,24,0.06),0_10px_20px_-14px_rgba(15,61,59,0.9)] hover:bg-teal-800',
+  // border-ink-line at full strength, not ink/15 and not ink-line/70. A secondary button
+  // is card white sitting on warm paper, and those two differ by 1.06:1 — the border IS
+  // the control boundary, so WCAG 1.4.11 wants 3:1 for it. ink-line measures 3.54:1 on
+  // card white and 3.25:1 on paper. ink/15 measured 1.35:1 and ink-line/70 about 2.5:1.
+  secondary: 'border border-ink-line bg-white text-ink hover:border-ink hover:bg-paper-deep',
+  quiet: 'bl-link min-h-0 text-teal-700'
 };
 
 const sizes: Record<Size, string> = {
   md: 'px-4 py-2.5 text-[0.95rem]',
-  lg: 'px-5 py-3 text-base'
+  lg: 'px-6 py-3.5 text-[1.02rem]'
 };
 
 function classesFor({ variant = 'primary', size = 'md', fullWidth, className }: CommonProps) {

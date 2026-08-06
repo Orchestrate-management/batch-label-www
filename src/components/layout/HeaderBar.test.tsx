@@ -3,6 +3,7 @@ import { render, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { SiteHeader } from './SiteHeader';
 import { HEADER_ROW_CLASS, HEADER_SHELL_CLASS } from './HeaderBar';
+import { GUTTER } from '../ui/Section';
 import { AuthShell } from '../auth/AuthShell';
 
 vi.mock('../../lib/auth', () => ({
@@ -80,10 +81,15 @@ describe('shared header geometry', () => {
   });
 
   it('puts the horizontal padding on the same box as the width constraint', () => {
-    // The horizontal half. Padding on the <header> with an unpadded max-w-5xl box inside
-    // it centres the content one gutter to the left of padding on the box itself.
+    // The horizontal half. Padding on the <header> with an unpadded, centred inner box
+    // puts the content one gutter to the left of padding applied to the box itself.
+    //
+    // The measure is max-w-6xl since the visual pass. It is asserted here because it has
+    // to be the SAME box the page bands use — GUTTER and Section in
+    // components/ui/Section.tsx — or the mark stops lining up with the first word of
+    // every heading beneath it.
     for (const row of [rowOf(renderMarketing()), rowOf(renderAuth())]) {
-      expect(row.className).toContain('max-w-5xl');
+      expect(row.className).toContain('max-w-6xl');
       expect(row.className).toContain('px-5');
       expect(row.className).toContain('sm:px-6');
       expect(row.className).toContain('mx-auto');
@@ -92,6 +98,17 @@ describe('shared header geometry', () => {
       const header = container.querySelector('header') as HTMLElement;
       expect(header.className).not.toContain('px-');
     }
+  });
+
+  it('shares its measure and its gutter with the page bands under it', () => {
+    // The header and the content used to be able to drift apart silently: the header row
+    // was max-w-5xl and Section was max-w-5xl, agreeing by coincidence rather than by
+    // construction. This asserts the agreement, so widening one without the other fails
+    // here rather than showing up as a misaligned mark on a screenshot.
+    for (const token of GUTTER.split(' ')) {
+      expect(HEADER_ROW_CLASS).toContain(token);
+    }
+    expect(HEADER_ROW_CLASS).toContain('max-w-6xl');
   });
 
   it('puts the mark in the header row on every shell, at the same size', () => {
