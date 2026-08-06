@@ -30,6 +30,46 @@ describe('the migration chain', () => {
   });
 
   /**
+   * NO TWO MIGRATIONS MAY SHARE A VERSION, and this harness is structurally unable to
+   * notice on its own.
+   *
+   * Supabase records what it has applied in `supabase_migrations.schema_migrations`, keyed on
+   * VERSION — the timestamp prefix alone, not the filename. Two files named `20260805120000_x`
+   * and `20260805120000_y` are two different migrations to git, to this suite and to a code
+   * review, and one single row to that table. The second one to be pushed fails on the primary
+   * key while applying, taking its own DDL down with it.
+   *
+   * That is exactly what happened to `20260805120000_member_roles_and_seats.sql`. It passed
+   * 628 checks here, passed CI, merged, and then could not be applied to the real database at
+   * all: `supabase db push` reported a failure at the INSERT into schema_migrations, and the
+   * whole team feature was live in the app with nothing behind it. Nothing in this file could
+   * see it, because the harness reads the directory and sorts, so a duplicate version is just
+   * two files that happen to sort adjacently and replay perfectly.
+   *
+   * The rename to 20260806120000 fixed the instance. This stops the next one, which would
+   * otherwise be found the same way: in production, by hand, after merge.
+   */
+  it('gives every migration a unique version, which is the timestamp prefix alone', () => {
+    const byVersion = new Map<string, string[]>();
+    for (const file of booted.files) {
+      const version = file.split('_')[0];
+      byVersion.set(version, [...(byVersion.get(version) ?? []), file]);
+    }
+
+    const collisions = [...byVersion.entries()].
+      filter(([, files]) => files.length > 1).
+      map(([version, files]) => `${version}: ${files.join(' + ')}`);
+
+    expect(
+      collisions,
+      'these migrations share a version. Supabase keys schema_migrations on the timestamp ' +
+      'prefix, so only one of each pair can ever be recorded and the other fails to apply ' +
+      'against a real database while passing everything here. Renaming one to the next free ' +
+      'timestamp is the whole fix.'
+    ).toEqual([]);
+  });
+
+  /**
    * Idempotency is not a nicety here. Every migration in this repo claims to be
    * re-runnable, `supabase db push` can re-apply, and a second application is
    * what found the defect where re-running 20260803120000 recreated empty decoy
