@@ -1,5 +1,5 @@
 /**
- * POST /api/account/invite
+ * POST /api/account/invite  (this file is api/account-invite.ts — see below)
  *
  * Mints an invitation to join an account and emails it. The last piece between a built team
  * feature and a second person actually being able to get in.
@@ -7,6 +7,27 @@
  * Header: Authorization: Bearer <supabase access token>. Required.
  * Body:   { account_id: uuid, email: string, role: 'owner'|'admin'|'editor'|'viewer' }
  * Answers: { ok: true } and nothing else, or { error, hint? } with a status.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHY THE FILE IS FLAT AND THE URL IS NOT
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * This lived at `api/account/invite.ts` first, on the assumption that Vercel maps a nested
+ * file to a nested route. It does not, on this project. `vercel build` was run against that
+ * layout and emitted FOUR functions — create-checkout-session, stripe-webhook,
+ * create-portal-session, plans — and nothing for the nested file. Zero-config function
+ * detection here globs the top level of api/ only, so the handler was never built, and the
+ * deployed endpoint answered Vercel's own NOT_FOUND rather than anything in this repo. It
+ * shipped that way with typecheck, lint, 1,494 tests and the build all green, because none
+ * of them run Vercel's function detection.
+ *
+ * The app posts to `/api/account/invite` and that contract is fixed, so the URL is preserved
+ * by a rewrite in vercel.json rather than by the filename. The rewrite sits FIRST, ahead of
+ * the SPA fallback: the fallback's negative lookahead already excludes /api/, so ordering is
+ * belt and braces rather than load-bearing.
+ *
+ * `src/server/esm-imports.test.ts` now fails if any handler is added under a subdirectory,
+ * because the next person to try this would get the same silent 404.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * WHY THIS IS A SERVER ENDPOINT AND NOT AN RPC THE APP CALLS DIRECTLY
@@ -61,7 +82,7 @@ import {
   readServerConfig,
   renderInviteEmail,
   userFromRequest
-} from '../_server.js';
+} from './_server.js';
 
 /** Matches the CHECK on public.account_members.role. Anything else is refused before the RPC. */
 const ROLES = ['owner', 'admin', 'editor', 'viewer'];

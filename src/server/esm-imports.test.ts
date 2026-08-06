@@ -79,7 +79,62 @@ describe('deployed handlers depend only on the generated bundle', () => {
     expect(handlers).toContain('stripe-webhook.ts');
     // A nested handler exists, so the walk above is doing something the old flat read did
     // not. Without this the recursion could be removed and every assertion would still pass.
-    expect(handlers).toContain('account/invite.ts');
+  });
+
+  /**
+   * NO HANDLER MAY LIVE IN A SUBDIRECTORY, because Vercel will not route it on this project.
+   *
+   * This was learned by shipping it. `api/account/invite.ts` was added on the assumption that
+   * Vercel maps a nested file to a nested route; `vercel build` against that layout emitted
+   * four functions and nothing for the nested file, so /api/account/invite answered Vercel's
+   * own NOT_FOUND in production. Typecheck, lint, 1,494 tests and the build were all green
+   * throughout, because nothing in CI runs Vercel's zero-config function detection.
+   *
+   * The walk above recurses precisely so this can be checked. If a nested route URL is wanted,
+   * keep the file flat and map the URL with a rewrite in vercel.json, which is what
+   * api/account-invite.ts does for /api/account/invite.
+   */
+  it('no handler sits in a subdirectory, because Vercel would not build it', () => {
+    const nested = handlers.filter((f) => f.includes('/'));
+    expect(
+      nested,
+      `these handlers are nested and will NOT be routed: ${nested.join(', ')}. Vercel's ` +
+      'zero-config function detection globs the top level of api/ only, so a nested file ' +
+      'produces no function and the endpoint answers NOT_FOUND with a completely green ' +
+      'build. Put the file at the top level and map the URL with a rewrite in vercel.json.'
+    ).toEqual([]);
+  });
+
+  /**
+   * The other half of that workaround. The app posts to a URL that no filename matches, so
+   * the rewrite in vercel.json IS the route: delete it and /api/account/invite goes back to
+   * answering NOT_FOUND, with every test here still green because the handler is fine.
+   *
+   * Asserts the destination resolves to a handler that exists, rather than just that some
+   * rewrite is present, because a rewrite pointing at a renamed file is the same 404.
+   */
+  it('every /api rewrite points at a handler that exists', () => {
+    const vercelJson = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8')) as {
+      rewrites?: { source: string; destination: string }[];
+    };
+    const apiRewrites = (vercelJson.rewrites ?? []).filter((r) => r.destination.startsWith('/api/'));
+
+    // Non-vacuity: the app's invite call depends on exactly this one existing.
+    expect(
+      apiRewrites.map((r) => r.source),
+      'vercel.json has no rewrite for /api/account/invite. The app posts there, no filename ' +
+      'matches it, and Vercel will not build a nested handler, so without this rewrite the ' +
+      'endpoint answers NOT_FOUND.'
+    ).toContain('/api/account/invite');
+
+    const broken = apiRewrites.filter(
+      (r) => !handlers.includes(`${r.destination.replace(/^\/api\//, '')}.ts`)
+    );
+    expect(
+      broken.map((r) => `${r.source} -> ${r.destination}`),
+      'these rewrites point at handlers that do not exist, which is a 404 the same as having ' +
+      'no rewrite at all'
+    ).toEqual([]);
   });
 
   it.each(handlerFiles())('%s imports only the generated bundle', (file) => {

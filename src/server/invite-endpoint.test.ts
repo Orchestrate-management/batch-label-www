@@ -56,7 +56,7 @@ vi.mock('../../api/_server.js', async () => {
 });
 
 async function handler() {
-  return (await import('../../api/account/invite')).default;
+  return (await import('../../api/account-invite')).default;
 }
 
 function post(body: unknown, headers: Record<string, string> = {}) {
